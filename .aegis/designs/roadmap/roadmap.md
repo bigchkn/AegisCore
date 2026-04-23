@@ -1,0 +1,411 @@
+# AegisCore — Roadmap
+
+**Approach:** HLD → N LLD → N Roadmap Tasks → Implementation  
+**HLD:** [`.aegis/designs/hld/aegis.md`](../hld/aegis.md)  
+**LLDs:** [`.aegis/designs/lld/`](../lld/)
+
+---
+
+## How to Read This Roadmap
+
+Each milestone corresponds to one LLD. The LLD must be written and agreed before any implementation task in that milestone begins. Tasks within a milestone may execute in parallel where dependencies allow.
+
+Status values: `pending` · `lld-in-progress` · `lld-done` · `in-progress` · `done`
+
+---
+
+## LLD Tracker
+
+All LLDs derived from the HLD (§15). Each must reach `done` before its milestone's implementation tasks begin.
+
+| LLD | File | Milestone | Crate(s) | Status |
+|---|---|---|---|---|
+| Core traits & types | `lld/core.md` | M0 | `aegis-core` | `pending` |
+| Config schema & merge | `lld/config.md` | M0 | `aegis-core` | `pending` |
+| Sandbox profiles | `lld/sandbox.md` | M2 | `aegis-sandbox` | `pending` |
+| State & registry | `lld/state.md` | M3 | `aegis-controller` | `pending` |
+| CLI providers | `lld/providers.md` | M4 | `aegis-providers` | `pending` |
+| Flight recorder | `lld/recorder.md` | M5 | `aegis-recorder` | `pending` |
+| Channels | `lld/channels.md` | M6 | `aegis-channels` | `pending` |
+| Watchdog & failover | `lld/watchdog.md` | M7 | `aegis-watchdog` | `pending` |
+| Prompts | `lld/prompts.md` | M8 | `aegis-controller` | `pending` |
+| Telegram bridge | `lld/telegram.md` | M9 | `aegis-telegram` | `pending` |
+| Controller & dispatcher | `lld/controller.md` | M10 | `aegis-controller` | `pending` |
+| Global daemon & IPC | `lld/daemon.md` | M11 | `aegis-controller` | `pending` |
+| CLI binary | `lld/cli.md` | M12 | `src/` | `pending` |
+| Taskflow engine | `lld/taskflow.md` | M13 | `aegis-taskflow` | `pending` |
+| UI (TUI + web) | `lld/ui.md` | M14–M15 | `aegis-tui`, `aegis-web` | `pending` |
+
+---
+
+## Milestone 0 — Foundation: `aegis-core` + Config
+
+**LLD:** `lld/core.md` + `lld/config.md`  
+**Status:** `pending`  
+**Depends on:** Nothing — must be first.  
+**Why first:** Every other crate implements traits defined here. Config schema governs all other LLDs.
+
+### Tasks
+
+| # | Task | Crate | Notes |
+|---|---|---|---|
+| 0.1 | Write `lld/core.md` | — | Trait surface, type definitions, AegisError taxonomy |
+| 0.2 | Write `lld/config.md` | — | Full `aegis.toml` + `~/.aegis/config` schema, merge semantics |
+| 0.3 | Scaffold Cargo workspace (`Cargo.toml`, all `crates/` stubs) | workspace | Create all crate directories with placeholder `lib.rs` |
+| 0.4 | Implement `aegis-core`: agent types, status enum, AgentHandle trait | `aegis-core` | |
+| 0.5 | Implement `aegis-core`: Task, TaskStatus, TaskQueue trait | `aegis-core` | |
+| 0.6 | Implement `aegis-core`: AgentRegistry + TaskRegistry traits | `aegis-core` | |
+| 0.7 | Implement `aegis-core`: Channel trait + Message types | `aegis-core` | |
+| 0.8 | Implement `aegis-core`: Provider trait + ProviderConfig + SessionRef | `aegis-core` | |
+| 0.9 | Implement `aegis-core`: SandboxProfile trait + SandboxPolicy enum | `aegis-core` | |
+| 0.10 | Implement `aegis-core`: Recorder trait + WatchdogSink trait | `aegis-core` | |
+| 0.11 | Implement `aegis-core`: StorageBackend trait + path conventions | `aegis-core` | |
+| 0.12 | Implement `aegis-core`: AegisError + Result alias | `aegis-core` | |
+| 0.13 | Implement config TOML parsing + two-layer merge (`~/.aegis/config` → `aegis.toml`) | `aegis-core` | serde + toml crates |
+| 0.14 | Unit tests: trait object safety; config merge correctness | `aegis-core` | |
+
+---
+
+## Milestone 1 — tmux Abstraction: `aegis-tmux`
+
+**LLD:** _(covered in `lld/channels.md` and `lld/daemon.md`)_  
+**Status:** `pending`  
+**Depends on:** M0 (aegis-core types)
+
+### Tasks
+
+| # | Task | Crate | Notes |
+|---|---|---|---|
+| 1.1 | Implement `TmuxClient`: `send-keys` wrapper | `aegis-tmux` | Escape rules for special characters |
+| 1.2 | Implement `TmuxClient`: `capture-pane` wrapper + configurable scan depth | `aegis-tmux` | |
+| 1.3 | Implement `TmuxClient`: `pipe-pane` attach/detach + log path management | `aegis-tmux` | |
+| 1.4 | Implement `TmuxClient`: session/window/pane creation and teardown | `aegis-tmux` | |
+| 1.5 | Integration tests: real tmux process (CI requires tmux installed) | `aegis-tmux` | |
+
+---
+
+## Milestone 2 — Sandbox Factory: `aegis-sandbox`
+
+**LLD:** `lld/sandbox.md`  
+**Status:** `pending`  
+**Depends on:** M0
+
+### Tasks
+
+| # | Task | Crate | Notes |
+|---|---|---|---|
+| 2.1 | Write `lld/sandbox.md` | — | Full `.sb` template grammar; per-provider system path requirements; violation detection |
+| 2.2 | Implement `.sb` profile template + variable substitution (`WORKTREE_PATH`, `HOME`) | `aegis-sandbox` | |
+| 2.3 | Implement `SeatbeltSandbox`: profile generation + write to `.aegis/profiles/<id>.sb` | `aegis-sandbox` | |
+| 2.4 | Implement `sandbox-exec` invocation wrapper | `aegis-sandbox` | |
+| 2.5 | Implement per-agent policy overrides (`sandbox.extra_reads`, `network` policy) | `aegis-sandbox` | |
+| 2.6 | Integration test: verify file access denied outside worktree | `aegis-sandbox` | macOS only |
+
+---
+
+## Milestone 3 — State & Registry: `aegis-controller` (partial)
+
+**LLD:** `lld/state.md`  
+**Status:** `pending`  
+**Depends on:** M0
+
+### Tasks
+
+| # | Task | Crate | Notes |
+|---|---|---|---|
+| 3.1 | Write `lld/state.md` | — | Registry file locking; snapshot format; crash recovery boot sequence |
+| 3.2 | Implement `FileRegistry`: `AgentRegistry` + `TaskRegistry` backed by `registry.json` / `tasks.json` | `aegis-controller` | File locking via `fs2` or similar |
+| 3.3 | Implement `ChannelRegistry`: `channels.json` CRUD | `aegis-controller` | |
+| 3.4 | Implement periodic snapshot writer + snapshot pruning | `aegis-controller` | |
+| 3.5 | Implement crash recovery: boot sequence reads last valid snapshot | `aegis-controller` | |
+| 3.6 | Unit tests: concurrent read/write safety; snapshot round-trip | `aegis-controller` | |
+
+---
+
+## Milestone 4 — CLI Providers: `aegis-providers`
+
+**LLD:** `lld/providers.md`  
+**Status:** `pending`  
+**Depends on:** M0
+
+### Tasks
+
+| # | Task | Crate | Notes |
+|---|---|---|---|
+| 4.1 | Write `lld/providers.md` | — | Provider trait full interface; per-CLI session resume; error pattern catalogue |
+| 4.2 | Implement `ClaudeProvider` (`claude-code` CLI) | `aegis-providers` | feature = `claude` |
+| 4.3 | Implement `GeminiProvider` (`gemini-cli`) | `aegis-providers` | feature = `gemini` |
+| 4.4 | Implement `CodexProvider` (`codex` CLI) | `aegis-providers` | feature = `codex` |
+| 4.5 | Implement `OllamaProvider` (`ollama run`) | `aegis-providers` | feature = `ollama`; local fallback |
+| 4.6 | Implement `ProviderRegistry`: load providers from config; build failover cascade | `aegis-providers` | |
+| 4.7 | Implement `failover_handoff_prompt()` per provider | `aegis-providers` | Template rendering via `lld/prompts.md` |
+| 4.8 | Unit tests: error pattern detection per provider; cascade ordering | `aegis-providers` | |
+
+---
+
+## Milestone 5 — Flight Recorder: `aegis-recorder`
+
+**LLD:** `lld/recorder.md`  
+**Status:** `pending`  
+**Depends on:** M0, M1 (aegis-tmux)
+
+### Tasks
+
+| # | Task | Crate | Notes |
+|---|---|---|---|
+| 5.1 | Write `lld/recorder.md` | — | pipe-pane lifecycle; log file locking; context window query API; rotation policy |
+| 5.2 | Implement `FlightRecorder`: attach `pipe-pane` to agent pane at spawn | `aegis-recorder` | |
+| 5.3 | Implement `FlightRecorder`: detach on agent termination; archive log | `aegis-recorder` | |
+| 5.4 | Implement `LogQuery`: return last N lines from agent log file | `aegis-recorder` | Used by Watchdog and CLI `aegis logs` |
+| 5.5 | Implement log rotation: max size eviction + retention count | `aegis-recorder` | |
+| 5.6 | Unit tests: rotation correctness; log query boundary conditions | `aegis-recorder` | |
+
+---
+
+## Milestone 6 — Channels: `aegis-channels`
+
+**LLD:** `lld/channels.md`  
+**Status:** `pending`  
+**Depends on:** M0, M1
+
+### Tasks
+
+| # | Task | Crate | Notes |
+|---|---|---|---|
+| 6.1 | Write `lld/channels.md` | — | Mailbox schema; delivery ordering; Injection escaping; broadcast fan-out; channel lifecycle |
+| 6.2 | Implement `InjectionChannel`: `send-keys` with escaping + retry | `aegis-channels` | |
+| 6.3 | Implement `MailboxChannel`: filesystem drop-box write; inbox polling | `aegis-channels` | |
+| 6.4 | Implement `ObservationChannel`: `capture-pane` read with configurable depth | `aegis-channels` | |
+| 6.5 | Implement `BroadcastChannel`: fan-out via Mailbox to all active agents | `aegis-channels` | |
+| 6.6 | Implement channel lifecycle: `aegis channel add/remove` state machine | `aegis-channels` | Persists to `channels.json` |
+| 6.7 | Unit tests: mailbox ordering; injection escaping edge cases | `aegis-channels` | |
+
+---
+
+## Milestone 7 — Watchdog: `aegis-watchdog`
+
+**LLD:** `lld/watchdog.md`  
+**Status:** `pending`  
+**Depends on:** M0, M1, M4 (providers), M5 (recorder)
+
+### Tasks
+
+| # | Task | Crate | Notes |
+|---|---|---|---|
+| 7.1 | Write `lld/watchdog.md` | — | Poll loop design; pattern matching engine; failover state machine; backoff strategy |
+| 7.2 | Implement async poll loop: `capture-pane` sweep every `poll_interval_ms` | `aegis-watchdog` | tokio interval |
+| 7.3 | Implement pattern matcher: configurable regex/string patterns per category | `aegis-watchdog` | Rate limit, auth failure, crash, sandbox violation, task complete |
+| 7.4 | Implement failover state machine: detect → pause → capture → switch → inject | `aegis-watchdog` | |
+| 7.5 | Implement backoff strategy: exponential backoff before cascade step | `aegis-watchdog` | |
+| 7.6 | Implement pane exit detection (non-zero exit code / closed window) | `aegis-watchdog` | |
+| 7.7 | Unit tests: pattern matching correctness; state machine transitions | `aegis-watchdog` | |
+
+---
+
+## Milestone 8 — Prompts: `aegis-controller` (partial)
+
+**LLD:** `lld/prompts.md`  
+**Status:** `pending`  
+**Depends on:** M0
+
+### Tasks
+
+| # | Task | Crate | Notes |
+|---|---|---|---|
+| 8.1 | Write `lld/prompts.md` | — | Template engine; variable resolution; prompt size limits per provider |
+| 8.2 | Implement prompt template renderer: `{{variable}}` substitution | `aegis-controller` | |
+| 8.3 | Implement prompt resolution: agent override → role file → built-in default | `aegis-controller` | |
+| 8.4 | Ship built-in default prompt templates (system, handoff/recovery, handoff/resume) | `aegis-controller` | Embedded in binary |
+| 8.5 | Implement `aegis init` prompt scaffold: copy defaults to `.aegis/prompts/` | `aegis-controller` | |
+| 8.6 | Unit tests: resolution order; size limit truncation | `aegis-controller` | |
+
+---
+
+## Milestone 9 — Telegram Bridge: `aegis-telegram`
+
+**LLD:** `lld/telegram.md`  
+**Status:** `pending`  
+**Depends on:** M0
+
+### Tasks
+
+| # | Task | Crate | Notes |
+|---|---|---|---|
+| 9.1 | Write `lld/telegram.md` | — | Bot auth; command parser; event queue design; outbound rate limiting |
+| 9.2 | Implement bot long-poll loop + webhook mode (configurable) | `aegis-telegram` | |
+| 9.3 | Implement Chat ID allowlist enforcement | `aegis-telegram` | |
+| 9.4 | Implement inbound command parser: `/status`, `/agents`, `/pause`, `/resume`, `/kill`, `/spawn`, `/logs`, `/failover` | `aegis-telegram` | |
+| 9.5 | Implement outbound event publisher with rate limiting | `aegis-telegram` | |
+| 9.6 | Implement `aegis channel add telegram` integration | `aegis-telegram` | Activated via channel lifecycle |
+| 9.7 | Integration test: mock Telegram API; verify command dispatch | `aegis-telegram` | |
+
+---
+
+## Milestone 10 — Controller & Dispatcher: `aegis-controller`
+
+**LLD:** `lld/controller.md`  
+**Status:** `pending`  
+**Depends on:** M1–M9 (all subsystems)
+
+### Tasks
+
+| # | Task | Crate | Notes |
+|---|---|---|---|
+| 10.1 | Write `lld/controller.md` | — | Builder pattern; Dispatcher spawn sequence; registry locking; tokio runtime design |
+| 10.2 | Implement `AegisRuntime` builder: accept optional subsystem impls | `aegis-controller` | |
+| 10.3 | Implement Dispatcher: Bastion spawn sequence (worktree → sandbox profile → tmux window → pipe-pane) | `aegis-controller` | |
+| 10.4 | Implement Dispatcher: Splinter spawn sequence + git worktree management | `aegis-controller` | |
+| 10.5 | Implement Dispatcher: clean termination + receipt processing + worktree prune | `aegis-controller` | |
+| 10.6 | Implement Scheduler: `MAX_SPLINTERS` semaphore + task queue | `aegis-controller` | |
+| 10.7 | Implement agent status transitions + registry updates | `aegis-controller` | |
+| 10.8 | Integration tests: full Bastion + Splinter lifecycle with mock CLI | `aegis-controller` | |
+
+---
+
+## Milestone 11 — Global Daemon & IPC: `aegisd`
+
+**LLD:** `lld/daemon.md`  
+**Status:** `pending`  
+**Depends on:** M10
+
+### Tasks
+
+| # | Task | Crate | Notes |
+|---|---|---|---|
+| 11.1 | Write `lld/daemon.md` | — | Unix socket protocol; HTTP + WebSocket server; project registry; startup/shutdown lifecycle |
+| 11.2 | Implement Unix domain socket server: request/response + event stream | `aegis-controller` / `src/` | Line-delimited JSON |
+| 11.3 | Implement HTTP server: REST endpoints for agents, tasks, channels, logs | `aegis-controller` | axum or similar |
+| 11.4 | Implement WebSocket endpoint (`/ws/events`): subscribe to event stream | `aegis-controller` | |
+| 11.5 | Implement machine-level project registry (`~/.aegis/state/projects.json`) | `aegis-controller` | |
+| 11.6 | Implement launchd plist generation + registration (install-time) | `src/` | |
+| 11.7 | Implement graceful shutdown: drain active agents; flush logs; close sockets | `aegis-controller` | |
+| 11.8 | Integration tests: socket round-trip; HTTP endpoint responses | — | |
+
+---
+
+## Milestone 12 — CLI Binary: `aegis`
+
+**LLD:** `lld/cli.md`  
+**Status:** `pending`  
+**Depends on:** M11
+
+### Tasks
+
+| # | Task | Crate | Notes |
+|---|---|---|---|
+| 12.1 | Write `lld/cli.md` | — | Full command surface; `aegis init` scaffold; session anchoring walk-up; subcommand routing |
+| 12.2 | Implement session anchoring: walk up directory tree for `.aegis/` | `src/` | |
+| 12.3 | Implement `aegis init`: scaffold sequence; seed from `~/.aegis/config`; register with daemon | `src/` | |
+| 12.4 | Implement `aegis doctor`: check tmux, git, sandbox-exec, configured CLIs | `src/` | |
+| 12.5 | Implement daemon subcommands: `daemon start/stop/status`, `projects` | `src/` | |
+| 12.6 | Implement session subcommands: `start`, `stop`, `attach` | `src/` | |
+| 12.7 | Implement agent subcommands: `agents`, `spawn`, `pause`, `resume`, `kill`, `failover` | `src/` | |
+| 12.8 | Implement channel subcommands: `channel add/list/status/remove` | `src/` | |
+| 12.9 | Implement observation subcommands: `status`, `logs` | `src/` | |
+| 12.10 | Implement config subcommands: `config validate`, `config show` | `src/` | |
+| 12.11 | Implement `aegis taskflow status/assign` | `src/` | |
+| 12.12 | Shell completion generation (zsh, bash, fish) | `src/` | via clap |
+| 12.13 | End-to-end tests: init → start → spawn → logs → kill cycle | — | |
+
+---
+
+## Milestone 13 — Taskflow Engine: `aegis-taskflow`
+
+**LLD:** `lld/taskflow.md`  
+**Status:** `pending`  
+**Depends on:** M0, M10 (agent registry integration)
+
+### Tasks
+
+| # | Task | Crate | Notes |
+|---|---|---|---|
+| 13.1 | Write `lld/taskflow.md` | — | HLD→LLD→Roadmap→Task pipeline; document schema; task state machine; agent registry integration |
+| 13.2 | Implement document schema: HLD, LLD, Roadmap, Task types | `aegis-taskflow` | Parsed from `.aegis/designs/` markdown |
+| 13.3 | Implement task state machine: pending → lld-in-progress → lld-done → in-progress → done | `aegis-taskflow` | |
+| 13.4 | Implement `aegis taskflow status`: render pipeline state from design directory | `aegis-taskflow` | |
+| 13.5 | Implement `aegis taskflow assign`: link task to agent in registry | `aegis-taskflow` | |
+| 13.6 | Implement roadmap parser: read `roadmap.md`; extract milestones and tasks | `aegis-taskflow` | |
+| 13.7 | Unit tests: state machine transitions; roadmap parse correctness | `aegis-taskflow` | |
+
+---
+
+## Milestone 14 — TUI: `aegis-tui`
+
+**LLD:** `lld/ui.md` (shared with M15)  
+**Status:** `pending`  
+**Depends on:** M11 (daemon + socket)
+
+### Tasks
+
+| # | Task | Crate | Notes |
+|---|---|---|---|
+| 14.1 | Write `lld/ui.md` | — | TUI layout; component model; web API surface; WebSocket event schema; shared client protocol |
+| 14.2 | Implement Unix socket client: connect, send requests, subscribe to event stream | `aegis-tui` | Shared with web client logic |
+| 14.3 | Implement TUI layout: agents panel, logs panel, tasks panel, channels panel, status bar | `aegis-tui` | ratatui |
+| 14.4 | Implement real-time log streaming: `logs.tail` subscription → log panel | `aegis-tui` | |
+| 14.5 | Implement key bindings: spawn, pause, failover, attach, quit | `aegis-tui` | |
+| 14.6 | Implement multi-project switching | `aegis-tui` | |
+
+---
+
+## Milestone 15 — Web UI: `aegis-web`
+
+**LLD:** `lld/ui.md` (shared with M14)  
+**Status:** `pending`  
+**Depends on:** M11 (HTTP + WebSocket server)
+
+### Tasks
+
+| # | Task | Crate | Notes |
+|---|---|---|---|
+| 15.1 | Implement REST client layer: agents, tasks, channels, logs endpoints | `aegis-web` | |
+| 15.2 | Implement WebSocket event subscription + live updates | `aegis-web` | |
+| 15.3 | Implement agent list view + status indicators | `aegis-web` | |
+| 15.4 | Implement live log streaming view | `aegis-web` | |
+| 15.5 | Implement Taskflow pipeline visualization (HLD → LLD → Roadmap → Tasks) | `aegis-web` | |
+| 15.6 | Implement per-project sidebar switcher | `aegis-web` | |
+| 15.7 | Embed static assets into `aegisd` binary (`include_dir!`) | `aegis-controller` | Zero separate server process |
+
+---
+
+## Milestone 16 — Install & Distribution
+
+**LLD:** _(covered in `lld/cli.md`)_  
+**Status:** `pending`  
+**Depends on:** M12–M15 (all user-facing surfaces complete)
+
+### Tasks
+
+| # | Task | Notes |
+|---|---|---|
+| 16.1 | Write install shell script (`install.sh`): detect arch, download binary, install launchd plist | |
+| 16.2 | Set up GitHub Actions: build matrix (arm64 + x86_64); release artifacts | |
+| 16.3 | Set up Homebrew tap (`aegiscore/homebrew-tap`) | |
+| 16.4 | Write `aegis doctor` checks for all runtime dependencies | |
+| 16.5 | Write getting-started guide (linked from README) | |
+
+---
+
+## Dependency Order Summary
+
+```
+M0 (core + config)
+ ├── M1 (tmux)
+ │    ├── M5 (recorder)
+ │    ├── M6 (channels)
+ │    └── M7 (watchdog) ── needs M4, M5
+ ├── M2 (sandbox)
+ ├── M3 (state)
+ ├── M4 (providers)
+ ├── M8 (prompts)
+ ├── M9 (telegram)
+ └── M13 (taskflow)
+      └── M10 (controller) ── needs M1–M9
+           └── M11 (daemon)
+                └── M12 (CLI)
+                     ├── M14 (TUI)
+                     ├── M15 (web)
+                     └── M16 (install)
+```
+
+Milestones M1–M9 and M13 can proceed in parallel after M0. M10 gates everything above it.
