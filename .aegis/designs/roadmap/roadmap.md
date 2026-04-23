@@ -20,8 +20,8 @@ All LLDs derived from the HLD (§15). Each must reach `done` before its mileston
 
 | LLD | File | Milestone | Crate(s) | Status |
 |---|---|---|---|---|
-| Core traits & types | `lld/core.md` | M0 | `aegis-core` | `pending` |
-| Config schema & merge | `lld/config.md` | M0 | `aegis-core` | `pending` |
+| Core traits & types | `lld/core.md` | M0 | `aegis-core` | `lld-done` |
+| Config schema & merge | `lld/config.md` | M0 | `aegis-core` | `lld-done` |
 | Sandbox profiles | `lld/sandbox.md` | M2 | `aegis-sandbox` | `pending` |
 | State & registry | `lld/state.md` | M3 | `aegis-controller` | `pending` |
 | CLI providers | `lld/providers.md` | M4 | `aegis-providers` | `pending` |
@@ -41,16 +41,16 @@ All LLDs derived from the HLD (§15). Each must reach `done` before its mileston
 ## Milestone 0 — Foundation: `aegis-core` + Config
 
 **LLD:** `lld/core.md` + `lld/config.md`  
-**Status:** `pending`  
+**Status:** `lld-done`  
 **Depends on:** Nothing — must be first.  
 **Why first:** Every other crate implements traits defined here. Config schema governs all other LLDs.
 
 ### Tasks
 
-| # | Task | Crate | Notes |
-|---|---|---|---|
-| 0.1 | Write `lld/core.md` | — | Trait surface, type definitions, AegisError taxonomy |
-| 0.2 | Write `lld/config.md` | — | Full `aegis.toml` + `~/.aegis/config` schema, merge semantics |
+| # | Task | Crate | Status | Notes |
+|---|---|---|---|---|
+| 0.1 | Write `lld/core.md` | — | `done` | Trait surface, type definitions, AegisError taxonomy |
+| 0.2 | Write `lld/config.md` | — | `done` | Full `aegis.toml` + `~/.aegis/config` schema, merge semantics |
 | 0.3 | Scaffold Cargo workspace (`Cargo.toml`, all `crates/` stubs) | workspace | Create all crate directories with placeholder `lib.rs` |
 | 0.4 | Implement `aegis-core`: agent types, status enum, AgentHandle trait | `aegis-core` | |
 | 0.5 | Implement `aegis-core`: Task, TaskStatus, TaskQueue trait | `aegis-core` | |
