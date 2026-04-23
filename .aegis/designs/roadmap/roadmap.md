@@ -24,9 +24,9 @@ All LLDs derived from the HLD (§15). Each must reach `done` before its mileston
 | Config schema & merge | `lld/config.md` | M0 | `aegis-core` | `lld-done` |
 | tmux abstraction | `lld/tmux.md` | M1 | `aegis-tmux` | `lld-done` |
 | Sandbox profiles | `lld/sandbox.md` | M2 | `aegis-sandbox` | `lld-done` |
-| State & registry | `lld/state.md` | M3 | `aegis-controller` | `pending` |
-| CLI providers | `lld/providers.md` | M4 | `aegis-providers` | `pending` |
-| Flight recorder | `lld/recorder.md` | M5 | `aegis-recorder` | `pending` |
+| State & registry | `lld/state.md` | M3 | `aegis-controller` | `lld-done` |
+| CLI providers | `lld/providers.md` | M4 | `aegis-providers` | `lld-done` |
+| Flight recorder | `lld/recorder.md` | M5 | `aegis-recorder` | `lld-done` |
 | Channels | `lld/channels.md` | M6 | `aegis-channels` | `pending` |
 | Watchdog & failover | `lld/watchdog.md` | M7 | `aegis-watchdog` | `pending` |
 | Prompts | `lld/prompts.md` | M8 | `aegis-controller` | `pending` |
@@ -109,59 +109,61 @@ All LLDs derived from the HLD (§15). Each must reach `done` before its mileston
 ## Milestone 3 — State & Registry: `aegis-controller` (partial)
 
 **LLD:** `lld/state.md`  
-**Status:** `pending`  
+**Status:** `lld-done`  
 **Depends on:** M0
 
 ### Tasks
 
-| # | Task | Crate | Notes |
-|---|---|---|---|
-| 3.1 | Write `lld/state.md` | — | Registry file locking; snapshot format; crash recovery boot sequence |
-| 3.2 | Implement `FileRegistry`: `AgentRegistry` + `TaskRegistry` backed by `registry.json` / `tasks.json` | `aegis-controller` | File locking via `fs2` or similar |
-| 3.3 | Implement `ChannelRegistry`: `channels.json` CRUD | `aegis-controller` | |
-| 3.4 | Implement periodic snapshot writer + snapshot pruning | `aegis-controller` | |
-| 3.5 | Implement crash recovery: boot sequence reads last valid snapshot | `aegis-controller` | |
-| 3.6 | Unit tests: concurrent read/write safety; snapshot round-trip | `aegis-controller` | |
+| # | Task | Crate | Status | Notes |
+|---|---|---|---|---|
+| 3.1 | Write `lld/state.md` | — | `done` | File locking strategy; on-disk format; snapshot writer; boot recovery |
+| 3.2 | Implement `FileRegistry`: `AgentRegistry` + `TaskRegistry` + `ChannelRegistry` | `aegis-controller` | `pending` | fs2 advisory locking; atomic write |
+| 3.3 | Implement `TaskQueue`: atomic `claim_next()` | `aegis-controller` | `pending` | |
+| 3.4 | Implement `StateManager`: periodic snapshot writer + prune | `aegis-controller` | `pending` | tokio background task |
+| 3.5 | Implement crash recovery boot sequence | `aegis-controller` | `pending` | Active agents → Failed on restart |
+| 3.6 | Implement `FileRegistry::init()` for `aegis init` | `aegis-controller` | `pending` | |
+| 3.7 | Tests: concurrent writes; snapshot round-trip; lock timeout; recovery | `aegis-controller` | `pending` | |
 
 ---
 
 ## Milestone 4 — CLI Providers: `aegis-providers`
 
 **LLD:** `lld/providers.md`  
-**Status:** `pending`  
+**Status:** `lld-done`  
 **Depends on:** M0
 
 ### Tasks
 
-| # | Task | Crate | Notes |
-|---|---|---|---|
-| 4.1 | Write `lld/providers.md` | — | Provider trait full interface; per-CLI session resume; error pattern catalogue |
-| 4.2 | Implement `ClaudeProvider` (`claude-code` CLI) | `aegis-providers` | feature = `claude` |
-| 4.3 | Implement `GeminiProvider` (`gemini-cli`) | `aegis-providers` | feature = `gemini` |
-| 4.4 | Implement `CodexProvider` (`codex` CLI) | `aegis-providers` | feature = `codex` |
-| 4.5 | Implement `OllamaProvider` (`ollama run`) | `aegis-providers` | feature = `ollama`; local fallback |
-| 4.6 | Implement `ProviderRegistry`: load providers from config; build failover cascade | `aegis-providers` | |
-| 4.7 | Implement `failover_handoff_prompt()` per provider | `aegis-providers` | Template rendering via `lld/prompts.md` |
-| 4.8 | Unit tests: error pattern detection per provider; cascade ordering | `aegis-providers` | |
+| # | Task | Crate | Status | Notes |
+|---|---|---|---|---|
+| 4.1 | Write `lld/providers.md` | — | `done` | Per-CLI specs; ProviderRegistry; cascade logic; handoff prompt template |
+| 4.2 | Implement `ClaudeProvider` | `aegis-providers` | `pending` | feature = `claude` |
+| 4.3 | Implement `GeminiProvider` (post-spawn resume via send-keys) | `aegis-providers` | `pending` | feature = `gemini` |
+| 4.4 | Implement `CodexProvider` | `aegis-providers` | `pending` | feature = `codex` |
+| 4.5 | Implement `OllamaProvider` | `aegis-providers` | `pending` | feature = `ollama`; no rate limits |
+| 4.6 | Implement `ProviderRegistry::from_config()` with feature-gated registration | `aegis-providers` | `pending` | |
+| 4.7 | Implement `cascade_for_agent()` + `next_in_cascade()` | `aegis-providers` | `pending` | |
+| 4.8 | Implement shared `render_handoff_prompt()` | `aegis-providers` | `pending` | |
+| 4.9 | Tests: pattern detection; cascade ordering; handoff prompt content | `aegis-providers` | `pending` | |
 
 ---
 
 ## Milestone 5 — Flight Recorder: `aegis-recorder`
 
 **LLD:** `lld/recorder.md`  
-**Status:** `pending`  
+**Status:** `lld-done`  
 **Depends on:** M0, M1 (aegis-tmux)
 
 ### Tasks
 
-| # | Task | Crate | Notes |
-|---|---|---|---|
-| 5.1 | Write `lld/recorder.md` | — | pipe-pane lifecycle; log file locking; context window query API; rotation policy |
-| 5.2 | Implement `FlightRecorder`: attach `pipe-pane` to agent pane at spawn | `aegis-recorder` | |
-| 5.3 | Implement `FlightRecorder`: detach on agent termination; archive log | `aegis-recorder` | |
-| 5.4 | Implement `LogQuery`: return last N lines from agent log file | `aegis-recorder` | Used by Watchdog and CLI `aegis logs` |
-| 5.5 | Implement log rotation: max size eviction + retention count | `aegis-recorder` | |
-| 5.6 | Unit tests: rotation correctness; log query boundary conditions | `aegis-recorder` | |
+| # | Task | Crate | Status | Notes |
+|---|---|---|---|---|
+| 5.1 | Write `lld/recorder.md` | — | `done` | pipe-pane lifecycle; tail algorithm; rotation; failover context window |
+| 5.2 | Implement `FlightRecorder::attach()` with internal pane map | `aegis-recorder` | `pending` | |
+| 5.3 | Implement `FlightRecorder::detach()` + `archive()` | `aegis-recorder` | `pending` | |
+| 5.4 | Implement `tail_lines()` backward-scan algorithm | `aegis-recorder` | `pending` | |
+| 5.5 | Implement `prune_archive()`: count + size limits | `aegis-recorder` | `pending` | |
+| 5.6 | Tests: capture round-trip; tail correctness; prune ordering | `aegis-recorder` | `pending` | |
 
 ---
 
