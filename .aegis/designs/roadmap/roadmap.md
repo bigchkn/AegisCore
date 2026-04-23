@@ -23,7 +23,7 @@ All LLDs derived from the HLD (§15). Each must reach `done` before its mileston
 | Core traits & types | `lld/core.md` | M0 | `aegis-core` | `lld-done` |
 | Config schema & merge | `lld/config.md` | M0 | `aegis-core` | `lld-done` |
 | tmux abstraction | `lld/tmux.md` | M1 | `aegis-tmux` | `lld-done` |
-| Sandbox profiles | `lld/sandbox.md` | M2 | `aegis-sandbox` | `pending` |
+| Sandbox profiles | `lld/sandbox.md` | M2 | `aegis-sandbox` | `lld-done` |
 | State & registry | `lld/state.md` | M3 | `aegis-controller` | `pending` |
 | CLI providers | `lld/providers.md` | M4 | `aegis-providers` | `pending` |
 | Flight recorder | `lld/recorder.md` | M5 | `aegis-recorder` | `pending` |
@@ -90,19 +90,19 @@ All LLDs derived from the HLD (§15). Each must reach `done` before its mileston
 ## Milestone 2 — Sandbox Factory: `aegis-sandbox`
 
 **LLD:** `lld/sandbox.md`  
-**Status:** `pending`  
+**Status:** `lld-done`  
 **Depends on:** M0
 
 ### Tasks
 
-| # | Task | Crate | Notes |
-|---|---|---|---|
-| 2.1 | Write `lld/sandbox.md` | — | Full `.sb` template grammar; per-provider system path requirements; violation detection |
-| 2.2 | Implement `.sb` profile template + variable substitution (`WORKTREE_PATH`, `HOME`) | `aegis-sandbox` | |
-| 2.3 | Implement `SeatbeltSandbox`: profile generation + write to `.aegis/profiles/<id>.sb` | `aegis-sandbox` | |
-| 2.4 | Implement `sandbox-exec` invocation wrapper | `aegis-sandbox` | |
-| 2.5 | Implement per-agent policy overrides (`sandbox.extra_reads`, `network` policy) | `aegis-sandbox` | |
-| 2.6 | Integration test: verify file access denied outside worktree | `aegis-sandbox` | macOS only |
+| # | Task | Crate | Status | Notes |
+|---|---|---|---|---|
+| 2.1 | Write `lld/sandbox.md` | — | `done` | `.sb` template; variable substitution; per-provider paths; violation detection |
+| 2.2 | Implement template + `@@VARIABLE@@` substitution + embed via `include_str!` | `aegis-sandbox` | `pending` | |
+| 2.3 | Implement `SeatbeltSandbox::render()` | `aegis-sandbox` | `pending` | |
+| 2.4 | Implement `SeatbeltSandbox::write()` (atomic write to `.aegis/profiles/<id>.sb`) | `aegis-sandbox` | `pending` | |
+| 2.5 | Implement `exec_prefix()` returning `sandbox-exec -f <path>` | `aegis-sandbox` | `pending` | |
+| 2.6 | Integration test: file access denied outside worktree on macOS | `aegis-sandbox` | `pending` | `#[cfg(target_os = "macos")]` |
 
 ---
 
