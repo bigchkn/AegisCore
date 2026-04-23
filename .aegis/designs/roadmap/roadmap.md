@@ -22,6 +22,7 @@ All LLDs derived from the HLD (§15). Each must reach `done` before its mileston
 |---|---|---|---|---|
 | Core traits & types | `lld/core.md` | M0 | `aegis-core` | `lld-done` |
 | Config schema & merge | `lld/config.md` | M0 | `aegis-core` | `lld-done` |
+| tmux abstraction | `lld/tmux.md` | M1 | `aegis-tmux` | `lld-done` |
 | Sandbox profiles | `lld/sandbox.md` | M2 | `aegis-sandbox` | `pending` |
 | State & registry | `lld/state.md` | M3 | `aegis-controller` | `pending` |
 | CLI providers | `lld/providers.md` | M4 | `aegis-providers` | `pending` |
@@ -68,19 +69,21 @@ All LLDs derived from the HLD (§15). Each must reach `done` before its mileston
 
 ## Milestone 1 — tmux Abstraction: `aegis-tmux`
 
-**LLD:** _(covered in `lld/channels.md` and `lld/daemon.md`)_  
-**Status:** `pending`  
+**LLD:** `lld/tmux.md`  
+**Status:** `lld-done`  
 **Depends on:** M0 (aegis-core types)
 
 ### Tasks
 
-| # | Task | Crate | Notes |
-|---|---|---|---|
-| 1.1 | Implement `TmuxClient`: `send-keys` wrapper | `aegis-tmux` | Escape rules for special characters |
-| 1.2 | Implement `TmuxClient`: `capture-pane` wrapper + configurable scan depth | `aegis-tmux` | |
-| 1.3 | Implement `TmuxClient`: `pipe-pane` attach/detach + log path management | `aegis-tmux` | |
-| 1.4 | Implement `TmuxClient`: session/window/pane creation and teardown | `aegis-tmux` | |
-| 1.5 | Integration tests: real tmux process (CI requires tmux installed) | `aegis-tmux` | |
+| # | Task | Crate | Status | Notes |
+|---|---|---|---|---|
+| 1.1 | Write `lld/tmux.md` | — | `done` | TmuxClient API, escaping strategy, pipe-pane lifecycle, test plan |
+| 1.2 | Implement `TmuxClient`: session/window/pane lifecycle | `aegis-tmux` | `pending` | |
+| 1.3 | Implement `TmuxClient`: `send-keys` + `-l` literal flag + escape | `aegis-tmux` | `pending` | |
+| 1.4 | Implement `TmuxClient`: `capture-pane` (raw + plain) | `aegis-tmux` | `pending` | |
+| 1.5 | Implement `TmuxClient`: `pipe-pane` attach/detach | `aegis-tmux` | `pending` | |
+| 1.6 | Implement `TmuxClient`: pane liveness (`pane_is_alive`, `pane_exit_status`) | `aegis-tmux` | `pending` | |
+| 1.7 | Integration tests against real tmux process | `aegis-tmux` | `pending` | CI must have tmux installed |
 
 ---
 
