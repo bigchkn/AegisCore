@@ -466,6 +466,101 @@ tbody tr:hover {
   overflow-wrap: anywhere;
 }
 
+.taskflow-view {
+  border: 1px solid #303842;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #171b20;
+}
+
+.taskflow-header {
+  padding: 14px;
+  border-bottom: 1px solid #303842;
+}
+
+.taskflow-header h2 {
+  margin: 0 0 4px;
+  font-size: 1rem;
+}
+
+.taskflow-header p {
+  margin: 0;
+  color: #9ea7b3;
+}
+
+.milestone-node {
+  border-bottom: 1px solid #262d35;
+}
+
+.milestone-node > button {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 44px;
+  padding: 0 14px;
+  border: 0;
+  background: transparent;
+  color: #e8eaed;
+  text-align: left;
+  cursor: pointer;
+}
+
+.milestone-node > button:hover {
+  background: #20262d;
+}
+
+.milestone-node em,
+.milestone-title em {
+  color: #9ea7b3;
+  font-style: normal;
+}
+
+.milestone-detail {
+  padding: 12px 14px 14px 44px;
+  background: #12171c;
+}
+
+.milestone-title {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.taskflow-task-list {
+  display: grid;
+  gap: 10px;
+}
+
+.taskflow-task {
+  display: grid;
+  grid-template-columns: 26px minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+}
+
+.taskflow-task p {
+  margin: 2px 0;
+  color: #d8dde4;
+}
+
+.taskflow-task small {
+  color: #9ea7b3;
+}
+
+.task-icon {
+  display: inline-grid;
+  width: 22px;
+  height: 22px;
+  place-items: center;
+  border-radius: 50%;
+  background: #2f333a;
+  color: #b6c0ca;
+  font-size: 0.75rem;
+}
+
 @media (max-width: 760px) {
   .app-shell {
     grid-template-columns: 1fr;

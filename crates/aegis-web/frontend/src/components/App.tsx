@@ -6,6 +6,7 @@ import { AgentsView } from '../views/AgentsView';
 import { ChannelsView } from '../views/ChannelsView';
 import { LogView } from '../views/LogView';
 import { PaneView } from '../views/PaneView';
+import { TaskflowView } from '../views/TaskflowView';
 import { TasksView } from '../views/TasksView';
 import { Sidebar } from './Sidebar';
 
@@ -42,7 +43,8 @@ export function App() {
         {activeView === 'logs' ? <LogView /> : null}
         {activeView === 'tasks' ? <TasksView /> : null}
         {activeView === 'channels' ? <ChannelsView /> : null}
-        {activeView === 'agents' || activeView === 'taskflow' ? <AgentsView /> : null}
+        {activeView === 'taskflow' ? <TaskflowView /> : null}
+        {activeView === 'agents' ? <AgentsView /> : null}
       </section>
     </main>
   );
