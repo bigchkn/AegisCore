@@ -29,7 +29,7 @@ All LLDs derived from the HLD (§15). Each must reach `done` before its mileston
 | Flight recorder         | `lld/recorder.md`   | M5        | `aegis-recorder`         | `lld-done` |
 | Channels                | `lld/channels.md`   | M6        | `aegis-channels`         | `done`     |
 | Watchdog & failover     | `lld/watchdog.md`   | M7        | `aegis-watchdog`         | `done`     |
-| Prompts                 | `lld/prompts.md`    | M8        | `aegis-controller`       | `pending`  |
+| Prompts                 | `lld/prompts.md`    | M8        | `aegis-controller`       | `done`     |
 | Telegram bridge         | `lld/telegram.md`   | M9        | `aegis-telegram`         | `pending`  |
 | Controller & dispatcher | `lld/controller.md` | M10       | `aegis-controller`       | `pending`  |
 | Global daemon & IPC     | `lld/daemon.md`     | M11       | `aegis-controller`       | `pending`  |
@@ -216,19 +216,19 @@ All LLDs derived from the HLD (§15). Each must reach `done` before its mileston
 ## Milestone 8 — Prompts: `aegis-controller` (partial)
 
 **LLD:** `lld/prompts.md`  
-**Status:** `pending`  
+**Status:** `done`  
 **Depends on:** M0
 
 ### Tasks
 
-| #   | Task                                                                              | Crate              | Notes                                                                 |
-| --- | --------------------------------------------------------------------------------- | ------------------ | --------------------------------------------------------------------- |
-| 8.1 | Write `lld/prompts.md`                                                            | —                  | Template engine; variable resolution; prompt size limits per provider |
-| 8.2 | Implement prompt template renderer: `{{variable}}` substitution                   | `aegis-controller` |                                                                       |
-| 8.3 | Implement prompt resolution: agent override → role file → built-in default        | `aegis-controller` |                                                                       |
-| 8.4 | Ship built-in default prompt templates (system, handoff/recovery, handoff/resume) | `aegis-controller` | Embedded in binary                                                    |
-| 8.5 | Implement `aegis init` prompt scaffold: copy defaults to `.aegis/prompts/`        | `aegis-controller` |                                                                       |
-| 8.6 | Unit tests: resolution order; size limit truncation                               | `aegis-controller` |                                                                       |
+| #   | Task                                                                              | Crate              | Status | Notes                                                                 |
+| --- | --------------------------------------------------------------------------------- | ------------------ | ------ | --------------------------------------------------------------------- |
+| 8.1 | Write `lld/prompts.md`                                                            | —                  | `done` | Template engine; variable resolution; prompt size limits per provider |
+| 8.2 | Implement prompt template renderer: `{{variable}}` substitution                   | `aegis-controller` | `done` | Simple variable replacement engine                                    |
+| 8.3 | Implement prompt resolution: agent override → role file → built-in default        | `aegis-controller` | `done` |                                                                       |
+| 8.4 | Ship built-in default prompt templates (system, handoff/recovery, handoff/resume) | `aegis-controller` | `done` | Embedded in binary via `include_str!`                                 |
+| 8.5 | Implement `aegis init` prompt scaffold: copy defaults to `.aegis/prompts/`        | `aegis-controller` | `done` | `PromptManager::scaffold_defaults()`                                  |
+| 8.6 | Unit tests: resolution order; size limit truncation                               | `aegis-controller` | `done` |                                                                       |
 
 ---
 

@@ -187,7 +187,45 @@ One scan can contain multiple signals. The Watchdog emits only the highest-prior
 
 Provider methods `is_rate_limit_error()`, `is_auth_error()`, and `is_task_complete()` are evaluated alongside configured Watchdog patterns. Configured patterns are still authoritative so users can recognize provider-specific output before the provider manifest is updated.
 
-### 6.3 Duplicate Suppression
+### 6.3 Provider Pattern Source of Truth
+
+Common provider errors are owned by `aegis-providers/src/builtin_providers.yaml`:
+
+```yaml
+providers:
+  claude-code:
+    error_patterns:
+      rate_limit: ["rate limit", "429", "usage limit reached"]
+      auth: ["401", "authentication failed"]
+```
+
+`aegis-watchdog` must not duplicate those strings in its implementation. It should ask the active provider:
+
+```rust
+provider.is_rate_limit_error(line)
+provider.is_auth_error(line)
+provider.is_task_complete(line)
+```
+
+This keeps provider expansion straightforward:
+
+1. Add or update provider patterns in `builtin_providers.yaml`.
+2. Add targeted provider manifest tests in `aegis-providers`.
+3. Watchdog provider-compatibility tests automatically exercise the loaded `ProviderRegistry`.
+
+Project-specific or fast-moving patterns remain configurable through:
+
+```toml
+[watchdog.patterns]
+rate_limit = ["re:temporarily unavailable", "too many requests"]
+auth_failure = ["invalid api key"]
+sandbox_violation = ["Operation not permitted"]
+task_complete = ["[AEGIS:DONE]"]
+```
+
+Those config patterns are additive to provider-owned patterns for matching. They are not written back into the provider manifest.
+
+### 6.4 Duplicate Suppression
 
 The monitor maintains an in-memory recent-event cache:
 
@@ -425,8 +463,13 @@ This prevents duplicate failovers when multiple sweeps observe the same pane out
 | `test_failover_exhausted_marks_failed` | No fallback provider calls `mark_failed()` |
 | `test_failover_uses_recorder_context` | Recovery prompt includes Flight Recorder tail, not only pane capture |
 | `test_backoff_increases_and_caps` | Delay grows exponentially and never exceeds max |
+| `test_provider_manifest_rate_limit_patterns_are_detected` | Every provider manifest rate-limit sample is detected by Watchdog matching |
+| `test_provider_manifest_auth_patterns_are_detected` | Every provider manifest auth sample is detected by Watchdog matching |
+| `test_watchdog_config_patterns_extend_provider_patterns` | Configured patterns match without replacing provider-owned patterns |
 
 Integration tests against real tmux should create an isolated session, write recognizable output, run `sweep_once()`, and clean up the session at the end. Failover tests should use a fake `FailoverExecutor` rather than launching real provider CLIs.
+
+Provider compatibility tests should be table-driven from `ProviderRegistry::from_config()` rather than copying pattern strings into Watchdog tests. For each loaded provider, construct representative lines by embedding each configured pattern in terminal-like text and assert the Watchdog emits the expected `DetectedEvent`. This protects currently supported providers and makes adding a provider require only manifest coverage plus the generated compatibility test.
 
 ---
 
