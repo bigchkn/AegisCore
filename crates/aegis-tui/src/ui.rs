@@ -207,12 +207,50 @@ fn render_spawn_overlay(frame: &mut Frame, area: Rect, input: &str) {
         .split(area);
 
     let title = Paragraph::new(" Task Description for New Agent: ")
-        .style(Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD));
+        .style(Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD))
+        .wrap(Wrap { trim: false });
     frame.render_widget(title, chunks[0]);
 
     let input_field = Paragraph::new(input)
-        .block(Block::default().borders(Borders::ALL).border_style(Style::default().fg(Color::Cyan)));
+        .block(Block::default().borders(Borders::ALL).border_style(Style::default().fg(Color::Cyan)))
+        .wrap(Wrap { trim: false });
     frame.render_widget(input_field, chunks[1]);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ratatui::{backend::TestBackend, Terminal};
+
+    #[test]
+    fn spawn_overlay_input_wraps_long_text() {
+        // 30 columns wide: input block inner width = 30 - 2 borders = 28 chars.
+        // A 60-char input must produce text on the second wrapped line (row 5).
+        let backend = TestBackend::new(30, 12);
+        let mut terminal = Terminal::new(backend).unwrap();
+
+        // Exactly 60 chars — more than 2× the inner width (28), guaranteeing a second wrapped line.
+        let long_input = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ12345678";
+
+        terminal
+            .draw(|frame| {
+                let area = Rect::new(0, 0, 30, 12);
+                render_spawn_overlay(frame, area, long_input);
+            })
+            .unwrap();
+
+        let buf = terminal.backend().buffer().clone();
+
+        // Layout: title chunk = rows 0-2, input block = rows 3-11.
+        // Input block border occupies row 3 (top) and row 11 (bottom).
+        // Inner content starts at row 4. Row 4 = first 28 chars, row 5 = chars 29-56.
+        let row5: String = (1u16..29).map(|x| buf[(x, 5u16)].symbol().to_string()).collect();
+        assert!(
+            row5.trim().len() > 0,
+            "Expected wrapped text on row 5 but found only whitespace: {:?}",
+            row5
+        );
+    }
 }
 
 fn render_kill_overlay(frame: &mut Frame, area: Rect, agent_id: uuid::Uuid, app: &AppState) {
