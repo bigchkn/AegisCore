@@ -88,8 +88,37 @@ impl Watchdog {
         let mut events = Vec::new();
 
         for agent in agents.into_iter().filter(is_monitor_eligible) {
-            let provider = self.providers.get(&agent.cli_provider)?;
             let target = TmuxTarget::parse(&agent.tmux_target())?;
+            match self.observer.pane_exit_status(&target).await {
+                Ok(Some(exit_code)) => {
+                    let event = DetectedEvent::CliCrash {
+                        agent_id: agent.agent_id,
+                        exit_code: Some(exit_code),
+                    };
+                    if self.should_emit(&event) {
+                        events.push(event);
+                    }
+                    continue;
+                }
+                Ok(None) => {}
+                Err(error) => {
+                    warn!(
+                        agent_id = %agent.agent_id,
+                        error = %error,
+                        "watchdog pane status check failed; treating pane as crashed"
+                    );
+                    let event = DetectedEvent::CliCrash {
+                        agent_id: agent.agent_id,
+                        exit_code: None,
+                    };
+                    if self.should_emit(&event) {
+                        events.push(event);
+                    }
+                    continue;
+                }
+            }
+
+            let provider = self.providers.get(&agent.cli_provider)?;
             let capture = match self
                 .observer
                 .capture_pane_plain(&target, self.config.scan_lines)
@@ -187,6 +216,7 @@ fn suppression_key(event: &DetectedEvent) -> (Uuid, &'static str, String) {
 
 #[async_trait]
 trait PaneObserver: Send + Sync {
+    async fn pane_exit_status(&self, target: &TmuxTarget) -> Result<Option<i32>>;
     async fn capture_pane_plain(&self, target: &TmuxTarget, lines: usize) -> Result<String>;
 }
 
@@ -196,6 +226,10 @@ struct TmuxPaneObserver {
 
 #[async_trait]
 impl PaneObserver for TmuxPaneObserver {
+    async fn pane_exit_status(&self, target: &TmuxTarget) -> Result<Option<i32>> {
+        self.tmux.pane_exit_status(target).await.map_err(Into::into)
+    }
+
     async fn capture_pane_plain(&self, target: &TmuxTarget, lines: usize) -> Result<String> {
         self.tmux.capture_pane_plain(target, lines).await.map_err(Into::into)
     }
@@ -302,11 +336,16 @@ mod tests {
 
     struct FakeObserver {
         capture: String,
+        exit_status: Option<i32>,
         captures: Mutex<usize>,
     }
 
     #[async_trait]
     impl PaneObserver for FakeObserver {
+        async fn pane_exit_status(&self, _target: &TmuxTarget) -> Result<Option<i32>> {
+            Ok(self.exit_status)
+        }
+
         async fn capture_pane_plain(&self, _target: &TmuxTarget, _lines: usize) -> Result<String> {
             *self.captures.lock().unwrap() += 1;
             Ok(self.capture.clone())
@@ -329,6 +368,7 @@ mod tests {
     async fn sweep_detects_task_complete() {
         let observer = Arc::new(FakeObserver {
             capture: "work finished [AEGIS:DONE]".to_string(),
+            exit_status: None,
             captures: Mutex::new(0),
         });
         let agent = agent_with_status(AgentStatus::Active);
@@ -355,6 +395,7 @@ mod tests {
     async fn run_dispatches_events_until_shutdown() {
         let observer = Arc::new(FakeObserver {
             capture: "work finished [AEGIS:DONE]".to_string(),
+            exit_status: None,
             captures: Mutex::new(0),
         });
         let sink = Arc::new(RecordingSink::default());
@@ -391,6 +432,7 @@ mod tests {
     async fn monitor_skips_paused_agents() {
         let observer = Arc::new(FakeObserver {
             capture: "work finished [AEGIS:DONE]".to_string(),
+            exit_status: None,
             captures: Mutex::new(0),
         });
         let watchdog = Watchdog::with_observer(
@@ -416,6 +458,10 @@ mod tests {
 
         #[async_trait]
         impl PaneObserver for FailingObserver {
+            async fn pane_exit_status(&self, _target: &TmuxTarget) -> Result<Option<i32>> {
+                Ok(None)
+            }
+
             async fn capture_pane_plain(
                 &self,
                 _target: &TmuxTarget,
@@ -440,5 +486,78 @@ mod tests {
 
         let events = watchdog.sweep_once().await.unwrap();
         assert!(events.is_empty());
+    }
+
+    #[tokio::test]
+    async fn sweep_detects_dead_pane() {
+        let watchdog = Watchdog::with_observer(
+            Arc::new(FakeObserver {
+                capture: String::new(),
+                exit_status: Some(17),
+                captures: Mutex::new(0),
+            }),
+            Arc::new(FakeAgentRegistry {
+                agents: vec![agent_with_status(AgentStatus::Active)],
+            }),
+            default_registry(),
+            Arc::new(RecordingSink::default()),
+            watchdog_config(&["[AEGIS:DONE]"]),
+        )
+        .unwrap();
+
+        let events = watchdog.sweep_once().await.unwrap();
+
+        assert_eq!(events.len(), 1);
+        assert!(matches!(
+            events[0],
+            DetectedEvent::CliCrash {
+                exit_code: Some(17),
+                ..
+            }
+        ));
+    }
+
+    #[tokio::test]
+    async fn missing_pane_is_treated_as_cli_crash() {
+        struct MissingPaneObserver;
+
+        #[async_trait]
+        impl PaneObserver for MissingPaneObserver {
+            async fn pane_exit_status(&self, _target: &TmuxTarget) -> Result<Option<i32>> {
+                Err(AegisError::TmuxPaneNotFound {
+                    target: "aegis:1.%1".to_string(),
+                })
+            }
+
+            async fn capture_pane_plain(
+                &self,
+                _target: &TmuxTarget,
+                _lines: usize,
+            ) -> Result<String> {
+                panic!("capture should not run when pane status lookup fails");
+            }
+        }
+
+        let watchdog = Watchdog::with_observer(
+            Arc::new(MissingPaneObserver),
+            Arc::new(FakeAgentRegistry {
+                agents: vec![agent_with_status(AgentStatus::Active)],
+            }),
+            default_registry(),
+            Arc::new(RecordingSink::default()),
+            watchdog_config(&["[AEGIS:DONE]"]),
+        )
+        .unwrap();
+
+        let events = watchdog.sweep_once().await.unwrap();
+
+        assert_eq!(events.len(), 1);
+        assert!(matches!(
+            events[0],
+            DetectedEvent::CliCrash {
+                exit_code: None,
+                ..
+            }
+        ));
     }
 }
