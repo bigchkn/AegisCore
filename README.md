@@ -1,5 +1,7 @@
 # AegisCore
 
+| Note : Software is still pre-release and not suitable to install yet.
+
 **Hardened Orchestration. Shielded Intelligence. Absolute Control.**
 
 AegisCore is a multi-agent orchestration engine for macOS that runs autonomous AI CLI agents inside kernel-enforced sandboxes — no Docker, no VMs, no web servers. Just tmux, git worktrees, and Apple's native Seatbelt security layer.
@@ -22,14 +24,14 @@ It coordinates a hierarchy of long-lived **Bastion** agents and ephemeral **Spli
 
 ## Core Concepts
 
-| Concept | Description |
-|---|---|
-| **Bastion** | Long-lived agent holding project context; coordinates Splinters |
-| **Splinter** | Ephemeral agent spawned for a discrete task; evaporates on completion |
-| **Flight Recorder** | Passive I/O mirror attached to every agent via `tmux pipe-pane` |
-| **Watchdog** | Background monitor that detects failures and triggers failover cascades |
-| **Sandbox Factory** | Generates per-agent `.sb` profiles at spawn time; injects worktree path |
-| **Channel Layer** | Injection (send-keys), Mailbox (filesystem), Observation (capture-pane), Broadcast |
+| Concept             | Description                                                                        |
+| ------------------- | ---------------------------------------------------------------------------------- |
+| **Bastion**         | Long-lived agent holding project context; coordinates Splinters                    |
+| **Splinter**        | Ephemeral agent spawned for a discrete task; evaporates on completion              |
+| **Flight Recorder** | Passive I/O mirror attached to every agent via `tmux pipe-pane`                    |
+| **Watchdog**        | Background monitor that detects failures and triggers failover cascades            |
+| **Sandbox Factory** | Generates per-agent `.sb` profiles at spawn time; injects worktree path            |
+| **Channel Layer**   | Injection (send-keys), Mailbox (filesystem), Observation (capture-pane), Broadcast |
 
 ---
 
