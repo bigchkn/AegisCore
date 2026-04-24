@@ -114,7 +114,7 @@ All LLDs derived from the HLD (§15). Each must reach `done` before its mileston
 ## Milestone 3 — State & Registry: `aegis-controller` (partial)
 
 **LLD:** `lld/state.md`  
-**Status:** `lld-done`  
+**Status:** `done`  
 **Depends on:** M0
 
 ### Tasks
@@ -122,12 +122,12 @@ All LLDs derived from the HLD (§15). Each must reach `done` before its mileston
 | # | Task | Crate | Status | Notes |
 |---|---|---|---|---|
 | 3.1 | Write `lld/state.md` | — | `done` | File locking strategy; on-disk format; snapshot writer; boot recovery |
-| 3.2 | Implement `FileRegistry`: `AgentRegistry` + `TaskRegistry` + `ChannelRegistry` | `aegis-controller` | `pending` | fs2 advisory locking; atomic write |
-| 3.3 | Implement `TaskQueue`: atomic `claim_next()` | `aegis-controller` | `pending` | |
-| 3.4 | Implement `StateManager`: periodic snapshot writer + prune | `aegis-controller` | `pending` | tokio background task |
-| 3.5 | Implement crash recovery boot sequence | `aegis-controller` | `pending` | Active agents → Failed on restart |
-| 3.6 | Implement `FileRegistry::init()` for `aegis init` | `aegis-controller` | `pending` | |
-| 3.7 | Tests: concurrent writes; snapshot round-trip; lock timeout; recovery | `aegis-controller` | `pending` | |
+| 3.2 | Implement `FileRegistry`: `AgentRegistry` + `TaskRegistry` + `ChannelRegistry` | `aegis-controller` | `done` | fs2 advisory locking; atomic write |
+| 3.3 | Implement `TaskQueue`: atomic `claim_next()` | `aegis-controller` | `done` | |
+| 3.4 | Implement `StateManager`: periodic snapshot writer + prune | `aegis-controller` | `done` | tokio background task |
+| 3.5 | Implement crash recovery boot sequence | `aegis-controller` | `done` | Active agents → Failed on restart |
+| 3.6 | Implement `FileRegistry::init()` for `aegis init` | `aegis-controller` | `done` | |
+| 3.7 | Tests: concurrent writes; snapshot round-trip; lock timeout; recovery | `aegis-controller` | `done` | |
 
 ---
 

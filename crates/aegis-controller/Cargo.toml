@@ -2,28 +2,17 @@
 name = "aegis-controller"
 version = "0.1.0"
 edition = "2021"
-description = "Runtime controller and dispatcher for AegisCore"
+description = "State management and orchestration for AegisCore"
 license = "MIT"
 
-[features]
-default  = ["channels", "sandbox", "watchdog", "recorder", "taskflow"]
-channels = ["dep:aegis-channels"]
-sandbox  = ["dep:aegis-sandbox"]
-watchdog = ["dep:aegis-watchdog"]
-recorder = ["dep:aegis-recorder"]
-telegram = ["dep:aegis-telegram"]
-taskflow = ["dep:aegis-taskflow"]
-
 [dependencies]
-aegis-core      = { workspace = true }
-aegis-tmux      = { workspace = true }
-aegis-providers = { workspace = true }
-aegis-channels  = { workspace = true, optional = true }
-aegis-sandbox   = { workspace = true, optional = true }
-aegis-watchdog  = { workspace = true, optional = true }
-aegis-recorder  = { workspace = true, optional = true }
-aegis-telegram  = { workspace = true, optional = true }
-aegis-taskflow  = { workspace = true, optional = true }
-serde_json      = { workspace = true }
-tokio           = { workspace = true }
-tracing         = { workspace = true }
+aegis-core = { workspace = true }
+tracing    = { workspace = true }
+serde      = { workspace = true }
+serde_json = { workspace = true }
+fs2        = "0.4"
+uuid       = { version = "1", features = ["v4", "serde"] }
+chrono     = { version = "0.4", features = ["serde"] }
+tokio      = { version = "1", features = ["fs", "time", "rt", "rt-multi-thread"] }
+async-trait = "0.1"
+tempfile = "3" # for atomic writes
