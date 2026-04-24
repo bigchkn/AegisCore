@@ -11,6 +11,7 @@ use uuid::Uuid;
 
 use crate::{
     events::EventBus,
+    git::GitWorktree,
     lifecycle::{sandbox_policy_from_config, AgentSpec, SpawnPlan},
     prompts::{PromptContext, PromptManager, PromptType},
     registry::FileRegistry,
@@ -183,11 +184,7 @@ impl Dispatcher {
         parent_id: Option<Uuid>,
     ) -> Result<Agent> {
         let spec = self.build_splinter_spec(role, task, parent_id);
-        let worktree = self.storage.agent_worktree_path(agent_id);
-        std::fs::create_dir_all(&worktree).map_err(|source| AegisError::StorageIo {
-            path: worktree,
-            source,
-        })?;
+        self.prepare_splinter_worktree(agent_id, role).await?;
         let window_name = format!("splinter-{role}-{}", short_id(agent_id));
         let (window, pane) = self.prepare_tmux_window(agent_id, &window_name).await?;
         let plan = self.build_spawn_plan(spec, agent_id, window, pane)?;
@@ -220,6 +217,23 @@ impl Dispatcher {
 
         tracing::debug!(%agent_id, session, window, pane, "prepared tmux window");
         Ok((window, pane))
+    }
+
+    async fn prepare_splinter_worktree(&self, agent_id: Uuid, role: &str) -> Result<()> {
+        if self.tmux.is_some() {
+            let git = GitWorktree::new(
+                self.storage.project_root().to_path_buf(),
+                self.storage.worktrees_dir(),
+            );
+            git.create_for_agent(agent_id, role).await?;
+            return Ok(());
+        }
+
+        let worktree = self.storage.agent_worktree_path(agent_id);
+        std::fs::create_dir_all(&worktree).map_err(|source| AegisError::StorageIo {
+            path: worktree,
+            source,
+        })
     }
 
     async fn launch_or_insert_plan(&self, plan: SpawnPlan) -> Result<Agent> {

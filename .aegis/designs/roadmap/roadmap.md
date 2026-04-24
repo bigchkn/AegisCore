@@ -267,7 +267,7 @@ All LLDs derived from the HLD (§15). Each must reach `done` before its mileston
 | 10.3  | Add `AegisRuntime::build()` and subsystem construction            | `aegis-controller` | `done`     | Runtime construction; background tasks still pending         |
 | 10.4  | Add `AgentSpec`, `SpawnPlan`, and spawn-plan unit tests           | `aegis-controller` | `done`     | Deterministic pre-launch validation                         |
 | 10.5  | Implement Dispatcher Bastion spawn flow                           | `aegis-controller` | `pending`  | tmux + provider + sandbox + recorder                        |
-| 10.6  | Implement Git worktree helper and Splinter spawn flow             | `aegis-controller` | `pending`  | Includes task assignment                                    |
+| 10.6  | Implement Git worktree helper and Splinter spawn flow             | `aegis-controller` | `done`     | Git worktree helper; live path uses worktree add             |
 | 10.7  | Implement Scheduler queue dispatch and concurrency limit          | `aegis-controller` | `done`     | `dispatch_once()` implemented; background loop pending       |
 | 10.8  | Implement pause, resume, kill, and receipt processing             | `aegis-controller` | `pending`  | Lifecycle state transitions                                 |
 | 10.9  | Implement Controller `WatchdogSink` and failover executor         | `aegis-controller` | `pending`  | Provider cascade and recorder context                       |
@@ -327,21 +327,21 @@ All LLDs derived from the HLD (§15). Each must reach `done` before its mileston
 ## Milestone 13 — Taskflow Engine: `aegis-taskflow`
 
 **LLD:** `lld/taskflow.md`  
-**Status:** `pending`  
+**Status:** `in-progress`  
 **Depends on:** M0, M10 (agent registry integration)
 
 ### Tasks
 
-| #    | Task                                                                                    | Crate            | Notes                                                                                          |
-| ---- | --------------------------------------------------------------------------------------- | ---------------- | ---------------------------------------------------------------------------------------------- |
-| 13.1 | Write `lld/taskflow.md`                                                                 | —                | HLD→LLD→Roadmap→Task pipeline; document schema; task state machine; agent registry integration |
-| 13.2 | Implement document schema: HLD, LLD, Roadmap, Task types                                | `aegis-taskflow` | Parsed from `.aegis/designs/` markdown                                                         |
-| 13.3 | Implement task state machine: pending → lld-in-progress → lld-done → in-progress → done | `aegis-taskflow` |                                                                                                |
-| 13.4 | Implement `aegis taskflow status`: render pipeline state from design directory          | `aegis-taskflow` |                                                                                                |
-| 13.5 | Implement `aegis taskflow assign`: link task to agent in registry                       | `aegis-taskflow` |                                                                                                |
-| 13.6 | Implement roadmap parser: read `roadmap.md`; extract milestones and tasks               | `aegis-taskflow` |                                                                                                |
-| 13.7 | Unit tests: state machine transitions; roadmap parse correctness                        | `aegis-taskflow` |                                                                                                |
-
+| #    | Task                                                                                 | Crate            | Status | Notes                                                                   |
+| ---- | ------------------------------------------------------------------------------------ | ---------------- | ------ | ----------------------------------------------------------------------- |
+| 13.1 | Write `lld/taskflow.md`                                                              | —                | `done` | Modular TOML model; CLI-first access; prompt snippet                    |
+| 13.2 | Implement Modular Schema: Index and Milestone TOML parsers                           | `aegis-taskflow` | `pending` | Parsers for `index.toml` and `milestones/*.toml` fragments              |
+| 13.3 | Implement Taskflow Link Registry (`taskflow.json`)                                   | `aegis-taskflow` | `pending` | Persistent mapping between Roadmap IDs and Registry UUIDs               |
+| 13.4 | Implement Sync Logic: Cross-reference TOML fragments with Agent Registry             | `aegis-taskflow` | `pending` | Core engine for status synchronization                                  |
+| 13.5 | Implement CLI Subcommands: `list`, `show`, `status`, `assign`                        | `src/`           | `pending` | Token-optimized summaries for agents and humans                         |
+| 13.6 | Implement View Generator: Auto-generate project `roadmap.md` from fragments          | `aegis-taskflow` | `pending` | Optional Markdown view for human-friendly consumption                   |
+| 13.7 | Implement System Prompt Snippet injection in `aegis-controller`                      | `aegis-controller` | `pending` | Injects taskflow awareness into every agent's system prompt             |
+| 13.8 | Unit & Integration Tests: TOML aggregation; sync correctness; merge-conflict safety | `aegis-taskflow` | `pending` |                                                                         |
 ---
 
 ## Milestone 14 — TUI: `aegis-tui`
