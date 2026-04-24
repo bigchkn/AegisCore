@@ -5,7 +5,8 @@ use std::{
 };
 
 use aegis_core::{
-    config::WatchdogConfig, Agent, AgentRegistry, AgentStatus, DetectedEvent, Result,
+    config::{RecorderConfig, WatchdogConfig},
+    Agent, AgentRegistry, AgentStatus, DetectedEvent, Recorder, Result, TaskRegistry,
     WatchdogAction, WatchdogSink,
 };
 use aegis_providers::ProviderRegistry;
@@ -15,11 +16,13 @@ use tokio::sync::watch;
 use tracing::warn;
 use uuid::Uuid;
 
-use crate::PatternMatcher;
+use crate::{FailoverCoordinator, FailoverExecutor, PatternMatcher};
 
 pub struct Watchdog {
     observer: Arc<dyn PaneObserver>,
     agents: Arc<dyn AgentRegistry>,
+    executor: Arc<dyn FailoverExecutor>,
+    failover: FailoverCoordinator,
     providers: Arc<ProviderRegistry>,
     sink: Arc<dyn WatchdogSink>,
     matcher: PatternMatcher,
@@ -31,32 +34,56 @@ impl Watchdog {
     pub fn new(
         tmux: Arc<TmuxClient>,
         agents: Arc<dyn AgentRegistry>,
+        tasks: Arc<dyn TaskRegistry>,
+        recorder: Arc<dyn Recorder>,
         providers: Arc<ProviderRegistry>,
         sink: Arc<dyn WatchdogSink>,
         config: WatchdogConfig,
+        recorder_config: RecorderConfig,
+        executor: Arc<dyn FailoverExecutor>,
     ) -> Result<Self> {
         Self::with_observer(
             Arc::new(TmuxPaneObserver { tmux }),
             agents,
+            tasks,
+            recorder,
             providers,
             sink,
             config,
+            recorder_config,
+            executor,
         )
     }
 
     fn with_observer(
         observer: Arc<dyn PaneObserver>,
         agents: Arc<dyn AgentRegistry>,
+        tasks: Arc<dyn TaskRegistry>,
+        recorder: Arc<dyn Recorder>,
         providers: Arc<ProviderRegistry>,
         sink: Arc<dyn WatchdogSink>,
         config: WatchdogConfig,
+        recorder_config: RecorderConfig,
+        executor: Arc<dyn FailoverExecutor>,
     ) -> Result<Self> {
+        let matcher = PatternMatcher::new(&config.patterns)?;
+        let failover = FailoverCoordinator::new(
+            agents.clone(),
+            tasks,
+            recorder,
+            providers.clone(),
+            recorder_config,
+            executor.clone(),
+        );
+
         Ok(Self {
             observer,
             agents,
+            executor,
+            failover,
             providers,
             sink,
-            matcher: PatternMatcher::new(&config.patterns)?,
+            matcher,
             config,
             recent_events: Mutex::new(HashMap::new()),
         })
@@ -147,12 +174,25 @@ impl Watchdog {
     }
 
     async fn handle_event(&self, event: DetectedEvent) -> Result<()> {
-        match self.sink.on_event(event) {
-            WatchdogAction::InitiateFailover
-            | WatchdogAction::PauseAndNotify
-            | WatchdogAction::CaptureAndMarkFailed
-            | WatchdogAction::LogAndContinue
-            | WatchdogAction::TriggerReceiptProcessing => Ok(()),
+        let action = self.sink.on_event(event.clone());
+        match action {
+            WatchdogAction::InitiateFailover if self.config.failover_enabled => {
+                self.failover.initiate(event).await
+            }
+            WatchdogAction::PauseAndNotify => {
+                if let Some(agent) = self.agents.get(event.agent_id())? {
+                    self.executor.pause_current(&agent).await?;
+                }
+                Ok(())
+            }
+            WatchdogAction::CaptureAndMarkFailed => {
+                let reason = event_reason(&event);
+                self.executor.mark_failed(event.agent_id(), &reason).await
+            }
+            WatchdogAction::TriggerReceiptProcessing => {
+                self.executor.process_receipt(event.agent_id()).await
+            }
+            WatchdogAction::LogAndContinue | WatchdogAction::InitiateFailover => Ok(()),
         }
     }
 
@@ -214,6 +254,33 @@ fn suppression_key(event: &DetectedEvent) -> (Uuid, &'static str, String) {
     }
 }
 
+fn event_reason(event: &DetectedEvent) -> String {
+    match event {
+        DetectedEvent::RateLimit { matched_pattern, .. } => {
+            format!("rate limit detected: {matched_pattern}")
+        }
+        DetectedEvent::AuthFailure {
+            matched_pattern, ..
+        } => {
+            format!("authentication failure detected: {matched_pattern}")
+        }
+        DetectedEvent::CliCrash { exit_code, .. } => match exit_code {
+            Some(code) => format!("cli crashed with exit code {code}"),
+            None => "cli pane disappeared".to_string(),
+        },
+        DetectedEvent::SandboxViolation {
+            matched_pattern, ..
+        } => {
+            format!("sandbox violation detected: {matched_pattern}")
+        }
+        DetectedEvent::TaskComplete {
+            matched_pattern, ..
+        } => {
+            format!("task completion detected: {matched_pattern}")
+        }
+    }
+}
+
 #[async_trait]
 trait PaneObserver: Send + Sync {
     async fn pane_exit_status(&self, target: &TmuxTarget) -> Result<Option<i32>>;
@@ -239,11 +306,18 @@ impl PaneObserver for TmuxPaneObserver {
 mod tests {
     use super::*;
     use aegis_core::{
-        config::WatchdogPatterns, AegisError, AgentKind,
+        config::WatchdogPatterns, AegisError, AgentKind, LogQuery, Task, TaskStatus,
     };
     use chrono::Utc;
     use std::path::PathBuf;
-    use uuid::Uuid;
+
+    fn recorder_config() -> RecorderConfig {
+        RecorderConfig {
+            failover_context_lines: 3,
+            log_rotation_max_mb: 32,
+            log_retention_count: 8,
+        }
+    }
 
     fn watchdog_config(task_complete: &[&str]) -> WatchdogConfig {
         WatchdogConfig {
@@ -277,7 +351,7 @@ mod tests {
             status,
             role: "worker".to_string(),
             parent_id: None,
-            task_id: None,
+            task_id: Some(Uuid::new_v4()),
             tmux_session: "aegis".to_string(),
             tmux_window: 1,
             tmux_pane: "%1".to_string(),
@@ -352,16 +426,152 @@ mod tests {
         }
     }
 
-    #[derive(Default)]
+    struct NoopTaskRegistry;
+
+    impl TaskRegistry for NoopTaskRegistry {
+        fn insert(&self, _task: &Task) -> Result<()> {
+            unimplemented!()
+        }
+
+        fn get(&self, _task_id: Uuid) -> Result<Option<Task>> {
+            Ok(None)
+        }
+
+        fn update_status(&self, _task_id: Uuid, _status: TaskStatus) -> Result<()> {
+            unimplemented!()
+        }
+
+        fn assign(&self, _task_id: Uuid, _agent_id: Uuid) -> Result<()> {
+            unimplemented!()
+        }
+
+        fn complete(&self, _task_id: Uuid, _receipt_path: Option<PathBuf>) -> Result<()> {
+            unimplemented!()
+        }
+
+        fn list_pending(&self) -> Result<Vec<Task>> {
+            Ok(Vec::new())
+        }
+
+        fn list_all(&self) -> Result<Vec<Task>> {
+            Ok(Vec::new())
+        }
+    }
+
+    struct NoopRecorder;
+
+    impl Recorder for NoopRecorder {
+        fn attach(&self, _agent: &Agent) -> Result<()> {
+            unimplemented!()
+        }
+
+        fn detach(&self, _agent_id: Uuid) -> Result<()> {
+            unimplemented!()
+        }
+
+        fn archive(&self, _agent_id: Uuid) -> Result<PathBuf> {
+            unimplemented!()
+        }
+
+        fn query(&self, _query: &LogQuery) -> Result<Vec<String>> {
+            Ok(Vec::new())
+        }
+
+        fn log_path(&self, agent_id: Uuid) -> PathBuf {
+            std::env::temp_dir().join(format!("{agent_id}.log"))
+        }
+    }
+
     struct RecordingSink {
+        action: WatchdogAction,
         events: Mutex<Vec<DetectedEvent>>,
+    }
+
+    impl Default for RecordingSink {
+        fn default() -> Self {
+            Self {
+                action: WatchdogAction::LogAndContinue,
+                events: Mutex::new(Vec::new()),
+            }
+        }
     }
 
     impl WatchdogSink for RecordingSink {
         fn on_event(&self, event: DetectedEvent) -> WatchdogAction {
             self.events.lock().unwrap().push(event);
-            WatchdogAction::LogAndContinue
+            self.action.clone()
         }
+    }
+
+    #[derive(Default)]
+    struct RecordingExecutor {
+        paused: Mutex<Vec<Uuid>>,
+        failed: Mutex<Vec<(Uuid, String)>>,
+        receipts: Mutex<Vec<Uuid>>,
+    }
+
+    #[async_trait]
+    impl FailoverExecutor for RecordingExecutor {
+        async fn pause_current(&self, agent: &Agent) -> Result<()> {
+            self.paused.lock().unwrap().push(agent.agent_id);
+            Ok(())
+        }
+
+        async fn relaunch_with_provider(
+            &self,
+            agent: &Agent,
+            provider_name: &str,
+        ) -> Result<Agent> {
+            let mut updated = agent.clone();
+            updated.cli_provider = provider_name.to_string();
+            Ok(updated)
+        }
+
+        async fn inject_recovery(&self, _agent: &Agent, _prompt: &str) -> Result<()> {
+            Ok(())
+        }
+
+        async fn mark_failed(&self, agent_id: Uuid, reason: &str) -> Result<()> {
+            self.failed
+                .lock()
+                .unwrap()
+                .push((agent_id, reason.to_string()));
+            Ok(())
+        }
+
+        async fn mark_cooling(&self, _agent_id: Uuid) -> Result<()> {
+            Ok(())
+        }
+
+        async fn mark_active(&self, _agent_id: Uuid, _provider_name: &str) -> Result<()> {
+            Ok(())
+        }
+
+        async fn process_receipt(&self, agent_id: Uuid) -> Result<()> {
+            self.receipts.lock().unwrap().push(agent_id);
+            Ok(())
+        }
+    }
+
+    fn test_watchdog(
+        observer: Arc<dyn PaneObserver>,
+        agents: Arc<dyn AgentRegistry>,
+        sink: Arc<dyn WatchdogSink>,
+        executor: Arc<dyn FailoverExecutor>,
+        config: WatchdogConfig,
+    ) -> Watchdog {
+        Watchdog::with_observer(
+            observer,
+            agents,
+            Arc::new(NoopTaskRegistry),
+            Arc::new(NoopRecorder),
+            default_registry(),
+            sink,
+            config,
+            recorder_config(),
+            executor,
+        )
+        .unwrap()
     }
 
     #[tokio::test]
@@ -373,16 +583,15 @@ mod tests {
         });
         let agent = agent_with_status(AgentStatus::Active);
         let sink = Arc::new(RecordingSink::default());
-        let watchdog = Watchdog::with_observer(
+        let watchdog = test_watchdog(
             observer,
             Arc::new(FakeAgentRegistry {
                 agents: vec![agent.clone()],
             }),
-            default_registry(),
             sink,
+            Arc::new(RecordingExecutor::default()),
             watchdog_config(&["[AEGIS:DONE]"]),
-        )
-        .unwrap();
+        );
 
         let events = watchdog.sweep_once().await.unwrap();
 
@@ -399,18 +608,15 @@ mod tests {
             captures: Mutex::new(0),
         });
         let sink = Arc::new(RecordingSink::default());
-        let watchdog = Arc::new(
-            Watchdog::with_observer(
-                observer,
-                Arc::new(FakeAgentRegistry {
-                    agents: vec![agent_with_status(AgentStatus::Active)],
-                }),
-                default_registry(),
-                sink.clone(),
-                watchdog_config(&["[AEGIS:DONE]"]),
-            )
-            .unwrap(),
-        );
+        let watchdog = Arc::new(test_watchdog(
+            observer,
+            Arc::new(FakeAgentRegistry {
+                agents: vec![agent_with_status(AgentStatus::Active)],
+            }),
+            sink.clone(),
+            Arc::new(RecordingExecutor::default()),
+            watchdog_config(&["[AEGIS:DONE]"]),
+        ));
         let (shutdown_tx, shutdown_rx) = watch::channel(false);
 
         let task = tokio::spawn({
@@ -435,16 +641,15 @@ mod tests {
             exit_status: None,
             captures: Mutex::new(0),
         });
-        let watchdog = Watchdog::with_observer(
+        let watchdog = test_watchdog(
             observer.clone(),
             Arc::new(FakeAgentRegistry {
                 agents: vec![agent_with_status(AgentStatus::Paused)],
             }),
-            default_registry(),
             Arc::new(RecordingSink::default()),
+            Arc::new(RecordingExecutor::default()),
             watchdog_config(&["[AEGIS:DONE]"]),
-        )
-        .unwrap();
+        );
 
         let events = watchdog.sweep_once().await.unwrap();
 
@@ -473,16 +678,15 @@ mod tests {
             }
         }
 
-        let watchdog = Watchdog::with_observer(
+        let watchdog = test_watchdog(
             Arc::new(FailingObserver),
             Arc::new(FakeAgentRegistry {
                 agents: vec![agent_with_status(AgentStatus::Active)],
             }),
-            default_registry(),
             Arc::new(RecordingSink::default()),
+            Arc::new(RecordingExecutor::default()),
             watchdog_config(&["[AEGIS:DONE]"]),
-        )
-        .unwrap();
+        );
 
         let events = watchdog.sweep_once().await.unwrap();
         assert!(events.is_empty());
@@ -490,7 +694,7 @@ mod tests {
 
     #[tokio::test]
     async fn sweep_detects_dead_pane() {
-        let watchdog = Watchdog::with_observer(
+        let watchdog = test_watchdog(
             Arc::new(FakeObserver {
                 capture: String::new(),
                 exit_status: Some(17),
@@ -499,11 +703,10 @@ mod tests {
             Arc::new(FakeAgentRegistry {
                 agents: vec![agent_with_status(AgentStatus::Active)],
             }),
-            default_registry(),
             Arc::new(RecordingSink::default()),
+            Arc::new(RecordingExecutor::default()),
             watchdog_config(&["[AEGIS:DONE]"]),
-        )
-        .unwrap();
+        );
 
         let events = watchdog.sweep_once().await.unwrap();
 
@@ -538,16 +741,15 @@ mod tests {
             }
         }
 
-        let watchdog = Watchdog::with_observer(
+        let watchdog = test_watchdog(
             Arc::new(MissingPaneObserver),
             Arc::new(FakeAgentRegistry {
                 agents: vec![agent_with_status(AgentStatus::Active)],
             }),
-            default_registry(),
             Arc::new(RecordingSink::default()),
+            Arc::new(RecordingExecutor::default()),
             watchdog_config(&["[AEGIS:DONE]"]),
-        )
-        .unwrap();
+        );
 
         let events = watchdog.sweep_once().await.unwrap();
 
@@ -559,5 +761,103 @@ mod tests {
                 ..
             }
         ));
+    }
+
+    #[tokio::test]
+    async fn handle_event_pauses_agent_when_sink_requests_notify() {
+        let agent = agent_with_status(AgentStatus::Active);
+        let executor = Arc::new(RecordingExecutor::default());
+        let watchdog = test_watchdog(
+            Arc::new(FakeObserver {
+                capture: String::new(),
+                exit_status: None,
+                captures: Mutex::new(0),
+            }),
+            Arc::new(FakeAgentRegistry {
+                agents: vec![agent.clone()],
+            }),
+            Arc::new(RecordingSink {
+                action: WatchdogAction::PauseAndNotify,
+                events: Mutex::new(Vec::new()),
+            }),
+            executor.clone(),
+            watchdog_config(&["[AEGIS:DONE]"]),
+        );
+
+        watchdog
+            .handle_event(DetectedEvent::SandboxViolation {
+                agent_id: agent.agent_id,
+                matched_pattern: "Operation not permitted".to_string(),
+            })
+            .await
+            .unwrap();
+
+        assert_eq!(executor.paused.lock().unwrap().as_slice(), &[agent.agent_id]);
+    }
+
+    #[tokio::test]
+    async fn handle_event_marks_failed_when_sink_requests_failure() {
+        let agent = agent_with_status(AgentStatus::Active);
+        let executor = Arc::new(RecordingExecutor::default());
+        let watchdog = test_watchdog(
+            Arc::new(FakeObserver {
+                capture: String::new(),
+                exit_status: None,
+                captures: Mutex::new(0),
+            }),
+            Arc::new(FakeAgentRegistry {
+                agents: vec![agent.clone()],
+            }),
+            Arc::new(RecordingSink {
+                action: WatchdogAction::CaptureAndMarkFailed,
+                events: Mutex::new(Vec::new()),
+            }),
+            executor.clone(),
+            watchdog_config(&["[AEGIS:DONE]"]),
+        );
+
+        watchdog
+            .handle_event(DetectedEvent::CliCrash {
+                agent_id: agent.agent_id,
+                exit_code: Some(9),
+            })
+            .await
+            .unwrap();
+
+        let failed = executor.failed.lock().unwrap();
+        assert_eq!(failed[0].0, agent.agent_id);
+        assert!(failed[0].1.contains("exit code 9"));
+    }
+
+    #[tokio::test]
+    async fn handle_event_triggers_receipt_processing() {
+        let agent = agent_with_status(AgentStatus::Active);
+        let executor = Arc::new(RecordingExecutor::default());
+        let watchdog = test_watchdog(
+            Arc::new(FakeObserver {
+                capture: String::new(),
+                exit_status: None,
+                captures: Mutex::new(0),
+            }),
+            Arc::new(FakeAgentRegistry {
+                agents: vec![agent.clone()],
+            }),
+            Arc::new(RecordingSink {
+                action: WatchdogAction::TriggerReceiptProcessing,
+                events: Mutex::new(Vec::new()),
+            }),
+            executor.clone(),
+            watchdog_config(&["[AEGIS:DONE]"]),
+        );
+
+        watchdog
+            .handle_event(DetectedEvent::TaskComplete {
+                agent_id: agent.agent_id,
+                matched_pattern: "[AEGIS:DONE]".to_string(),
+            })
+            .await
+            .unwrap();
+
+        assert_eq!(executor.receipts.lock().unwrap().as_slice(), &[agent.agent_id]);
     }
 }
