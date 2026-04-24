@@ -1,4 +1,3 @@
-import { fetchProjectData } from '../api/thunks';
 import { setActiveProject, setActiveView } from '../store/uiSlice';
 import { useAppDispatch, useAppSelector } from '../store/hooks';
 import type { ActiveView } from '../store/domain';
@@ -21,7 +20,6 @@ export function Sidebar() {
 
   const selectProject = (projectId: string) => {
     dispatch(setActiveProject(projectId));
-    void dispatch(fetchProjectData(projectId));
   };
 
   return (
