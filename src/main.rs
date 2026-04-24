@@ -216,6 +216,22 @@ enum TaskflowCommands {
         roadmap_id: String,
         task_id: String,
     },
+    /// Create a new milestone
+    CreateMilestone {
+        id: String,
+        name: String,
+        /// Optional path to LLD document
+        #[arg(long)]
+        lld: Option<String>,
+    },
+    /// Add a task to a milestone
+    AddTask {
+        milestone_id: String,
+        /// Short unique ID (e.g., 13.1)
+        id: String,
+        /// Task description
+        task: String,
+    },
 }
 
 #[tokio::main]
@@ -374,6 +390,12 @@ async fn dispatch(cli: Cli, printer: &Printer, client: &DaemonClient) -> Result<
                 }
                 TaskflowCommands::Assign { roadmap_id, task_id } => {
                     commands::taskflow::assign(&roadmap_id, &task_id, printer, client, &anchor).await
+                }
+                TaskflowCommands::CreateMilestone { id, name, lld } => {
+                    commands::taskflow::create_milestone(&id, &name, lld.as_deref(), printer, client, &anchor).await
+                }
+                TaskflowCommands::AddTask { milestone_id, id, task } => {
+                    commands::taskflow::add_task(&milestone_id, &id, &task, printer, client, &anchor).await
                 }
             }
         }

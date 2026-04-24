@@ -2,7 +2,22 @@
 name = "AegisCore"
 current_milestone = 13
 
-[milestones]
-M11 = { path = "milestones/M11.toml", status = "done" }
-M12 = { path = "milestones/M12.toml", status = "in-progress" }
-M13 = { path = "milestones/M13.toml", status = "in-progress" }
+[milestones.M12]
+path = "milestones/M12.toml"
+status = "in-progress"
+
+[milestones.M15]
+path = "milestones/M15.toml"
+status = "pending"
+
+[milestones.M13]
+path = "milestones/M13.toml"
+status = "in-progress"
+
+[milestones.M11]
+path = "milestones/M11.toml"
+status = "done"
+
+[milestones.M14]
+path = "milestones/M14.toml"
+status = "pending"

@@ -23,7 +23,7 @@ extra_reads = []
 extra_writes = []
 
 [providers.claude-code]
-binary = "claude"
+binary = "/Users/Mattew/.claude/local/claude"
 resume_flag = "--resume"
 
 [providers.gemini-cli]

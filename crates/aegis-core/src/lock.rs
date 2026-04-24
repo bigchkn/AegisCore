@@ -93,6 +93,39 @@ impl LockedFile {
         })
     }
 
+    pub fn read_toml<T: DeserializeOwned>(&mut self) -> Result<T> {
+        self.file
+            .seek(SeekFrom::Start(0))
+            .map_err(|e| AegisError::StorageIo {
+                path: self.path.clone(),
+                source: e,
+            })?;
+
+        let mut content = String::new();
+        self.file
+            .read_to_string(&mut content)
+            .map_err(|e| AegisError::StorageIo {
+                path: self.path.clone(),
+                source: e,
+            })?;
+
+        if content.trim().is_empty() {
+            // TOML doesn't have an empty object like {}, it's just an empty string
+            // But we need to be able to parse it into the target type.
+            // If T implements Default, we could use that, but DeserializeOwned doesn't guarantee it.
+            // Most our TOMLs are not meant to be empty.
+            return toml::from_str("").map_err(|e| AegisError::Config {
+                field: self.path.display().to_string(),
+                reason: format!("Empty TOML: {}", e),
+            });
+        }
+
+        toml::from_str(&content).map_err(|e| AegisError::Config {
+            field: self.path.display().to_string(),
+            reason: format!("TOML Parse Error: {}", e),
+        })
+    }
+
     pub fn write_json_atomic<T: Serialize>(&mut self, value: &T) -> Result<()> {
         let parent = self.path.parent().unwrap_or_else(|| Path::new("."));
         let mut tmp = NamedTempFile::new_in(parent).map_err(|e| AegisError::StorageIo {
@@ -107,6 +140,45 @@ impl LockedFile {
             })?;
 
         tmp.write_all(json.as_bytes())
+            .map_err(|e| AegisError::StorageIo {
+                path: self.path.clone(),
+                source: e,
+            })?;
+
+        tmp.persist(&self.path).map_err(|e| AegisError::StorageIo {
+            path: self.path.clone(),
+            source: e.error,
+        })?;
+
+        // Re-acquire lock on the new file
+        self.file = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(&self.path)
+            .map_err(|e| AegisError::StorageIo {
+                path: self.path.clone(),
+                source: e,
+            })?;
+        self.file
+            .lock_exclusive()
+            .map_err(|e| AegisError::RegistryLock { source: e })?;
+
+        Ok(())
+    }
+
+    pub fn write_toml_atomic<T: Serialize>(&mut self, value: &T) -> Result<()> {
+        let parent = self.path.parent().unwrap_or_else(|| Path::new("."));
+        let mut tmp = NamedTempFile::new_in(parent).map_err(|e| AegisError::StorageIo {
+            path: self.path.clone(),
+            source: e,
+        })?;
+
+        let content = toml::to_string_pretty(value).map_err(|e| AegisError::ConfigSerializationError {
+            path: self.path.clone(),
+            source: e,
+        })?;
+
+        tmp.write_all(content.as_bytes())
             .map_err(|e| AegisError::StorageIo {
                 path: self.path.clone(),
                 source: e,

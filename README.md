@@ -74,9 +74,11 @@ All providers are configured in `aegis.toml`. Failover cascades are user-defined
 
 ---
 
-## Getting Started
+## Documentation
 
-[Getting Started Guide](GETTING_STARTED.md)
+- **[Getting Started](GETTING_STARTED.md)**: Installation and your first agent.
+- **[Taskflow System](TASKFLOW.md)**: How AegisCore manages project roadmaps and agent alignment.
+- **[Architecture (HLD)](.aegis/designs/hld/aegis.md)**: Deep dive into the system design.
 
 ---
 

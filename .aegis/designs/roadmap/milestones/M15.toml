@@ -1,0 +1,24 @@
+id = 15
+name = "Web Agent Controls"
+status = "pending"
+lld = "lld/web-agents.md"
+
+[[tasks]]
+id = "15.4"
+task = "Add Vitest coverage for web agent spawn/create flows"
+status = "pending"
+
+[[tasks]]
+id = "15.1"
+task = "Write lld/web-agents.md"
+status = "pending"
+
+[[tasks]]
+id = "15.2"
+task = "Add web agent create/spawn controls in AgentsView"
+status = "pending"
+
+[[tasks]]
+id = "15.3"
+task = "Wire spawn/create-agent form state and API thunk flow"
+status = "pending"

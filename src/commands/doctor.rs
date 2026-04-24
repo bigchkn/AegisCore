@@ -226,7 +226,17 @@ async fn check_daemon(client: &DaemonClient) -> Check {
 }
 
 fn check_provider(name: &str, binary: &str) -> Check {
-    let found = which_binary(binary);
+    let mut found = which_binary(binary);
+    
+    // Special case for claude-code which might be installed as 'claude' or 'claude-code'
+    if found.is_none() && name == "claude-code" {
+        if binary == "claude" {
+            found = which_binary("claude-code");
+        } else if binary == "claude-code" {
+            found = which_binary("claude");
+        }
+    }
+
     Check {
         label: format!("{name} provider"),
         ok: found.is_some(),
@@ -238,6 +248,15 @@ fn check_provider(name: &str, binary: &str) -> Check {
 }
 
 fn which_binary(name: &str) -> Option<PathBuf> {
+    let path = PathBuf::from(name);
+    if path.is_absolute() {
+        if path.exists() {
+            return Some(path);
+        } else {
+            return None;
+        }
+    }
+
     std::env::var("PATH").ok().and_then(|path_var| {
         path_var.split(':').find_map(|dir| {
             let p = PathBuf::from(dir).join(name);

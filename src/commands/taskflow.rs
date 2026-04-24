@@ -128,3 +128,51 @@ pub async fn assign(
     printer.line(&format!("Roadmap task {roadmap_id} linked to registry task {task_id}."));
     Ok(())
 }
+
+pub async fn create_milestone(
+    id: &str,
+    name: &str,
+    lld: Option<&str>,
+    printer: &Printer,
+    client: &DaemonClient,
+    anchor: &ProjectAnchor,
+) -> Result<(), AegisCliError> {
+    client
+        .request(
+            Some(&anchor.project_root),
+            "taskflow.create_milestone",
+            serde_json::json!({
+                "id": id,
+                "name": name,
+                "lld": lld,
+            }),
+        )
+        .await?;
+
+    printer.line(&format!("Milestone {id} ({name}) created."));
+    Ok(())
+}
+
+pub async fn add_task(
+    milestone_id: &str,
+    id: &str,
+    task: &str,
+    printer: &Printer,
+    client: &DaemonClient,
+    anchor: &ProjectAnchor,
+) -> Result<(), AegisCliError> {
+    client
+        .request(
+            Some(&anchor.project_root),
+            "taskflow.add_task",
+            serde_json::json!({
+                "milestone_id": milestone_id,
+                "id": id,
+                "task": task,
+            }),
+        )
+        .await?;
+
+    printer.line(&format!("Task {id} added to milestone {milestone_id}."));
+    Ok(())
+}

@@ -43,6 +43,7 @@ pub struct Milestone {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProjectTask {
     pub id: String,
+    pub uid: Uuid,
     pub task: String,
     pub status: TaskflowStatus,
     pub crate_name: Option<String>,
