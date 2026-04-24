@@ -3,8 +3,10 @@ import { useEffect } from 'react';
 import { fetchProjectData, fetchProjects } from '../api/thunks';
 import { useAppDispatch, useAppSelector } from '../store/hooks';
 import { AgentsView } from '../views/AgentsView';
+import { ChannelsView } from '../views/ChannelsView';
 import { LogView } from '../views/LogView';
 import { PaneView } from '../views/PaneView';
+import { TasksView } from '../views/TasksView';
 import { Sidebar } from './Sidebar';
 
 export function App() {
@@ -38,12 +40,9 @@ export function App() {
         {error ? <div className="banner">{error}</div> : null}
         {activeView === 'pane' ? <PaneView /> : null}
         {activeView === 'logs' ? <LogView /> : null}
-        {activeView === 'agents' ||
-        activeView === 'tasks' ||
-        activeView === 'channels' ||
-        activeView === 'taskflow' ? (
-          <AgentsView />
-        ) : null}
+        {activeView === 'tasks' ? <TasksView /> : null}
+        {activeView === 'channels' ? <ChannelsView /> : null}
+        {activeView === 'agents' || activeView === 'taskflow' ? <AgentsView /> : null}
       </section>
     </main>
   );

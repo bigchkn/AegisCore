@@ -180,6 +180,45 @@ select {
   overflow: auto;
 }
 
+.view-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px;
+  border-bottom: 1px solid #262d35;
+}
+
+.segmented-control {
+  display: inline-flex;
+  overflow: hidden;
+  border: 1px solid #3b4652;
+  border-radius: 6px;
+}
+
+.segmented-control button {
+  min-height: 32px;
+  padding: 0 11px;
+  border: 0;
+  border-right: 1px solid #3b4652;
+  background: #171b20;
+  color: #cbd3dd;
+  cursor: pointer;
+}
+
+.segmented-control button:last-child {
+  border-right: 0;
+}
+
+.segmented-control button.is-active {
+  background: #27303a;
+  color: #f0f3f6;
+}
+
+.inline-empty {
+  padding: 24px;
+  color: #9ea7b3;
+}
+
 table {
   width: 100%;
   border-collapse: collapse;
@@ -241,6 +280,51 @@ tbody tr:hover {
 .status-terminated {
   background: #461f25;
   color: #f08b98;
+}
+
+.task-queued {
+  background: #2f333a;
+  color: #b6c0ca;
+}
+
+.task-active {
+  background: #143b2a;
+  color: #7ce2ab;
+}
+
+.task-complete {
+  background: #1f3d57;
+  color: #9bd2f8;
+}
+
+.task-failed {
+  background: #461f25;
+  color: #f08b98;
+}
+
+.link-button {
+  max-width: 220px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #9bd2f8;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.channel-dot {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  margin-right: 8px;
+  border-radius: 50%;
+  background: #5b6673;
+}
+
+.channel-dot.is-active {
+  background: #7ce2ab;
 }
 
 .row-actions {
