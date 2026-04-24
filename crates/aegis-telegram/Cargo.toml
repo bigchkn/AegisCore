@@ -7,5 +7,9 @@ license = "MIT"
 
 [dependencies]
 aegis-core = { workspace = true }
-tokio      = { workspace = true }
+tokio      = { workspace = true, features = ["sync"] }
 tracing    = { workspace = true }
+serde      = { workspace = true, features = ["derive"] }
+teloxide   = { version = "0.12", features = ["macros"] }
+uuid       = { version = "1", features = ["v4"] }
+async-trait = "0.1"

@@ -1,8 +1,8 @@
+use crate::handoff::render_handoff_prompt;
+use crate::manifest::{ProviderDefinition, ResumeMechanism};
+use aegis_core::provider::{FailoverContext, Provider, ProviderConfig, SessionRef};
 use std::path::Path;
 use std::process::Command;
-use aegis_core::provider::{Provider, ProviderConfig, SessionRef, FailoverContext};
-use crate::manifest::{ProviderDefinition, ResumeMechanism};
-use crate::handoff::render_handoff_prompt;
 
 pub struct GenericProvider {
     pub definition: ProviderDefinition,
@@ -11,7 +11,10 @@ pub struct GenericProvider {
 
 impl GenericProvider {
     pub fn new(definition: ProviderDefinition, user_config: ProviderConfig) -> Self {
-        Self { definition, user_config }
+        Self {
+            definition,
+            user_config,
+        }
     }
 }
 
@@ -27,6 +30,12 @@ impl Provider for GenericProvider {
     fn spawn_command(&self, worktree: &Path, session: Option<&SessionRef>) -> Command {
         let mut cmd = Command::new(&self.user_config.binary);
         cmd.current_dir(worktree);
+
+        if let Some(s) = session {
+            if self.definition.resume_mechanism == ResumeMechanism::Subcommand {
+                cmd.args(self.resume_args(s));
+            }
+        }
 
         // Standard unattended flags
         cmd.args(&self.definition.auto_approve_flags);
@@ -51,6 +60,15 @@ impl Provider for GenericProvider {
                 args.push(flag.clone());
                 args.push(session.session_id.clone());
             }
+        } else if self.definition.resume_mechanism == ResumeMechanism::Subcommand {
+            if let Some(command) = &self.definition.resume_command {
+                args.extend(
+                    command
+                        .replace("{session_id}", &session.session_id)
+                        .split_whitespace()
+                        .map(str::to_owned),
+                );
+            }
         }
         args
     }
@@ -61,12 +79,20 @@ impl Provider for GenericProvider {
 
     fn is_rate_limit_error(&self, line: &str) -> bool {
         let l = line.to_lowercase();
-        self.definition.error_patterns.rate_limit.iter().any(|p| l.contains(p))
+        self.definition
+            .error_patterns
+            .rate_limit
+            .iter()
+            .any(|p| l.contains(p))
     }
 
     fn is_auth_error(&self, line: &str) -> bool {
         let l = line.to_lowercase();
-        self.definition.error_patterns.auth.iter().any(|p| l.contains(p))
+        self.definition
+            .error_patterns
+            .auth
+            .iter()
+            .any(|p| l.contains(p))
     }
 
     fn is_task_complete(&self, _line: &str) -> bool {

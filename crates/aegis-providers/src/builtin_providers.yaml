@@ -20,3 +20,14 @@ providers:
     error_patterns:
       rate_limit: ["quota exceeded", "429"]
       auth: ["401", "permission denied"]
+
+  codex:
+    binary: "codex"
+    auto_approve_flags: ["--full-auto"]
+    non_interactive_flags: ["--no-alt-screen"]
+    resume_mechanism: "subcommand"
+    resume_command: "resume {session_id}"
+    export_command: null
+    error_patterns:
+      rate_limit: ["rate limit", "429", "too many requests", "quota exceeded"]
+      auth: ["401", "unauthorized", "invalid api key", "not logged in"]

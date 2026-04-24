@@ -20,7 +20,9 @@ pub fn render_handoff_prompt(ctx: &FailoverContext) -> String {
         previous = ctx.previous_provider,
         worktree = ctx.worktree_path.display(),
         role = ctx.role,
-        task_section = ctx.task_description.as_deref()
+        task_section = ctx
+            .task_description
+            .as_deref()
             .map(|t| format!("Task: {t}\n"))
             .unwrap_or_default(),
         lines = ctx.terminal_context.lines().count(),

@@ -243,9 +243,9 @@ All LLDs derived from the HLD (§15). Each must reach `done` before its mileston
 | #   | Task                                                                                                                 | Crate            | Notes                                                                |
 | --- | -------------------------------------------------------------------------------------------------------------------- | ---------------- | -------------------------------------------------------------------- |
 | 9.1 | Write `lld/telegram.md`                                                                                              | —                | Bot auth; command parser; event queue design; outbound rate limiting |
-| 9.2 | Implement bot long-poll loop + webhook mode (configurable)                                                           | `aegis-telegram` |                                                                      |
-| 9.3 | Implement Chat ID allowlist enforcement                                                                              | `aegis-telegram` |                                                                      |
-| 9.4 | Implement inbound command parser: `/status`, `/agents`, `/pause`, `/resume`, `/kill`, `/spawn`, `/logs`, `/failover` | `aegis-telegram` |                                                                      |
+| 9.2 | Implement bot long-poll loop + webhook mode (configurable)                                                           | `aegis-telegram` | `done` |
+| 9.3 | Implement Chat ID allowlist enforcement                                                                              | `aegis-telegram` | `done` |
+| 9.4 | Implement inbound command parser: `/status`, `/agents`, `/pause`, `/resume`, `/kill`, `/spawn`, `/logs`, `/failover` | `aegis-telegram` |        |
 | 9.5 | Implement outbound event publisher with rate limiting                                                                | `aegis-telegram` |                                                                      |
 | 9.6 | Implement `aegis channel add telegram` integration                                                                   | `aegis-telegram` | Activated via channel lifecycle                                      |
 | 9.7 | Integration test: mock Telegram API; verify command dispatch                                                         | `aegis-telegram` |                                                                      |

@@ -13,6 +13,8 @@ pub enum ResumeMechanism {
     CliFlag,
     /// Resumed via post-spawn command injection (e.g. /resume <id>)
     Injection,
+    /// Resumed by placing a provider subcommand before the session id.
+    Subcommand,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]

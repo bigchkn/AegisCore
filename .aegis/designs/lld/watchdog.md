@@ -189,7 +189,7 @@ Provider methods `is_rate_limit_error()`, `is_auth_error()`, and `is_task_comple
 
 ### 6.3 Provider Pattern Source of Truth
 
-Common provider errors are owned by `aegis-providers/src/builtin_providers.yaml`:
+Common provider errors for `claude-code`, `gemini-cli`, `codex`, and future providers are owned by `aegis-providers/src/builtin_providers.yaml`:
 
 ```yaml
 providers:

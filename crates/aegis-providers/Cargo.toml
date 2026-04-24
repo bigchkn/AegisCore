@@ -6,9 +6,10 @@ description = "CLI provider implementations for AegisCore"
 license = "MIT"
 
 [features]
-default = ["claude", "gemini"]
+default = ["claude", "gemini", "codex"]
 claude  = []
 gemini  = []
+codex   = []
 
 [dependencies]
 aegis-core = { workspace = true }
