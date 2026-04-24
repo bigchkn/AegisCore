@@ -1,1 +1,3 @@
-// aegis-tui — stub; implementation pending LLD
+pub mod client;
+
+pub use client::AegisClient;
