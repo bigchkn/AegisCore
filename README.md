@@ -74,6 +74,12 @@ All providers are configured in `aegis.toml`. Failover cascades are user-defined
 
 ---
 
+## Getting Started
+
+[Getting Started Guide](GETTING_STARTED.md)
+
+---
+
 ## Status
 
 Early development. Following a structured HLD → LLD → Roadmap task approach.

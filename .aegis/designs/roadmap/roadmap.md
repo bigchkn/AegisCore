@@ -401,18 +401,18 @@ All LLDs derived from the HLD (§15). Each must reach `done` before its mileston
 ## Milestone 16 — Install & Distribution
 
 **LLD:** _(covered in `lld/cli.md`)_  
-**Status:** `pending`  
+**Status:** `done`  
 **Depends on:** M12–M15 (all user-facing surfaces complete)
 
 ### Tasks
 
-| #    | Task                                                                                           | Notes |
-| ---- | ---------------------------------------------------------------------------------------------- | ----- |
-| 16.1 | Write install shell script (`install.sh`): detect arch, download binary, install launchd plist |       |
-| 16.2 | Set up GitHub Actions: build matrix (arm64 + x86_64); release artifacts                        |       |
-| 16.3 | Set up Homebrew tap (`aegiscore/homebrew-tap`)                                                 |       |
-| 16.4 | Write `aegis doctor` checks for all runtime dependencies                                       |       |
-| 16.5 | Write getting-started guide (linked from README)                                               |       |
+| #    | Task                                                                                           | Status    | Notes |
+| ---- | ---------------------------------------------------------------------------------------------- | --------- | ----- |
+| 16.1 | Write install shell script (`install.sh`): detect arch, download binary, install launchd plist | `done`    |       |
+| 16.2 | Set up GitHub Actions: build matrix (arm64 + x86_64); release artifacts                        | `done`    |       |
+| 16.3 | Set up Homebrew tap (`aegiscore/homebrew-tap`)                                                 | `skipped` |       |
+| 16.4 | Write `aegis doctor` checks for all runtime dependencies                                       | `done`    |       |
+| 16.5 | Write getting-started guide (linked from README)                                               | `done`    |       |
 
 ---
 

@@ -19,12 +19,22 @@ pub async fn run(printer: &Printer, client: &DaemonClient) -> i32 {
     // 2. git
     checks.push(check_binary("git", &["--version"], "git"));
 
-    // 3. sandbox-exec (macOS only)
+    // 3. node (optional but recommended for web UI development)
+    checks.push(check_binary("node", &["--version"], "node"));
+
+    // 4. sandbox-exec (macOS only)
     #[cfg(target_os = "macos")]
     checks.push(check_sandbox_exec());
 
-    // 4. aegisd
+    // 5. launchd (macOS only)
+    #[cfg(target_os = "macos")]
+    checks.push(check_launchd());
+
+    // 6. aegisd
     checks.push(check_daemon(client).await);
+
+    // 7. Directory permissions
+    checks.push(check_aegis_dir());
 
     // 5. Configured providers
     if let Some(cfg) = &config {
@@ -74,11 +84,13 @@ fn check_tmux() -> Check {
 }
 
 fn is_tmux_version_ok(ver_str: &str) -> bool {
-    // "tmux 3.4" → parse "3.4"
+    // "tmux 3.4" or "tmux 3.0a" → parse major version
     let parts: Vec<&str> = ver_str.split_whitespace().collect();
     if let Some(v) = parts.get(1) {
-        if let Some(major) = v.split('.').next() {
-            return major.parse::<u32>().unwrap_or(0) >= 3;
+        // Handle cases like "3.0a" by taking only numeric prefix
+        let major_str: String = v.chars().take_while(|c| c.is_ascii_digit()).collect();
+        if let Ok(major) = major_str.parse::<u32>() {
+            return major >= 3;
         }
     }
     false
@@ -97,8 +109,8 @@ fn check_binary(label: &str, args: &[&str], _name: &str) -> Check {
         }
         _ => Check {
             label: label.into(),
-            ok: false,
-            detail: format!("{label} not found"),
+            ok: label == "node", // node is optional
+            detail: if label == "node" { "optional - needed for web UI development".into() } else { format!("{label} not found") },
         },
     }
 }
@@ -107,13 +119,82 @@ fn check_binary(label: &str, args: &[&str], _name: &str) -> Check {
 fn check_sandbox_exec() -> Check {
     let path = std::path::Path::new("/usr/bin/sandbox-exec");
     if path.exists() {
-        Check { label: "sandbox-exec".into(), ok: true, detail: String::new() }
+        Check { label: "sandbox-exec".into(), ok: true, detail: "present".into() }
     } else {
         Check {
             label: "sandbox-exec".into(),
             ok: false,
             detail: "not found at /usr/bin/sandbox-exec".into(),
         }
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn check_launchd() -> Check {
+    let home = std::env::var("HOME").unwrap_or_default();
+    let plist_path = std::path::PathBuf::from(&home).join("Library/LaunchAgents/com.aegiscore.aegisd.plist");
+    
+    if !plist_path.exists() {
+        return Check {
+            label: "launchd plist".into(),
+            ok: false,
+            detail: "not installed - run: aegis daemon install".into(),
+        };
+    }
+
+    // Check if it's loaded
+    let output = std::process::Command::new("launchctl")
+        .arg("list")
+        .arg("com.aegiscore.aegisd")
+        .output();
+
+    match output {
+        Ok(out) if out.status.success() => {
+            Check {
+                label: "launchd service".into(),
+                ok: true,
+                detail: "active".into(),
+            }
+        }
+        _ => Check {
+            label: "launchd service".into(),
+            ok: false,
+            detail: "installed but not loaded - run: aegis daemon start".into(),
+        },
+    }
+}
+
+fn check_aegis_dir() -> Check {
+    let home = std::env::var("HOME").unwrap_or_default();
+    let aegis_dir = std::path::PathBuf::from(&home).join(".aegis");
+
+    if !aegis_dir.exists() {
+        return Check {
+            label: "~/.aegis".into(),
+            ok: true,
+            detail: "not present (will be created on first use)".into(),
+        };
+    }
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        if let Ok(meta) = std::fs::metadata(&aegis_dir) {
+            let mode = meta.permissions().mode() & 0o777;
+            if mode != 0o700 {
+                return Check {
+                    label: "~/.aegis permissions".into(),
+                    ok: false,
+                    detail: format!("found {:o}, need 700", mode),
+                };
+            }
+        }
+    }
+
+    Check {
+        label: "~/.aegis".into(),
+        ok: true,
+        detail: "ok".into(),
     }
 }
 
