@@ -1,19 +1,36 @@
 export type ProjectStatus = {
-  name?: string;
-  root_path?: string;
-  agents?: number;
   active_agents?: number;
-  queued_tasks?: number;
-  active_tasks?: number;
+  pending_tasks?: number;
 };
 
 export type ProjectRecord = {
-  project_id: string;
-  name: string;
+  id: string;
   root_path: string;
-  registered_at?: string;
-  last_seen_at?: string | null;
-  status?: ProjectStatus;
+  auto_start: boolean;
+  last_seen: string;
+};
+
+export type TaskflowIndex = {
+  project: {
+    name: string;
+    current_milestone: number;
+  };
+  milestones: Record<string, { path: string; status: string }>;
+};
+
+export type TaskflowMilestone = {
+  id: number;
+  name: string;
+  status: string;
+  lld: string | null;
+  tasks: Array<{
+    id: string;
+    task: string;
+    status: string;
+    crate_name: string | null;
+    notes: string | null;
+    registry_task_id: string | null;
+  }>;
 };
 
 export type ActiveView = 'agents' | 'pane' | 'logs' | 'tasks' | 'channels' | 'taskflow';

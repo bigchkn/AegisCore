@@ -1,6 +1,7 @@
 import { createSlice, type PayloadAction } from '@reduxjs/toolkit';
 
 import type { Task } from '../types/Task';
+import { fetchTasks } from '../api/thunks';
 
 export type TasksState = {
   items: Task[];
@@ -46,6 +47,19 @@ const tasksSlice = createSlice({
         task.status = 'active';
       }
     },
+  },
+  extraReducers: (builder) => {
+    builder
+      .addCase(fetchTasks.pending, (state) => {
+        state.loading = true;
+      })
+      .addCase(fetchTasks.fulfilled, (state, action) => {
+        state.items = action.payload;
+        state.loading = false;
+      })
+      .addCase(fetchTasks.rejected, (state) => {
+        state.loading = false;
+      });
   },
 });
 

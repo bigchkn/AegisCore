@@ -2,6 +2,7 @@ import { createSlice, type PayloadAction } from '@reduxjs/toolkit';
 
 import type { Agent } from '../types/Agent';
 import type { AgentStatus } from '../types/AgentStatus';
+import { fetchAgents } from '../api/thunks';
 
 type AgentStatusPatch = {
   agent_id: string;
@@ -46,6 +47,19 @@ const agentsSlice = createSlice({
     removeAgent(state, action: PayloadAction<string>) {
       state.items = state.items.filter((agent) => agent.agent_id !== action.payload);
     },
+  },
+  extraReducers: (builder) => {
+    builder
+      .addCase(fetchAgents.pending, (state) => {
+        state.loading = true;
+      })
+      .addCase(fetchAgents.fulfilled, (state, action) => {
+        state.items = action.payload;
+        state.loading = false;
+      })
+      .addCase(fetchAgents.rejected, (state) => {
+        state.loading = false;
+      });
   },
 });
 

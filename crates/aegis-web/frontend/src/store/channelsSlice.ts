@@ -2,6 +2,7 @@ import { createSlice, type PayloadAction } from '@reduxjs/toolkit';
 
 import type { ChannelKind } from '../types/ChannelKind';
 import type { ChannelRecord } from '../types/ChannelRecord';
+import { fetchChannels } from '../api/thunks';
 
 export type ChannelsState = {
   items: ChannelRecord[];
@@ -50,6 +51,19 @@ const channelsSlice = createSlice({
     removeChannel(state, action: PayloadAction<string>) {
       state.items = state.items.filter((channel) => channel.name !== action.payload);
     },
+  },
+  extraReducers: (builder) => {
+    builder
+      .addCase(fetchChannels.pending, (state) => {
+        state.loading = true;
+      })
+      .addCase(fetchChannels.fulfilled, (state, action) => {
+        state.items = action.payload;
+        state.loading = false;
+      })
+      .addCase(fetchChannels.rejected, (state) => {
+        state.loading = false;
+      });
   },
 });
 

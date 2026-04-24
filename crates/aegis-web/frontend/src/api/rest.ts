@@ -1,0 +1,52 @@
+import type { Agent } from '../types/Agent';
+import type { ChannelRecord } from '../types/ChannelRecord';
+import type { Task } from '../types/Task';
+import type { ProjectRecord, ProjectStatus, TaskflowIndex, TaskflowMilestone } from '../store/domain';
+
+type CommandResponse = {
+  status?: string;
+  task_id?: string;
+};
+
+async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const response = await fetch(path, {
+    ...init,
+    headers: {
+      'content-type': 'application/json',
+      ...init?.headers,
+    },
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(text || `${response.status} ${response.statusText}`);
+  }
+
+  return (await response.json()) as T;
+}
+
+export const api = {
+  listProjects: () => request<ProjectRecord[]>('/projects'),
+  projectStatus: (projectId: string) => request<ProjectStatus>(`/projects/${projectId}/status`),
+  listAgents: (projectId: string) => request<Agent[]>(`/projects/${projectId}/agents`),
+  listTasks: (projectId: string) => request<Task[]>(`/projects/${projectId}/tasks`),
+  listChannels: (projectId: string) => request<ChannelRecord[]>(`/projects/${projectId}/channels`),
+  taskflowStatus: (projectId: string) =>
+    request<TaskflowIndex>(`/projects/${projectId}/taskflow/status`),
+  taskflowMilestone: (projectId: string, milestoneId: string) =>
+    request<TaskflowMilestone>(`/projects/${projectId}/taskflow/show/${milestoneId}`),
+  command: (projectId: string, command: string, params: unknown = null) =>
+    request<CommandResponse>(`/projects/${projectId}/commands`, {
+      method: 'POST',
+      body: JSON.stringify({ command, params }),
+    }),
+  spawn: (projectId: string, task: string) => api.command(projectId, 'spawn', task),
+  pause: (projectId: string, agentId: string) =>
+    api.command(projectId, 'pause', { agent_id: agentId }),
+  resume: (projectId: string, agentId: string) =>
+    api.command(projectId, 'resume', { agent_id: agentId }),
+  kill: (projectId: string, agentId: string) =>
+    api.command(projectId, 'kill', { agent_id: agentId }),
+  failover: (projectId: string, agentId: string) =>
+    api.command(projectId, 'failover', { agent_id: agentId }),
+};
