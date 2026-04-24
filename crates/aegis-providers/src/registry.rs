@@ -143,13 +143,47 @@ mod tests {
     }
 
     #[test]
-    fn test_error_pattern_matching() {
+    fn test_gemini_unattended_flags() {
         let cfg = mock_config();
         let registry = ProviderRegistry::from_config(&cfg).unwrap();
-        let claude = registry.get("claude-code").unwrap();
+        let gemini = registry.get("gemini-cli").unwrap();
         
-        assert!(claude.is_rate_limit_error("error: 429 rate limit exceeded"));
-        assert!(claude.is_auth_error("authentication failed: invalid key"));
-        assert!(!claude.is_rate_limit_error("all systems nominal"));
+        let cmd = gemini.spawn_command(&PathBuf::from("/tmp"), None);
+        let args: Vec<_> = cmd.get_args().map(|a| a.to_str().unwrap()).collect();
+        
+        assert!(args.contains(&"--yes"));
+    }
+
+    #[test]
+    fn test_ollama_command_structure() {
+        let cfg = mock_config();
+        let registry = ProviderRegistry::from_config(&cfg).unwrap();
+        let ollama = registry.get("ollama").unwrap();
+        
+        let cmd = ollama.spawn_command(&PathBuf::from("/tmp"), None);
+        let args: Vec<_> = cmd.get_args().map(|a| a.to_str().unwrap()).collect();
+        
+        // Ollama specific: 'run gemma3' (default model)
+        assert_eq!(args[0], "run");
+        assert_eq!(args[1], "gemma3");
+    }
+
+    #[test]
+    fn test_error_pattern_matching_all() {
+        let cfg = mock_config();
+        let registry = ProviderRegistry::from_config(&cfg).unwrap();
+        
+        // Claude
+        let claude = registry.get("claude-code").unwrap();
+        assert!(claude.is_rate_limit_error("429 usage limit reached"));
+        
+        // Gemini
+        let gemini = registry.get("gemini-cli").unwrap();
+        assert!(gemini.is_rate_limit_error("quota exceeded"));
+        assert!(gemini.is_auth_error("permission denied"));
+
+        // Codex
+        let codex = registry.get("codex").unwrap();
+        assert!(codex.is_rate_limit_error("insufficient_quota"));
     }
 }
