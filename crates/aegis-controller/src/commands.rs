@@ -70,6 +70,10 @@ impl ControllerCommands {
         self.dispatcher.kill_agent(agent_id).await
     }
 
+    pub async fn failover(&self, agent_id: Uuid) -> Result<Agent> {
+        self.dispatcher.failover_agent(agent_id).await
+    }
+
     pub fn logs(&self, agent_id: Uuid, lines: Option<usize>) -> Result<Vec<String>> {
         let Some(recorder) = &self.recorder else {
             return Ok(Vec::new());

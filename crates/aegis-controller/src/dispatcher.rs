@@ -2,7 +2,8 @@ use std::{path::PathBuf, sync::Arc};
 
 use aegis_core::{
     config::AgentEntry, AegisError, AegisEvent, Agent, AgentKind, AgentRegistry, AgentStatus,
-    Recorder, Result, SandboxProfile, StorageBackend, Task, TaskRegistry, TaskStatus,
+    FailoverContext, LogQuery, Recorder, Result, SandboxProfile, StorageBackend, Task,
+    TaskRegistry, TaskStatus,
 };
 use aegis_providers::ProviderRegistry;
 use aegis_tmux::{TmuxClient, TmuxTarget};
@@ -362,6 +363,100 @@ You are operating within an AegisCore autonomous environment. To understand your
         AgentRegistry::archive(self.registry.as_ref(), agent_id)
     }
 
+    pub async fn failover_agent(&self, agent_id: Uuid) -> Result<Agent> {
+        let agent = self.require_agent(agent_id)?;
+        self.ensure_transition(&agent.status, &AgentStatus::Cooling)?;
+        let next_provider = self.next_provider_name(&agent)?;
+        let old_status = agent.status.clone();
+
+        AgentRegistry::update_status(self.registry.as_ref(), agent_id, AgentStatus::Cooling)?;
+        self.events.publish(AegisEvent::AgentStatusChanged {
+            agent_id,
+            old_status,
+            new_status: AgentStatus::Cooling,
+        });
+
+        if let Some(tmux) = &self.tmux {
+            let target = TmuxTarget::parse(&agent.tmux_target())?;
+            tmux.interrupt(&target).await?;
+        }
+
+        let terminal_context = self.capture_failover_context(agent_id)?;
+        let task_description = match agent.task_id {
+            Some(task_id) => {
+                TaskRegistry::get(self.registry.as_ref(), task_id)?.map(|task| task.description)
+            }
+            None => None,
+        };
+
+        AgentRegistry::update_provider(self.registry.as_ref(), agent_id, &next_provider)?;
+        let provider = self.providers.get(&next_provider)?;
+        let provider_command = provider.spawn_command(&agent.worktree_path, None);
+        let mut launch_command = Vec::new();
+        if let Some(sandbox) = &self.sandbox {
+            launch_command.extend(sandbox.exec_prefix(&agent.sandbox_profile));
+        }
+        launch_command.extend(command_parts(&provider_command));
+
+        let context = FailoverContext {
+            agent_id,
+            task_id: agent.task_id,
+            previous_provider: agent.cli_provider.clone(),
+            terminal_context,
+            task_description,
+            worktree_path: agent.worktree_path.clone(),
+            role: agent.role.clone(),
+        };
+        let recovery_prompt = provider.failover_handoff_prompt(&context);
+
+        if let Some(tmux) = &self.tmux {
+            let target = TmuxTarget::parse(&agent.tmux_target())?;
+            tmux.send_text(&target, &shell_command(&launch_command))
+                .await?;
+            tmux.send_text(&target, &recovery_prompt).await?;
+        }
+
+        let mut updated = self.require_agent(agent_id)?;
+        updated.status = AgentStatus::Active;
+        updated.updated_at = Utc::now();
+        AgentRegistry::update(self.registry.as_ref(), &updated)?;
+        self.events.publish(AegisEvent::AgentStatusChanged {
+            agent_id,
+            old_status: AgentStatus::Cooling,
+            new_status: AgentStatus::Active,
+        });
+        Ok(updated)
+    }
+
+    fn next_provider_name(&self, agent: &Agent) -> Result<String> {
+        agent
+            .fallback_cascade
+            .iter()
+            .find(|provider| *provider != &agent.cli_provider)
+            .cloned()
+            .ok_or_else(|| AegisError::Config {
+                field: "agent.fallback_cascade".to_string(),
+                reason: format!("no fallback provider available for {}", agent.cli_provider),
+            })
+    }
+
+    fn capture_failover_context(&self, agent_id: Uuid) -> Result<String> {
+        let Some(recorder) = &self.recorder else {
+            return Ok(String::new());
+        };
+
+        match recorder.query(&LogQuery {
+            agent_id,
+            last_n_lines: Some(self.config.recorder.failover_context_lines),
+            since: None,
+            follow: false,
+        }) {
+            Ok(lines) => Ok(lines.join("\n")),
+            Err(AegisError::LogFileNotFound { .. }) => Ok(String::new()),
+            Err(error) => Err(error),
+        }
+    }
+
     pub async fn process_receipt(&self, agent_id: Uuid) -> Result<()> {
         let agent = self.require_agent(agent_id)?;
         self.ensure_transition(&agent.status, &AgentStatus::Reporting)?;
@@ -600,8 +695,8 @@ mod tests {
         )]);
         project.splinter_defaults = Some(RawSplinterDefaults {
             cli_provider: Some("claude-code".to_string()),
+            fallback_cascade: Some(vec!["gemini-cli".to_string()]),
             auto_cleanup: Some(false),
-            ..Default::default()
         });
         project.agent = HashMap::from([(
             "architect".to_string(),
@@ -680,6 +775,38 @@ mod tests {
             .unwrap();
         assert_eq!(stored.assigned_agent_id, Some(agent_id));
         assert_eq!(stored.status, TaskStatus::Active);
+    }
+
+    #[tokio::test]
+    async fn failover_agent_switches_provider_and_returns_active() {
+        let (dispatcher, _dir) = dispatcher();
+        let task = Task {
+            task_id: Uuid::new_v4(),
+            description: "write tests".to_string(),
+            status: TaskStatus::Queued,
+            assigned_agent_id: None,
+            created_by: TaskCreator::System,
+            created_at: Utc::now(),
+            completed_at: None,
+            receipt_path: None,
+        };
+        TaskRegistry::insert(dispatcher.registry.as_ref(), &task).unwrap();
+
+        let agent_id = Uuid::new_v4();
+        dispatcher
+            .spawn_splinter_with_id(agent_id, "worker", &task, None)
+            .await
+            .unwrap();
+
+        let agent = dispatcher.failover_agent(agent_id).await.unwrap();
+
+        assert_eq!(agent.status, AgentStatus::Active);
+        assert_eq!(agent.cli_provider, "gemini-cli");
+        let stored = AgentRegistry::get(dispatcher.registry.as_ref(), agent_id)
+            .unwrap()
+            .unwrap();
+        assert_eq!(stored.status, AgentStatus::Active);
+        assert_eq!(stored.cli_provider, "gemini-cli");
     }
 
     #[tokio::test]

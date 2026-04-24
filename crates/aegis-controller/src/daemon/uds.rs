@@ -183,6 +183,41 @@ async fn dispatch_command(
     match request.command.as_str() {
         "status" => Ok(serde_json::to_value(commands.status()?).unwrap()),
         "agents.list" => Ok(serde_json::to_value(commands.list_agents()?).unwrap()),
+        "agents.spawn" => {
+            let task = request
+                .params
+                .get("task")
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| AegisError::IpcProtocol {
+                    reason: "Missing task".to_string(),
+                })?;
+            let task_id = commands.spawn(task)?;
+            Ok(serde_json::json!({ "task_id": task_id }))
+        }
+        "agents.pause" => {
+            let agent_id = parse_agent_id(&request.params)?;
+            commands.pause(agent_id).await?;
+            Ok(serde_json::json!({ "agent_id": agent_id, "status": "paused" }))
+        }
+        "agents.resume" => {
+            let agent_id = parse_agent_id(&request.params)?;
+            commands.resume(agent_id).await?;
+            Ok(serde_json::json!({ "agent_id": agent_id, "status": "active" }))
+        }
+        "agents.kill" => {
+            let agent_id = parse_agent_id(&request.params)?;
+            commands.kill(agent_id).await?;
+            Ok(serde_json::json!({ "agent_id": agent_id, "status": "terminated" }))
+        }
+        "agents.failover" => {
+            let agent_id = parse_agent_id(&request.params)?;
+            let agent = commands.failover(agent_id).await?;
+            Ok(serde_json::json!({
+                "agent_id": agent.agent_id,
+                "new_provider": agent.cli_provider,
+                "status": agent.status,
+            }))
+        }
         "taskflow.status" => Ok(serde_json::to_value(commands.taskflow_status()?).unwrap()),
         "taskflow.show" => {
             let m_id = request
@@ -217,6 +252,16 @@ async fn dispatch_command(
             reason: format!("Unknown command: {}", request.command),
         }),
     }
+}
+
+fn parse_agent_id(params: &serde_json::Value) -> Result<Uuid> {
+    params
+        .get("agent_id")
+        .and_then(|v| v.as_str())
+        .and_then(|v| Uuid::parse_str(v).ok())
+        .ok_or_else(|| AegisError::IpcProtocol {
+            reason: "Missing or invalid agent_id".to_string(),
+        })
 }
 
 async fn handle_subscription(mut lines: Framed<UnixStream, LinesCodec>, event_bus: Arc<EventBus>) {
