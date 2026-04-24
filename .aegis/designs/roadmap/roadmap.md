@@ -35,7 +35,7 @@ All LLDs derived from the HLD (§15). Each must reach `done` before its mileston
 | Global daemon & IPC     | `lld/daemon.md`     | M11       | `aegis-controller`       | `done`     |
 | CLI binary              | `lld/cli.md`        | M12       | `src/`                   | `done`     |
 | Taskflow engine         | `lld/taskflow.md`   | M13       | `aegis-taskflow`         | `done`     |
-| UI (TUI + web)          | `lld/ui.md`         | M14–M15   | `aegis-tui`, `aegis-web` | `pending`  |
+| UI (TUI + web)          | `lld/ui.md`         | M14–M15   | `aegis-tui`, `aegis-web` | `lld-done` |
 
 ---
 
@@ -347,39 +347,54 @@ All LLDs derived from the HLD (§15). Each must reach `done` before its mileston
 ## Milestone 14 — TUI: `aegis-tui`
 
 **LLD:** `lld/ui.md` (shared with M15)  
-**Status:** `pending`  
-**Depends on:** M11 (daemon + socket)
+**Status:** `lld-done`  
+**Depends on:** M11 (daemon + socket); M14 protocol tasks (14.2–14.6) land in `aegis-controller` before TUI impl begins
 
 ### Tasks
 
-| #    | Task                                                                                    | Crate       | Notes                                                                                        |
-| ---- | --------------------------------------------------------------------------------------- | ----------- | -------------------------------------------------------------------------------------------- |
-| 14.1 | Write `lld/ui.md`                                                                       | —           | TUI layout; component model; web API surface; WebSocket event schema; shared client protocol |
-| 14.2 | Implement Unix socket client: connect, send requests, subscribe to event stream         | `aegis-tui` | Shared with web client logic                                                                 |
-| 14.3 | Implement TUI layout: agents panel, logs panel, tasks panel, channels panel, status bar | `aegis-tui` | ratatui                                                                                      |
-| 14.4 | Implement real-time log streaming: `logs.tail` subscription → log panel                 | `aegis-tui` |                                                                                              |
-| 14.5 | Implement key bindings: spawn, pause, failover, attach, quit                            | `aegis-tui` |                                                                                              |
-| 14.6 | Implement multi-project switching                                                       | `aegis-tui` |                                                                                              |
+| #     | Task                                                                                                    | Crate                                   | Status    | Notes                                                        |
+| ----- | ------------------------------------------------------------------------------------------------------- | --------------------------------------- | --------- | ------------------------------------------------------------ |
+| 14.1  | Write `lld/ui.md`                                                                                       | —                                       | `done`    | TUI layout; pane relay protocol; React/Redux web; ts-rs sharing |
+| 14.2  | Add `AegisEvent` variants: `AgentTerminated`, `FailoverInitiated`, `TaskAssigned`, `ChannelAdded/Removed` | `aegis-core`                            | `pending` | Prerequisite for both UIs                                    |
+| 14.2a | Add `#[derive(TS)]` + `ts-export` feature; write `export_ts_bindings` test                              | `aegis-core`, `aegis-controller`        | `pending` | Generates `frontend/src/types/`; run before any frontend work |
+| 14.3  | Implement `LogTailer` + `PaneRelay` in `daemon/logs.rs`                                                 | `aegis-controller`                      | `pending` | Prerequisite for all live views in both UIs                  |
+| 14.4  | Add `logs.tail` and `pane.attach` UDS commands                                                          | `aegis-controller`                      | `pending` |                                                              |
+| 14.5  | Add `/ws/logs/:agent_id` and `/ws/pane/:agent_id` WebSocket endpoints                                   | `aegis-controller`                      | `pending` |                                                              |
+| 14.6  | Add `channels.list`, `tasks.list` UDS commands; HTTP task/channel/taskflow endpoints                   | `aegis-controller`                      | `pending` |                                                              |
+| 14.7  | Implement `AegisClient` (connect, send, subscribe, tail_logs, attach_pane)                              | `aegis-tui`                             | `pending` |                                                              |
+| 14.8  | Implement `AppState`, event handlers, and pane mode state machine                                       | `aegis-tui`                             | `pending` | No rendering yet                                             |
+| 14.9  | Implement TUI layout and all panel renderers (agents, logs, pane, tasks, channels, status bar)          | `aegis-tui`                             | `pending` | ratatui + tui-term for pane panel                            |
+| 14.10 | Implement key bindings and overlays (spawn prompt, confirm-kill, help screen)                           | `aegis-tui`                             | `pending` |                                                              |
+| 14.11 | Implement multi-project switching                                                                       | `aegis-tui`                             | `pending` |                                                              |
+| 14.12 | Wire `aegis ui` subcommand in `src/`                                                                    | `src/`                                  | `pending` |                                                              |
+| 14.13 | TUI unit and integration tests                                                                          | `aegis-tui`                             | `pending` |                                                              |
 
 ---
 
 ## Milestone 15 — Web UI: `aegis-web`
 
 **LLD:** `lld/ui.md` (shared with M14)  
-**Status:** `pending`  
-**Depends on:** M11 (HTTP + WebSocket server)
+**Status:** `lld-done`  
+**Depends on:** M11 (HTTP + WebSocket server); M14 protocol tasks (14.2–14.6) are shared prerequisites
 
 ### Tasks
 
-| #    | Task                                                                    | Crate              | Notes                        |
-| ---- | ----------------------------------------------------------------------- | ------------------ | ---------------------------- |
-| 15.1 | Implement REST client layer: agents, tasks, channels, logs endpoints    | `aegis-web`        |                              |
-| 15.2 | Implement WebSocket event subscription + live updates                   | `aegis-web`        |                              |
-| 15.3 | Implement agent list view + status indicators                           | `aegis-web`        |                              |
-| 15.4 | Implement live log streaming view                                       | `aegis-web`        |                              |
-| 15.5 | Implement Taskflow pipeline visualization (HLD → LLD → Roadmap → Tasks) | `aegis-web`        |                              |
-| 15.6 | Implement per-project sidebar switcher                                  | `aegis-web`        |                              |
-| 15.7 | Embed static assets into `aegisd` binary (`include_dir!`)               | `aegis-controller` | Zero separate server process |
+| #     | Task                                                                             | Crate              | Status    | Notes                                                              |
+| ----- | -------------------------------------------------------------------------------- | ------------------ | --------- | ------------------------------------------------------------------ |
+| 15.1  | Scaffold `frontend/` with React + Redux Toolkit + xterm.js + Vite + TypeScript   | `aegis-web`        | `pending` | `npm create vite` base; task 14.2a must run first to populate `src/types/` |
+| 15.2  | Implement Redux store: all slices + WebSocket middleware                          | `aegis-web`        | `pending` |                                                                    |
+| 15.3  | Implement REST API client (`api/rest.ts`) and RTK async thunks                   | `aegis-web`        | `pending` |                                                                    |
+| 15.4  | Implement `AgentsView` + `StatusBadge` + Sidebar skeleton                        | `aegis-web`        | `pending` |                                                                    |
+| 15.5  | Implement `PaneView` with xterm.js + `/ws/pane` WebSocket relay                  | `aegis-web`        | `pending` | Interactive terminal — the "attach and communicate" feature        |
+| 15.6  | Implement `LogView` with `/ws/logs` WebSocket stream                             | `aegis-web`        | `pending` |                                                                    |
+| 15.7  | Implement `TasksView` and `ChannelsView`                                          | `aegis-web`        | `pending` |                                                                    |
+| 15.8  | Implement `TaskflowView` (collapsible HLD → LLD → Roadmap → Tasks tree)          | `aegis-web`        | `pending` |                                                                    |
+| 15.9  | Implement `Sidebar` project switcher with Redux dispatch                          | `aegis-web`        | `pending` |                                                                    |
+| 15.10 | Implement `build.rs` (ts-rs generation step + Vite build step)                   | `aegis-web`        | `pending` |                                                                    |
+| 15.11 | Implement rust-embed asset embedding + `asset_for_path` + `static_routes()`      | `aegis-web`        | `pending` |                                                                    |
+| 15.12 | Merge `static_routes()` into `HttpServer::new()` in `aegis-controller`           | `aegis-controller` | `pending` | Zero separate server process                                       |
+| 15.13 | TypeScript unit tests (Vitest)                                                   | `aegis-web`        | `pending` |                                                                    |
+| 15.14 | Rust asset embedding + pane relay WebSocket integration tests                    | `aegis-web`        | `pending` |                                                                    |
 
 ---
 

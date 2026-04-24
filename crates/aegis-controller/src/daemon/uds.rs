@@ -155,6 +155,25 @@ async fn dispatch_command(
     project_registry: &ProjectRegistry,
     active_runtimes: &Arc<Mutex<HashMap<Uuid, AegisRuntime>>>,
 ) -> Result<serde_json::Value> {
+    // 1. Handle Global Commands (no project context required)
+    match request.command.as_str() {
+        "projects.list" => return Ok(serde_json::to_value(project_registry.load()?).unwrap()),
+        "projects.register" => {
+            let root_path = request
+                .params
+                .get("root_path")
+                .and_then(|v| v.as_str())
+                .map(PathBuf::from)
+                .ok_or_else(|| AegisError::IpcProtocol {
+                    reason: "Missing root_path in params".to_string(),
+                })?;
+            let project = project_registry.register(root_path)?;
+            return Ok(serde_json::to_value(project).unwrap());
+        }
+        _ => {}
+    }
+
+    // 2. Handle Project-Specific Commands
     let project_path = request
         .project_path
         .as_ref()

@@ -5,7 +5,9 @@ use uuid::Uuid;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct TaskflowStore {
+    #[serde(default)]
     pub version: u32,
+    #[serde(default)]
     pub links: HashMap<String, Uuid>,
 }
 

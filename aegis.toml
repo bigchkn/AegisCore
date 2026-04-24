@@ -1,0 +1,39 @@
+[global]
+max_splinters = 5
+tmux_session_name = "aegis"
+telegram_enabled = false
+
+[watchdog]
+poll_interval_ms = 2000
+scan_lines = 50
+failover_enabled = true
+
+[recorder]
+failover_context_lines = 100
+log_rotation_max_mb = 50
+log_retention_count = 20
+
+[state]
+snapshot_interval_s = 60
+snapshot_retention_count = 10
+
+[sandbox.defaults]
+network = "outbound_only"
+extra_reads = []
+extra_writes = []
+
+[providers.claude-code]
+binary = "claude"
+resume_flag = "--resume"
+
+[providers.gemini-cli]
+binary = "gemini"
+
+[providers.ollama]
+binary = "ollama"
+model = "gemma3"
+
+[splinter_defaults]
+cli_provider = "claude-code"
+fallback_cascade = ["gemini-cli", "ollama"]
+auto_cleanup = true
