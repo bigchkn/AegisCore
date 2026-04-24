@@ -65,6 +65,7 @@ impl DaemonSupervisor {
         let http_state = HttpState {
             event_bus: Arc::clone(&self.event_bus),
             projects: Arc::clone(&self.project_registry),
+            active_runtimes: Arc::clone(&self.active_runtimes),
         };
         let http_server = HttpServer::new(http_state);
         let http_handle = tokio::spawn(http_server.run(self.http_port));

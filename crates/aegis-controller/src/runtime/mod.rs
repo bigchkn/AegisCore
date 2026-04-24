@@ -21,6 +21,7 @@ use crate::{
     watchdog::ControllerWatchdogSink,
 };
 
+#[derive(Clone)]
 pub struct AegisRuntime {
     pub project_id: Uuid,
     pub root_path: PathBuf,
