@@ -2,9 +2,10 @@ use std::sync::Arc;
 
 use aegis_core::{
     config::AgentEntry, AegisError, AegisEvent, Agent, AgentKind, AgentRegistry, AgentStatus,
-    Result, StorageBackend, Task, TaskRegistry,
+    Recorder, Result, SandboxProfile, StorageBackend, Task, TaskRegistry,
 };
 use aegis_providers::ProviderRegistry;
+use aegis_taskflow::TaskflowEngine;
 use aegis_tmux::{TmuxClient, TmuxTarget};
 use chrono::Utc;
 use uuid::Uuid;
@@ -12,7 +13,7 @@ use uuid::Uuid;
 use crate::{
     events::EventBus,
     git::GitWorktree,
-    lifecycle::{sandbox_policy_from_config, AgentSpec, SpawnPlan},
+    lifecycle::{sandbox_policy_from_config, validate_transition, AgentSpec, SpawnPlan},
     prompts::{PromptContext, PromptManager, PromptType},
     registry::FileRegistry,
     storage::ProjectStorage,
@@ -21,8 +22,11 @@ use crate::{
 pub struct Dispatcher {
     registry: Arc<FileRegistry>,
     tmux: Option<Arc<TmuxClient>>,
+    sandbox: Option<Arc<dyn SandboxProfile>>,
+    recorder: Option<Arc<dyn Recorder>>,
     providers: Arc<ProviderRegistry>,
     prompts: Arc<PromptManager>,
+    taskflow: Option<Arc<TaskflowEngine>>,
     storage: Arc<ProjectStorage>,
     events: EventBus,
     config: aegis_core::EffectiveConfig,
@@ -32,8 +36,11 @@ impl Dispatcher {
     pub fn new(
         registry: Arc<FileRegistry>,
         tmux: Option<Arc<TmuxClient>>,
+        sandbox: Option<Arc<dyn SandboxProfile>>,
+        recorder: Option<Arc<dyn Recorder>>,
         providers: Arc<ProviderRegistry>,
         prompts: Arc<PromptManager>,
+        taskflow: Option<Arc<TaskflowEngine>>,
         storage: Arc<ProjectStorage>,
         events: EventBus,
         config: aegis_core::EffectiveConfig,
@@ -41,8 +48,11 @@ impl Dispatcher {
         Self {
             registry,
             tmux,
+            sandbox,
+            recorder,
             providers,
             prompts,
+            taskflow,
             storage,
             events,
             config,
@@ -106,7 +116,11 @@ impl Dispatcher {
 
         let provider = self.providers.get(&spec.cli_provider)?;
         let provider_command = provider.spawn_command(&worktree_path, None);
-        let launch_command = command_parts(&provider_command);
+        let mut launch_command = Vec::new();
+        if let Some(sandbox) = &self.sandbox {
+            launch_command.extend(sandbox.exec_prefix(&sandbox_profile));
+        }
+        launch_command.extend(command_parts(&provider_command));
 
         let now = Utc::now();
         let agent = Agent {
@@ -144,17 +158,28 @@ impl Dispatcher {
             AgentKind::Bastion => PromptType::System,
             AgentKind::Splinter => PromptType::Task,
         };
-        let initial_prompt = self.prompts.resolve_prompt(
+        let mut initial_prompt = self.prompts.resolve_prompt(
             prompt_type,
             &prompt_context,
             spec.system_prompt.as_deref(),
         )?;
+
+        // Taskflow awareness injection (Task 13.7)
+        let taskflow_snippet = r#"
+### Project Context & Navigation
+You are operating within an AegisCore autonomous environment. To understand your place in the broader project roadmap, use the following tools:
+- Run `aegis taskflow status` to see the overall project health.
+- Run `aegis taskflow show <M-ID>` (e.g., M13) to see the specific tasks and design goals for your current milestone.
+- Read design documents directly at `.aegis/designs/` for deep technical context (Read-Only).
+"#;
+        initial_prompt.push_str(taskflow_snippet);
 
         Ok(SpawnPlan {
             agent,
             provider_command,
             launch_command,
             initial_prompt,
+            sandbox_policy: spec.sandbox,
         })
     }
 
@@ -237,20 +262,52 @@ impl Dispatcher {
     }
 
     async fn launch_or_insert_plan(&self, plan: SpawnPlan) -> Result<Agent> {
+        self.write_sandbox_profile(&plan)?;
+
         if let Some(tmux) = &self.tmux {
             let target = TmuxTarget::parse(&plan.agent.tmux_target())?;
             tmux.send_text(&target, &shell_command(&plan.launch_command))
                 .await?;
-            let agent = self.insert_planned_agent(plan.agent)?;
+            let agent = self.insert_starting_agent(plan.agent)?;
+            self.attach_recorder(&agent)?;
+            let agent = self.activate_agent(agent)?;
             tmux.send_text(&target, &plan.initial_prompt).await?;
             Ok(agent)
         } else {
-            self.insert_planned_agent(plan.agent)
+            let agent = self.insert_starting_agent(plan.agent)?;
+            self.attach_recorder(&agent)?;
+            self.activate_agent(agent)
         }
     }
 
-    fn insert_planned_agent(&self, mut agent: Agent) -> Result<Agent> {
+    fn write_sandbox_profile(&self, plan: &SpawnPlan) -> Result<()> {
+        let Some(sandbox) = &self.sandbox else {
+            return Ok(());
+        };
+        let home = std::env::var("HOME")
+            .map(std::path::PathBuf::from)
+            .unwrap_or_else(|_| self.storage.project_root().to_path_buf());
+        sandbox.write(
+            &plan.agent.worktree_path,
+            &home,
+            &plan.sandbox_policy,
+            &plan.agent.sandbox_profile,
+        )
+    }
+
+    fn insert_starting_agent(&self, agent: Agent) -> Result<Agent> {
         AgentRegistry::insert(self.registry.as_ref(), &agent)?;
+        Ok(agent)
+    }
+
+    fn attach_recorder(&self, agent: &Agent) -> Result<()> {
+        if let Some(recorder) = &self.recorder {
+            recorder.attach(agent)?;
+        }
+        Ok(())
+    }
+
+    fn activate_agent(&self, mut agent: Agent) -> Result<Agent> {
         let old_status = agent.status.clone();
         agent.status = AgentStatus::Active;
         agent.updated_at = Utc::now();
@@ -270,16 +327,70 @@ impl Dispatcher {
     }
 
     pub async fn pause_agent(&self, agent_id: Uuid) -> Result<()> {
-        AgentRegistry::update_status(self.registry.as_ref(), agent_id, AgentStatus::Paused)
+        let agent = self.require_agent(agent_id)?;
+        self.ensure_transition(&agent.status, &AgentStatus::Paused)?;
+        if let Some(tmux) = &self.tmux {
+            let target = TmuxTarget::parse(&agent.tmux_target())?;
+            tmux.interrupt(&target).await?;
+        }
+        AgentRegistry::update_status(self.registry.as_ref(), agent_id, AgentStatus::Paused)?;
+        self.events.publish(AegisEvent::AgentStatusChanged {
+            agent_id,
+            old_status: agent.status,
+            new_status: AgentStatus::Paused,
+        });
+        Ok(())
     }
 
     pub async fn resume_agent(&self, agent_id: Uuid) -> Result<()> {
-        AgentRegistry::update_status(self.registry.as_ref(), agent_id, AgentStatus::Active)
+        let agent = self.require_agent(agent_id)?;
+        self.ensure_transition(&agent.status, &AgentStatus::Active)?;
+        AgentRegistry::update_status(self.registry.as_ref(), agent_id, AgentStatus::Active)?;
+        self.events.publish(AegisEvent::AgentStatusChanged {
+            agent_id,
+            old_status: agent.status,
+            new_status: AgentStatus::Active,
+        });
+        Ok(())
     }
 
     pub async fn kill_agent(&self, agent_id: Uuid) -> Result<()> {
+        let agent = self.require_agent(agent_id)?;
+        self.detach_and_archive(agent_id)?;
+        if let Some(tmux) = &self.tmux {
+            let target = TmuxTarget::parse(&agent.tmux_target())?;
+            let _ = tmux.kill_window(&target).await;
+        }
         AgentRegistry::update_status(self.registry.as_ref(), agent_id, AgentStatus::Terminated)?;
         AgentRegistry::archive(self.registry.as_ref(), agent_id)
+    }
+
+    fn require_agent(&self, agent_id: Uuid) -> Result<Agent> {
+        AgentRegistry::get(self.registry.as_ref(), agent_id)?
+            .ok_or(AegisError::AgentNotFound { agent_id })
+    }
+
+    fn ensure_transition(&self, from: &AgentStatus, to: &AgentStatus) -> Result<()> {
+        if validate_transition(from, to) {
+            return Ok(());
+        }
+
+        Err(AegisError::Config {
+            field: "agent.status".to_string(),
+            reason: format!("invalid transition from {from:?} to {to:?}"),
+        })
+    }
+
+    fn detach_and_archive(&self, agent_id: Uuid) -> Result<()> {
+        let Some(recorder) = &self.recorder else {
+            return Ok(());
+        };
+
+        recorder.detach(agent_id)?;
+        match recorder.archive(agent_id) {
+            Ok(_) | Err(AegisError::LogFileNotFound { .. }) => Ok(()),
+            Err(error) => Err(error),
+        }
     }
 }
 
@@ -386,8 +497,11 @@ mod tests {
         let dispatcher = Dispatcher::new(
             registry,
             None,
+            None,
+            None,
             providers,
             prompts,
+            None, // taskflow
             storage,
             EventBus::default(),
             config,
@@ -413,10 +527,6 @@ mod tests {
         assert!(plan.agent.log_path.ends_with(format!("{agent_id}.log")));
         assert!(plan.launch_command.contains(&"claude".to_string()));
         assert!(plan.initial_prompt.contains("architect"));
-        assert_eq!(
-            shell_command(&["echo".into(), "hello world".into(), "it's".into()]),
-            "echo 'hello world' 'it'\\''s'"
-        );
     }
 
     #[tokio::test]

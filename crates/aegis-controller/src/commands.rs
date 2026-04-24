@@ -1,6 +1,8 @@
 use std::sync::Arc;
 
 use aegis_core::{Agent, AgentRegistry, LogQuery, Recorder, Result, TaskCreator, TaskQueue};
+use aegis_taskflow::model::{Milestone, ProjectIndex};
+use aegis_taskflow::TaskflowEngine;
 use serde::Serialize;
 use uuid::Uuid;
 
@@ -18,6 +20,7 @@ pub struct ControllerCommands {
     dispatcher: Arc<Dispatcher>,
     scheduler: Arc<Scheduler>,
     recorder: Option<Arc<dyn Recorder>>,
+    taskflow: Option<Arc<TaskflowEngine>>,
 }
 
 impl ControllerCommands {
@@ -26,12 +29,14 @@ impl ControllerCommands {
         dispatcher: Arc<Dispatcher>,
         scheduler: Arc<Scheduler>,
         recorder: Option<Arc<dyn Recorder>>,
+        taskflow: Option<Arc<TaskflowEngine>>,
     ) -> Self {
         Self {
             registry,
             dispatcher,
             scheduler,
             recorder,
+            taskflow,
         }
     }
 
@@ -73,5 +78,45 @@ impl ControllerCommands {
             since: None,
             follow: false,
         })
+    }
+
+    pub fn taskflow_status(&self) -> Result<ProjectIndex> {
+        let tf = self
+            .taskflow
+            .as_ref()
+            .ok_or_else(|| aegis_core::AegisError::IpcProtocol {
+                reason: "taskflow not enabled".into(),
+            })?;
+        tf.get_status()
+    }
+
+    pub fn taskflow_show(&self, milestone_id: &str) -> Result<Milestone> {
+        let tf = self
+            .taskflow
+            .as_ref()
+            .ok_or_else(|| aegis_core::AegisError::IpcProtocol {
+                reason: "taskflow not enabled".into(),
+            })?;
+        tf.get_milestone(milestone_id)
+    }
+
+    pub fn taskflow_assign(&self, roadmap_id: &str, task_id: Uuid) -> Result<()> {
+        let tf = self
+            .taskflow
+            .as_ref()
+            .ok_or_else(|| aegis_core::AegisError::IpcProtocol {
+                reason: "taskflow not enabled".into(),
+            })?;
+        tf.links().assign(roadmap_id.to_string(), task_id)
+    }
+
+    pub fn taskflow_sync(&self) -> Result<aegis_taskflow::SyncReport> {
+        let tf = self
+            .taskflow
+            .as_ref()
+            .ok_or_else(|| aegis_core::AegisError::IpcProtocol {
+                reason: "taskflow not enabled".into(),
+            })?;
+        tf.sync()
     }
 }

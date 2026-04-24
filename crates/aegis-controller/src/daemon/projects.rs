@@ -119,4 +119,9 @@ impl ProjectRegistry {
         projects.retain(|p| p.id != id);
         self.save(projects)
     }
+
+    pub fn find_by_path(&self, path: &PathBuf) -> Result<Option<ProjectRecord>> {
+        let abs = path.canonicalize().unwrap_or_else(|_| path.clone());
+        Ok(self.load()?.into_iter().find(|p| p.root_path == abs))
+    }
 }

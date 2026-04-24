@@ -1,194 +1,382 @@
-use aegis_controller::daemon::{UdsRequest, UdsResponse};
-use aegis_core::{AegisError, Result};
-use clap::{Parser, Subcommand};
-use futures_util::{SinkExt, StreamExt};
+mod anchoring;
+mod client;
+mod commands;
+mod error;
+mod output;
+
 use std::path::PathBuf;
-use tokio::net::UnixStream;
-use tokio_util::codec::{Framed, LinesCodec};
+use clap::{Parser, Subcommand};
+use clap_complete::Shell;
 use uuid::Uuid;
+use anchoring::ProjectAnchor;
+use client::DaemonClient;
+use error::AegisCliError;
+use output::Printer;
 
 #[derive(Parser)]
-#[command(name = "aegis")]
-#[command(about = "AegisCore CLI", long_about = None)]
+#[command(name = "aegis", about = "AegisCore CLI", version)]
 struct Cli {
+    /// Unix domain socket path
+    #[arg(long, default_value = "/tmp/aegis.sock", global = true, env = "AEGIS_SOCKET")]
+    socket: PathBuf,
+
+    /// Emit raw JSON output
+    #[arg(long, global = true)]
+    json: bool,
+
+    /// Disable ANSI color output
+    #[arg(long, global = true)]
+    no_color: bool,
+
+    /// Suppress informational messages
+    #[arg(long, global = true)]
+    quiet: bool,
+
     #[command(subcommand)]
     command: Commands,
-
-    /// Path to the Unix Domain Socket
-    #[arg(long, default_value = "/tmp/aegis.sock", global = true)]
-    uds_path: PathBuf,
 }
 
 #[derive(Subcommand)]
 enum Commands {
+    /// Initialize an AegisCore project in the current directory
+    Init {
+        /// Reinitialize even if already initialized
+        #[arg(long)]
+        force: bool,
+    },
+
+    /// Check system dependencies
+    Doctor,
+
     /// Daemon management
     Daemon {
         #[command(subcommand)]
         subcommand: DaemonCommands,
     },
-    /// Project management
-    Projects {
-        #[command(subcommand)]
-        subcommand: ProjectCommands,
+
+    /// List all registered projects
+    Projects,
+
+    /// Start Bastion agents for this project
+    Start {
+        /// Start a specific Bastion role only
+        #[arg(long)]
+        bastion: Option<String>,
     },
-    /// Agent management (stub)
-    Agents {
-        #[arg(short, long)]
-        list: bool,
+
+    /// Stop all project agents
+    Stop {
+        /// Kill agents immediately (no graceful drain)
+        #[arg(long)]
+        force: bool,
+    },
+
+    /// Attach to the project tmux session (or a specific agent pane)
+    Attach {
+        agent_id: Option<Uuid>,
+    },
+
+    /// List all agents
+    Agents,
+
+    /// Spawn a Splinter agent with a task
+    Spawn {
+        /// Task description
+        task: String,
+        /// Agent role
+        #[arg(long)]
+        role: Option<String>,
+        /// Parent agent ID
+        #[arg(long)]
+        parent: Option<Uuid>,
+    },
+
+    /// Pause an agent
+    Pause { agent_id: String },
+
+    /// Resume a paused agent
+    Resume { agent_id: String },
+
+    /// Kill an agent
+    Kill { agent_id: String },
+
+    /// Trigger provider failover for an agent
+    Failover { agent_id: String },
+
+    /// Channel management
+    Channel {
+        #[command(subcommand)]
+        subcommand: ChannelCommands,
+    },
+
+    /// Show project status overview
+    Status,
+
+    /// Tail an agent's Flight Recorder log
+    Logs {
+        agent_id: String,
+        /// Number of lines
+        #[arg(short = 'n', default_value_t = 50)]
+        lines: usize,
+        /// Stream log continuously
+        #[arg(long)]
+        follow: bool,
+    },
+
+    /// Config management
+    Config {
+        #[command(subcommand)]
+        subcommand: ConfigCommands,
+    },
+
+    /// Taskflow pipeline management
+    Taskflow {
+        #[command(subcommand)]
+        subcommand: TaskflowCommands,
+    },
+
+    /// Generate shell completions
+    Completions {
+        shell: Shell,
     },
 }
 
 #[derive(Subcommand)]
 enum DaemonCommands {
-    /// Start the daemon (via aegisd)
+    /// Start the daemon via launchd
     Start,
-    /// Stop the daemon (via launchctl)
+    /// Stop the daemon via launchd
     Stop,
-    /// Install launchd plist
+    /// Show daemon status
+    Status,
+    /// Install the launchd plist
     Install,
-    /// Uninstall launchd plist
+    /// Uninstall the launchd plist
     Uninstall,
 }
 
 #[derive(Subcommand)]
-enum ProjectCommands {
-    /// List all registered projects
+enum ChannelCommands {
+    /// Add a channel
+    Add {
+        #[command(subcommand)]
+        kind: ChannelAddKind,
+    },
+    /// List active channels
     List,
-    /// Register the current directory as an Aegis project
-    Init,
-    /// Unregister a project by ID
-    Remove { id: Uuid },
+    /// Show channel health and stats
+    Status { name: String },
+    /// Remove a channel
+    Remove {
+        name: String,
+        /// Skip confirmation prompt
+        #[arg(long)]
+        yes: bool,
+    },
+}
+
+#[derive(Subcommand)]
+enum ChannelAddKind {
+    /// Add Telegram bridge
+    Telegram {
+        #[arg(long)]
+        token: Option<String>,
+        #[arg(long = "chat-id")]
+        chat_ids: Vec<i64>,
+        #[arg(long)]
+        yes: bool,
+    },
+    /// Add a named mailbox channel
+    Mailbox { name: String },
+}
+
+#[derive(Subcommand)]
+enum ConfigCommands {
+    /// Validate aegis.toml
+    Validate,
+    /// Show effective merged config
+    Show,
+}
+
+#[derive(Subcommand)]
+enum TaskflowCommands {
+    /// Show project pipeline overview
+    Status,
+    /// List all milestones
+    List,
+    /// Show detailed tasks for a milestone
+    Show { milestone_id: String },
+    /// Sync roadmap with agent registry
+    Sync,
+    /// Manually link a roadmap task to a registry task
+    Assign {
+        roadmap_id: String,
+        task_id: String,
+    },
 }
 
 #[tokio::main]
-async fn main() -> Result<()> {
+async fn main() {
     let cli = Cli::parse();
+    let printer = Printer::new(cli.json, cli.no_color);
+    let client = DaemonClient::new(cli.socket.clone());
 
+    let result = dispatch(cli, &printer, &client).await;
+
+    if let Err(e) = result {
+        e.print_and_exit();
+    }
+}
+
+async fn dispatch(cli: Cli, printer: &Printer, client: &DaemonClient) -> Result<(), AegisCliError> {
     match cli.command {
-        Commands::Daemon { subcommand } => handle_daemon(subcommand).await,
-        Commands::Projects { subcommand } => handle_projects(subcommand, cli.uds_path).await,
-        Commands::Agents { list: _ } => {
-            println!("Agent management not yet implemented (M10/M12).");
+        Commands::Init { force } => {
+            commands::init::run(force, printer, client).await
+        }
+
+        Commands::Doctor => {
+            let code = commands::doctor::run(printer, client).await;
+            if code != 0 {
+                std::process::exit(code);
+            }
             Ok(())
         }
+
+        Commands::Daemon { subcommand } => match subcommand {
+            DaemonCommands::Start => commands::daemon::start(printer).await,
+            DaemonCommands::Stop => commands::daemon::stop(printer).await,
+            DaemonCommands::Status => commands::daemon::status(printer, client).await,
+            DaemonCommands::Install => commands::daemon::install().await,
+            DaemonCommands::Uninstall => commands::daemon::uninstall().await,
+        },
+
+        Commands::Projects => commands::daemon::projects(printer, client).await,
+
+        Commands::Start { bastion } => {
+            let anchor = require_anchor()?;
+            commands::session::start(bastion.as_deref(), printer, client, &anchor).await
+        }
+
+        Commands::Stop { force } => {
+            let anchor = require_anchor()?;
+            commands::session::stop(force, printer, client, &anchor).await
+        }
+
+        Commands::Attach { agent_id } => {
+            let anchor = require_anchor()?;
+            commands::session::attach(agent_id, &anchor)
+        }
+
+        Commands::Agents => {
+            let anchor = require_anchor()?;
+            commands::agents::list(printer, client, &anchor).await
+        }
+
+        Commands::Spawn { task, role, parent } => {
+            let anchor = require_anchor()?;
+            commands::agents::spawn(&task, role.as_deref(), parent, printer, client, &anchor).await
+        }
+
+        Commands::Pause { agent_id } => {
+            let anchor = require_anchor()?;
+            commands::agents::pause(&agent_id, printer, client, &anchor).await
+        }
+
+        Commands::Resume { agent_id } => {
+            let anchor = require_anchor()?;
+            commands::agents::resume(&agent_id, printer, client, &anchor).await
+        }
+
+        Commands::Kill { agent_id } => {
+            let anchor = require_anchor()?;
+            commands::agents::kill(&agent_id, printer, client, &anchor).await
+        }
+
+        Commands::Failover { agent_id } => {
+            let anchor = require_anchor()?;
+            commands::agents::failover(&agent_id, printer, client, &anchor).await
+        }
+
+        Commands::Channel { subcommand } => {
+            let anchor = require_anchor()?;
+            match subcommand {
+                ChannelCommands::Add { kind } => match kind {
+                    ChannelAddKind::Telegram { token, chat_ids, yes } => {
+                        commands::channels::add_telegram(
+                            token.as_deref(),
+                            &chat_ids,
+                            yes,
+                            printer,
+                            client,
+                            &anchor,
+                        )
+                        .await
+                    }
+                    ChannelAddKind::Mailbox { name } => {
+                        commands::channels::add_mailbox(&name, printer, client, &anchor).await
+                    }
+                },
+                ChannelCommands::List => {
+                    commands::channels::list(printer, client, &anchor).await
+                }
+                ChannelCommands::Status { name } => {
+                    commands::channels::channel_status(&name, printer, client, &anchor).await
+                }
+                ChannelCommands::Remove { name, yes } => {
+                    commands::channels::remove(&name, yes, printer, client, &anchor).await
+                }
+            }
+        }
+
+        Commands::Status => {
+            let anchor = require_anchor()?;
+            commands::observe::status(printer, client, &anchor).await
+        }
+
+        Commands::Logs { agent_id, lines, follow } => {
+            let anchor = require_anchor()?;
+            commands::observe::logs(&agent_id, Some(lines), follow, printer, client, &anchor).await
+        }
+
+        Commands::Config { subcommand } => match subcommand {
+            ConfigCommands::Validate => {
+                let anchor = require_anchor()?;
+                commands::config::validate(&anchor, printer)
+            }
+            ConfigCommands::Show => {
+                let anchor = require_anchor()?;
+                commands::config::show(printer, client, &anchor).await
+            }
+        },
+
+        Commands::Taskflow { subcommand } => {
+            let anchor = require_anchor()?;
+            match subcommand {
+                TaskflowCommands::Status => {
+                    commands::taskflow::status(printer, client, &anchor).await
+                }
+                TaskflowCommands::List => {
+                    commands::taskflow::list(printer, client, &anchor).await
+                }
+                TaskflowCommands::Show { milestone_id } => {
+                    commands::taskflow::show(&milestone_id, printer, client, &anchor).await
+                }
+                TaskflowCommands::Sync => {
+                    commands::taskflow::sync(printer, client, &anchor).await
+                }
+                TaskflowCommands::Assign { roadmap_id, task_id } => {
+                    commands::taskflow::assign(&roadmap_id, &task_id, printer, client, &anchor).await
+                }
+            }
+        }
+
+        Commands::Completions { shell } => {
+            commands::completions::run::<Cli>(shell)
+        }
     }
 }
 
-async fn handle_daemon(cmd: DaemonCommands) -> Result<()> {
-    match cmd {
-        DaemonCommands::Start => {
-            println!("Starting aegisd...");
-            let home = std::env::var("HOME").unwrap();
-            let plist_path = format!("{}/Library/LaunchAgents/com.aegiscore.aegisd.plist", home);
-            std::process::Command::new("launchctl")
-                .arg("load")
-                .arg(plist_path)
-                .status()
-                .map_err(|e| AegisError::Unexpected(Box::new(e)))?;
-        }
-        DaemonCommands::Stop => {
-            println!("Stopping aegisd...");
-            let home = std::env::var("HOME").unwrap();
-            let plist_path = format!("{}/Library/LaunchAgents/com.aegiscore.aegisd.plist", home);
-            std::process::Command::new("launchctl")
-                .arg("unload")
-                .arg(plist_path)
-                .status()
-                .map_err(|e| AegisError::Unexpected(Box::new(e)))?;
-        }
-        DaemonCommands::Install => {
-            std::process::Command::new("aegisd")
-                .arg("install")
-                .status()
-                .map_err(|e| AegisError::Unexpected(Box::new(e)))?;
-        }
-        DaemonCommands::Uninstall => {
-            std::process::Command::new("aegisd")
-                .arg("uninstall")
-                .status()
-                .map_err(|e| AegisError::Unexpected(Box::new(e)))?;
-        }
-    }
-    Ok(())
-}
-
-async fn handle_projects(cmd: ProjectCommands, uds_path: PathBuf) -> Result<()> {
-    match cmd {
-        ProjectCommands::List => {
-            let response =
-                send_uds_command(uds_path, "list_projects", serde_json::json!({})).await?;
-            println!(
-                "{}",
-                serde_json::to_string_pretty(&response.payload).unwrap()
-            );
-        }
-        ProjectCommands::Init => {
-            let current_dir = std::env::current_dir().map_err(|e| AegisError::StorageIo {
-                path: ".".into(),
-                source: e,
-            })?;
-            let response = send_uds_command(
-                uds_path,
-                "register_project",
-                serde_json::json!({ "path": current_dir }),
-            )
-            .await?;
-            println!("Project registered: {}", response.status);
-        }
-        ProjectCommands::Remove { id } => {
-            let response = send_uds_command(
-                uds_path,
-                "unregister_project",
-                serde_json::json!({ "id": id }),
-            )
-            .await?;
-            println!("Project unregistered: {}", response.status);
-        }
-    }
-    Ok(())
-}
-
-async fn send_uds_command(
-    path: PathBuf,
-    command: &str,
-    params: serde_json::Value,
-) -> Result<UdsResponse> {
-    let stream = UnixStream::connect(path.clone())
-        .await
-        .map_err(|_| AegisError::DaemonNotRunning { socket_path: path })?;
-
-    let mut lines = Framed::new(stream, LinesCodec::new());
-
-    let request = UdsRequest {
-        id: Uuid::new_v4(),
-        project_path: None,
-        command: command.to_string(),
-        params,
-    };
-
-    let request_json = serde_json::to_string(&request).map_err(|e| AegisError::IpcProtocol {
-        reason: e.to_string(),
-    })?;
-
-    lines
-        .send(request_json)
-        .await
-        .map_err(|e| AegisError::IpcProtocol {
-            reason: e.to_string(),
-        })?;
-
-    if let Some(result) = lines.next().await {
-        let line: String = result.map_err(|e| AegisError::IpcProtocol {
-            reason: e.to_string(),
-        })?;
-        let response: UdsResponse =
-            serde_json::from_str(&line).map_err(|e| AegisError::IpcProtocol {
-                reason: e.to_string(),
-            })?;
-        Ok(response)
-    } else {
-        Err(AegisError::IpcProtocol {
-            reason: "No response from daemon".to_string(),
-        })
-    }
+fn require_anchor() -> Result<ProjectAnchor, AegisCliError> {
+    let cwd = std::env::current_dir().map_err(AegisCliError::Io)?;
+    ProjectAnchor::discover(&cwd)
 }
