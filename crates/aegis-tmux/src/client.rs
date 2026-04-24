@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::{io::ErrorKind, path::Path};
 
 use tracing::debug;
 
@@ -10,11 +10,15 @@ pub struct TmuxClient {
 
 impl TmuxClient {
     pub fn new() -> Self {
-        Self { tmux_bin: "tmux".to_owned() }
+        Self {
+            tmux_bin: "tmux".to_owned(),
+        }
     }
 
     pub fn with_binary(bin: &str) -> Self {
-        Self { tmux_bin: bin.to_owned() }
+        Self {
+            tmux_bin: bin.to_owned(),
+        }
     }
 
     // ── internal ──────────────────────────────────────────────────────────────
@@ -25,7 +29,12 @@ impl TmuxClient {
             .args(args)
             .output()
             .await
-            .map_err(|e| TmuxError::Io { source: e })?;
+            .map_err(|e| match e.kind() {
+                ErrorKind::NotFound | ErrorKind::PermissionDenied => TmuxError::BinaryNotFound {
+                    reason: e.to_string(),
+                },
+                _ => TmuxError::Io { source: e },
+            })?;
 
         if output.status.success() {
             Ok(String::from_utf8_lossy(&output.stdout).into_owned())
@@ -46,27 +55,32 @@ impl TmuxClient {
     }
 
     /// Create a new window in an existing session. Returns the window index.
-    pub async fn new_window(
-        &self,
-        session: &str,
-        name: Option<&str>,
-    ) -> Result<u32, TmuxError> {
+    pub async fn new_window(&self, session: &str, name: Option<&str>) -> Result<u32, TmuxError> {
         let target = format!("{session}:");
         let mut args = vec!["new-window", "-t", &target, "-P", "-F", "#{window_index}"];
         if let Some(n) = name {
             args.extend(["-n", n]);
         }
         let out = self.run_tmux(&args).await?;
-        out.trim().parse::<u32>().map_err(|_| TmuxError::CommandFailed {
-            code: -1,
-            stderr: format!("unexpected window_index output: {}", out.trim()),
-        })
+        out.trim()
+            .parse::<u32>()
+            .map_err(|_| TmuxError::CommandFailed {
+                code: -1,
+                stderr: format!("unexpected window_index output: {}", out.trim()),
+            })
     }
 
     /// Split an existing window, creating a new pane. Returns the pane ID (`%N`).
     pub async fn split_window(&self, target: &TmuxTarget) -> Result<String, TmuxError> {
         let out = self
-            .run_tmux(&["split-window", "-t", target.as_str(), "-P", "-F", "#{pane_id}"])
+            .run_tmux(&[
+                "split-window",
+                "-t",
+                target.as_str(),
+                "-P",
+                "-F",
+                "#{pane_id}",
+            ])
             .await?;
         Ok(out.trim().to_owned())
     }
@@ -79,7 +93,8 @@ impl TmuxClient {
 
     /// Kill an entire window and all its panes.
     pub async fn kill_window(&self, target: &TmuxTarget) -> Result<(), TmuxError> {
-        self.run_tmux(&["kill-window", "-t", target.as_str()]).await?;
+        self.run_tmux(&["kill-window", "-t", target.as_str()])
+            .await?;
         Ok(())
     }
 
@@ -96,7 +111,12 @@ impl TmuxClient {
             .args(["has-session", "-t", session])
             .status()
             .await
-            .map_err(|e| TmuxError::Io { source: e })?;
+            .map_err(|e| match e.kind() {
+                ErrorKind::NotFound | ErrorKind::PermissionDenied => TmuxError::BinaryNotFound {
+                    reason: e.to_string(),
+                },
+                _ => TmuxError::Io { source: e },
+            })?;
         Ok(status.success())
     }
 
@@ -118,21 +138,25 @@ impl TmuxClient {
     /// Inject text into the pane as if typed, followed by Enter.
     /// Uses `-l` (literal) flag so tmux key bindings are not triggered.
     pub async fn send_text(&self, target: &TmuxTarget, text: &str) -> Result<(), TmuxError> {
-        self.run_tmux(&["send-keys", "-t", target.as_str(), "-l", text]).await?;
-        self.run_tmux(&["send-keys", "-t", target.as_str(), "Enter"]).await?;
+        self.run_tmux(&["send-keys", "-t", target.as_str(), "-l", text])
+            .await?;
+        self.run_tmux(&["send-keys", "-t", target.as_str(), "Enter"])
+            .await?;
         Ok(())
     }
 
     /// Send a named key event (e.g. `"C-c"`, `"Enter"`, `"Escape"`).
     /// Does not use `-l` — intended for control sequences only.
     pub async fn send_key(&self, target: &TmuxTarget, key: &str) -> Result<(), TmuxError> {
-        self.run_tmux(&["send-keys", "-t", target.as_str(), key]).await?;
+        self.run_tmux(&["send-keys", "-t", target.as_str(), key])
+            .await?;
         Ok(())
     }
 
     /// Send Ctrl-C to interrupt the running process in the pane.
     pub async fn interrupt(&self, target: &TmuxTarget) -> Result<(), TmuxError> {
-        self.run_tmux(&["send-keys", "-t", target.as_str(), "C-c"]).await?;
+        self.run_tmux(&["send-keys", "-t", target.as_str(), "C-c"])
+            .await?;
         Ok(())
     }
 
@@ -145,10 +169,8 @@ impl TmuxClient {
         lines: usize,
     ) -> Result<String, TmuxError> {
         let start = format!("-{lines}");
-        self.run_tmux(&[
-            "capture-pane", "-t", target.as_str(), "-p", "-e", "-S", &start,
-        ])
-        .await
+        self.run_tmux(&["capture-pane", "-t", target.as_str(), "-p", "-S", &start])
+            .await
     }
 
     /// Capture the last `lines` lines with ANSI escape codes stripped.
@@ -159,7 +181,13 @@ impl TmuxClient {
     ) -> Result<String, TmuxError> {
         let start = format!("-{lines}");
         self.run_tmux(&[
-            "capture-pane", "-t", target.as_str(), "-p", "-S", &start,
+            "capture-pane",
+            "-t",
+            target.as_str(),
+            "-p",
+            "-e",
+            "-S",
+            &start,
         ])
         .await
     }
@@ -168,14 +196,11 @@ impl TmuxClient {
 
     /// Attach a log stream: all pane output is appended to `log_path`.
     /// Idempotent — calling again on an already-piped pane is a no-op.
-    pub async fn pipe_attach(
-        &self,
-        target: &TmuxTarget,
-        log_path: &Path,
-    ) -> Result<(), TmuxError> {
+    pub async fn pipe_attach(&self, target: &TmuxTarget, log_path: &Path) -> Result<(), TmuxError> {
         let path_escaped = escape_for_send_keys(&log_path.to_string_lossy());
         let shell_cmd = format!("cat >> {path_escaped}");
-        self.run_tmux(&["pipe-pane", "-t", target.as_str(), "-o", &shell_cmd]).await?;
+        self.run_tmux(&["pipe-pane", "-t", target.as_str(), "-o", &shell_cmd])
+            .await?;
         Ok(())
     }
 
@@ -189,10 +214,7 @@ impl TmuxClient {
 
     /// Returns the exit status of the process in the pane.
     /// `None` = still running. `Some(code)` = exited with that code.
-    pub async fn pane_exit_status(
-        &self,
-        target: &TmuxTarget,
-    ) -> Result<Option<i32>, TmuxError> {
+    pub async fn pane_exit_status(&self, target: &TmuxTarget) -> Result<Option<i32>, TmuxError> {
         let out = self
             .run_tmux(&[
                 "display-message",

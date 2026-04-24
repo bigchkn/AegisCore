@@ -15,3 +15,5 @@ ollama  = []
 [dependencies]
 aegis-core = { workspace = true }
 tracing    = { workspace = true }
+serde      = { workspace = true }
+serde_yaml = { workspace = true }
