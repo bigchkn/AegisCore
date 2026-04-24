@@ -115,16 +115,18 @@ async fn handle_connection(
         }
 
         if request.command == "logs.tail" || request.command == "pane.attach" {
-            let project_path = request.project_path.as_ref().ok_or_else(|| {
-                AegisError::IpcProtocol {
-                    reason: "Missing project_path".to_string(),
-                }
-            })?;
-            let project = project_registry.find_by_path(project_path)?.ok_or_else(|| {
-                AegisError::ProjectNotInitialized {
+            let project_path =
+                request
+                    .project_path
+                    .as_ref()
+                    .ok_or_else(|| AegisError::IpcProtocol {
+                        reason: "Missing project_path".to_string(),
+                    })?;
+            let project = project_registry
+                .find_by_path(project_path)?
+                .ok_or_else(|| AegisError::ProjectNotInitialized {
                     path: project_path.clone(),
-                }
-            })?;
+                })?;
 
             let mut runtimes = active_runtimes.lock().await;
             let runtime = if let Some(r) = runtimes.get(&project.id) {
@@ -132,6 +134,7 @@ async fn handle_connection(
             } else {
                 let r = AegisRuntime::load(project.root_path.clone()).await?;
                 r.recover().await?;
+                r.start().await?;
                 runtimes.insert(project.id, r);
                 runtimes.get(&project.id).unwrap()
             };
@@ -312,16 +315,20 @@ async fn dispatch_command(
         }
         "taskflow.sync" => Ok(serde_json::to_value(commands.taskflow_sync()?).unwrap()),
         "taskflow.create_milestone" => {
-            let id = request.params.get("id").and_then(|v| v.as_str()).ok_or_else(|| {
-                AegisError::IpcProtocol {
+            let id = request
+                .params
+                .get("id")
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| AegisError::IpcProtocol {
                     reason: "Missing id".to_string(),
-                }
-            })?;
-            let name = request.params.get("name").and_then(|v| v.as_str()).ok_or_else(|| {
-                AegisError::IpcProtocol {
+                })?;
+            let name = request
+                .params
+                .get("name")
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| AegisError::IpcProtocol {
                     reason: "Missing name".to_string(),
-                }
-            })?;
+                })?;
             let lld = request.params.get("lld").and_then(|v| v.as_str());
             commands.taskflow_create_milestone(id, name, lld)?;
             Ok(serde_json::json!({ "message": "Milestone created" }))
@@ -334,18 +341,47 @@ async fn dispatch_command(
                 .ok_or_else(|| AegisError::IpcProtocol {
                     reason: "Missing milestone_id".to_string(),
                 })?;
-            let id = request.params.get("id").and_then(|v| v.as_str()).ok_or_else(|| {
-                AegisError::IpcProtocol {
+            let id = request
+                .params
+                .get("id")
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| AegisError::IpcProtocol {
                     reason: "Missing id".to_string(),
-                }
-            })?;
-            let task = request.params.get("task").and_then(|v| v.as_str()).ok_or_else(|| {
-                AegisError::IpcProtocol {
+                })?;
+            let task = request
+                .params
+                .get("task")
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| AegisError::IpcProtocol {
                     reason: "Missing task".to_string(),
-                }
-            })?;
+                })?;
             commands.taskflow_add_task(milestone_id, id, task)?;
             Ok(serde_json::json!({ "message": "Task added" }))
+        }
+        "taskflow.set_task_status" => {
+            let milestone_id = request
+                .params
+                .get("milestone_id")
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| AegisError::IpcProtocol {
+                    reason: "Missing milestone_id".to_string(),
+                })?;
+            let task_id = request
+                .params
+                .get("task_id")
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| AegisError::IpcProtocol {
+                    reason: "Missing task_id".to_string(),
+                })?;
+            let status = request
+                .params
+                .get("status")
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| AegisError::IpcProtocol {
+                    reason: "Missing status".to_string(),
+                })?;
+            commands.taskflow_set_task_status(milestone_id, task_id, status)?;
+            Ok(serde_json::json!({ "message": "Task status updated" }))
         }
         _ => Err(AegisError::IpcProtocol {
             reason: format!("Unknown command: {}", request.command),
