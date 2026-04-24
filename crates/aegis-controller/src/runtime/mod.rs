@@ -11,6 +11,7 @@ use uuid::Uuid;
 use crate::{
     commands::ControllerCommands, dispatcher::Dispatcher, events::EventBus, prompts::PromptManager,
     registry::FileRegistry, scheduler::Scheduler, state::StateManager, storage::ProjectStorage,
+    watchdog::ControllerWatchdogSink,
 };
 
 pub struct AegisRuntime {
@@ -27,6 +28,7 @@ pub struct AegisRuntime {
     pub dispatcher: Arc<Dispatcher>,
     pub scheduler: Arc<Scheduler>,
     pub state: Arc<StateManager>,
+    pub watchdog_sink: Arc<ControllerWatchdogSink>,
     pub taskflow: Option<Arc<TaskflowEngine>>,
     pub events: EventBus,
 }
@@ -66,6 +68,11 @@ impl AegisRuntime {
         let state = Arc::new(StateManager::new(storage.clone()));
         let taskflow = Arc::new(TaskflowEngine::new(storage.clone(), registry.clone()));
         let events = EventBus::default();
+        let watchdog_sink = Arc::new(ControllerWatchdogSink::new(
+            registry.clone(),
+            events.clone(),
+            config.watchdog.failover_enabled,
+        ));
 
         let dispatcher = Arc::new(Dispatcher::new(
             registry.clone(),
@@ -98,6 +105,7 @@ impl AegisRuntime {
             dispatcher,
             scheduler,
             state,
+            watchdog_sink,
             taskflow: Some(taskflow),
             events,
         })
