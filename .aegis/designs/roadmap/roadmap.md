@@ -26,7 +26,8 @@ All LLDs derived from the HLD (§15). Each must reach `done` before its mileston
 | Sandbox profiles        | `lld/sandbox.md`    | M2        | `aegis-sandbox`          | `done`     |
 | State & registry        | `lld/state.md`      | M3        | `aegis-controller`       | `done`     |
 | CLI providers           | `lld/providers.md`  | M4        | `aegis-providers`        | `done`     |
-| Flight recorder         | `lld/recorder.md`   | M5        | `aegis-recorder`         | `lld-done` || Channels                | `lld/channels.md`   | M6        | `aegis-channels`         | `pending`  |
+| Flight recorder         | `lld/recorder.md`   | M5        | `aegis-recorder`         | `lld-done` |
+| Channels                | `lld/channels.md`   | M6        | `aegis-channels`         | `lld-done` |
 | Watchdog & failover     | `lld/watchdog.md`   | M7        | `aegis-watchdog`         | `pending`  |
 | Prompts                 | `lld/prompts.md`    | M8        | `aegis-controller`       | `pending`  |
 | Telegram bridge         | `lld/telegram.md`   | M9        | `aegis-telegram`         | `pending`  |
@@ -175,20 +176,20 @@ All LLDs derived from the HLD (§15). Each must reach `done` before its mileston
 ## Milestone 6 — Channels: `aegis-channels`
 
 **LLD:** `lld/channels.md`  
-**Status:** `pending`  
+**Status:** `lld-done`  
 **Depends on:** M0, M1
 
 ### Tasks
 
-| #   | Task                                                                        | Crate            | Notes                                                                                       |
-| --- | --------------------------------------------------------------------------- | ---------------- | ------------------------------------------------------------------------------------------- |
-| 6.1 | Write `lld/channels.md`                                                     | —                | Mailbox schema; delivery ordering; Injection escaping; broadcast fan-out; channel lifecycle |
-| 6.2 | Implement `InjectionChannel`: `send-keys` with escaping + retry             | `aegis-channels` |                                                                                             |
-| 6.3 | Implement `MailboxChannel`: filesystem drop-box write; inbox polling        | `aegis-channels` |                                                                                             |
-| 6.4 | Implement `ObservationChannel`: `capture-pane` read with configurable depth | `aegis-channels` |                                                                                             |
-| 6.5 | Implement `BroadcastChannel`: fan-out via Mailbox to all active agents      | `aegis-channels` |                                                                                             |
-| 6.6 | Implement channel lifecycle: `aegis channel add/remove` state machine       | `aegis-channels` | Persists to `channels.json`                                                                 |
-| 6.7 | Unit tests: mailbox ordering; injection escaping edge cases                 | `aegis-channels` |                                                                                             |
+| #   | Task                                                                        | Crate            | Status | Notes                                                                                       |
+| --- | --------------------------------------------------------------------------- | ---------------- | ------ | ------------------------------------------------------------------------------------------- |
+| 6.1 | Write `lld/channels.md`                                                     | —                | `done` | Mailbox schema; delivery ordering; Injection escaping; broadcast fan-out; channel lifecycle |
+| 6.2 | Implement `InjectionChannel`: `send-keys` with escaping + retry             | `aegis-channels` |        |                                                                                             |
+| 6.3 | Implement `MailboxChannel`: filesystem drop-box write; inbox polling        | `aegis-channels` |        |                                                                                             |
+| 6.4 | Implement `ObservationChannel`: `capture-pane` read with configurable depth | `aegis-channels` |        |                                                                                             |
+| 6.5 | Implement `BroadcastChannel`: fan-out via Mailbox to all active agents      | `aegis-channels` |        |                                                                                             |
+| 6.6 | Implement channel lifecycle: `aegis channel add/remove` state machine       | `aegis-channels` |        | Persists to `channels.json`                                                                 |
+| 6.7 | Unit tests: mailbox ordering; injection escaping edge cases                 | `aegis-channels` |        |                                                                                             |
 
 ---
 
