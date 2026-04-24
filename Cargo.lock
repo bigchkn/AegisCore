@@ -170,6 +170,7 @@ dependencies = [
  "aegis-core",
  "aegis-providers",
  "aegis-tmux",
+ "rand",
  "regex",
  "tempfile",
  "tokio",
