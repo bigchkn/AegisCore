@@ -22,6 +22,9 @@ pub enum AegisCliError {
 
     #[error(transparent)]
     Core(#[from] aegis_core::AegisError),
+
+    #[error("Unexpected error: {0}")]
+    Unexpected(String),
 }
 
 impl AegisCliError {
@@ -30,7 +33,7 @@ impl AegisCliError {
             Self::NotAnAegisProject | Self::DaemonNotRunning | Self::InvalidArg(_) => 1,
             Self::Config(_) => 2,
             Self::DaemonError(_) => 3,
-            Self::Io(_) | Self::Core(_) => 1,
+            Self::Io(_) | Self::Core(_) | Self::Unexpected(_) => 1,
         }
     }
 

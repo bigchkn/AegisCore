@@ -17,6 +17,10 @@ impl DaemonClient {
         Self { uds_path: path }
     }
 
+    pub fn uds_path(&self) -> &Path {
+        &self.uds_path
+    }
+
     async fn connect(&self) -> Result<Framed<UnixStream, LinesCodec>, AegisCliError> {
         UnixStream::connect(&self.uds_path)
             .await

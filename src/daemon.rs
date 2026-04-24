@@ -1,4 +1,4 @@
-use aegis_controller::daemon::DaemonSupervisor;
+use aegis_controller::daemon::server::DaemonSupervisor;
 use aegis_core::Result;
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;

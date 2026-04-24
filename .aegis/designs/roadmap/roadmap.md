@@ -366,7 +366,7 @@ All LLDs derived from the HLD (§15). Each must reach `done` before its mileston
 | 14.9  | Implement TUI layout and all panel renderers (agents, logs, pane, tasks, channels, status bar)          | `aegis-tui`                             | `done`    | ratatui + tui-term for pane panel                            |
 | 14.10 | Implement key bindings and overlays (spawn prompt, confirm-kill, help screen)                           | `aegis-tui`                             | `done`    |                                                              |
 | 14.11 | Implement multi-project switching                                                                       | `aegis-tui`                             | `done`    |                                                              |
-| 14.12 | Wire `aegis ui` subcommand in `src/`                                                                    | `src/`                                  | `pending` |                                                              |
+| 14.12 | Wire `aegis ui` subcommand in `src/`                                                                    | `src/`                                  | `done`    |                                                              |
 | 14.13 | TUI unit and integration tests                                                                          | `aegis-tui`                             | `pending` |                                                              |
 
 ---

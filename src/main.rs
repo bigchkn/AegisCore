@@ -112,6 +112,9 @@ enum Commands {
     /// Show project status overview
     Status,
 
+    /// Start the interactive TUI
+    Ui,
+
     /// Tail an agent's Flight Recorder log
     Logs {
         agent_id: String,
@@ -331,6 +334,11 @@ async fn dispatch(cli: Cli, printer: &Printer, client: &DaemonClient) -> Result<
         Commands::Status => {
             let anchor = require_anchor()?;
             commands::observe::status(printer, client, &anchor).await
+        }
+
+        Commands::Ui => {
+            let anchor = require_anchor()?;
+            commands::ui::run(printer, client, &anchor).await
         }
 
         Commands::Logs { agent_id, lines, follow } => {
