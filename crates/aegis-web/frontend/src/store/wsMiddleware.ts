@@ -88,7 +88,7 @@ export const wsMiddleware: Middleware = (store) => {
   connect();
 
   return (next) => (action) => {
-    if (reconnectTimer && action.type === 'ui/setActiveProject') {
+    if (reconnectTimer && isAction(action) && action.type === 'ui/setActiveProject') {
       window.clearTimeout(reconnectTimer);
       reconnectTimer = null;
       connect();
@@ -96,3 +96,12 @@ export const wsMiddleware: Middleware = (store) => {
     return next(action);
   };
 };
+
+function isAction(action: unknown): action is { type: string } {
+  return (
+    typeof action === 'object' &&
+    action !== null &&
+    'type' in action &&
+    typeof action.type === 'string'
+  );
+}
