@@ -170,8 +170,11 @@ dependencies = [
  "aegis-core",
  "aegis-providers",
  "aegis-tmux",
+ "regex",
+ "tempfile",
  "tokio",
  "tracing",
+ "uuid",
 ]
 
 [[package]]

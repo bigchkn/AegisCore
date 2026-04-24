@@ -1,1 +1,3 @@
-// aegis-watchdog — stub; implementation pending LLD
+mod matcher;
+
+pub use matcher::PatternMatcher;
