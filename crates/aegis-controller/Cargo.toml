@@ -27,6 +27,7 @@ axum = { version = "0.7", features = ["ws"] }
 tower-http = { version = "0.5", features = ["fs", "cors", "trace"] }
 tokio-util = { version = "0.7", features = ["codec"] }
 futures-util = "0.3"
+strip-ansi-escapes = "0.2"
 
 ts-rs = { version = "10", optional = true, features = ["uuid-impl", "chrono-impl"] }
 

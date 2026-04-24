@@ -1,4 +1,4 @@
-use std::{io::ErrorKind, path::Path};
+use std::{io::{ErrorKind, Write}, path::Path};
 
 use tracing::debug;
 
@@ -157,6 +157,51 @@ impl TmuxClient {
     pub async fn interrupt(&self, target: &TmuxTarget) -> Result<(), TmuxError> {
         self.run_tmux(&["send-keys", "-t", target.as_str(), "C-c"])
             .await?;
+        Ok(())
+    }
+
+    /// Resize a specific pane.
+    pub async fn resize_pane(
+        &self,
+        target: &TmuxTarget,
+        cols: u32,
+        rows: u32,
+    ) -> Result<(), TmuxError> {
+        self.run_tmux(&[
+            "resize-pane",
+            "-t",
+            target.as_str(),
+            "-x",
+            &cols.to_string(),
+            "-y",
+            &rows.to_string(),
+        ])
+        .await?;
+        Ok(())
+    }
+
+    /// Inject arbitrary raw bytes (e.g. control sequences, paste data) into the pane.
+    /// Uses tmux load-buffer + paste-buffer for reliable injection without shell escaping.
+    pub async fn send_raw_input(&self, target: &TmuxTarget, data: &[u8]) -> Result<(), TmuxError> {
+        let mut tmp = tempfile::NamedTempFile::new().map_err(|e| TmuxError::Io { source: e })?;
+        tmp.write_all(data).map_err(|e| TmuxError::Io { source: e })?;
+        tmp.flush().map_err(|e| TmuxError::Io { source: e })?;
+
+        let buffer_name = format!("aegis_paste_{}", uuid::Uuid::new_v4());
+        let path_str = tmp.path().to_string_lossy();
+
+        // 1. Load temp file into tmux buffer
+        self.run_tmux(&["load-buffer", "-b", &buffer_name, &path_str])
+            .await?;
+
+        // 2. Paste buffer into target pane
+        // -r: do not replace LF with CR (raw)
+        self.run_tmux(&["paste-buffer", "-b", &buffer_name, "-r", "-t", target.as_str()])
+            .await?;
+
+        // 3. Clean up buffer
+        let _ = self.run_tmux(&["delete-buffer", "-b", &buffer_name]).await;
+
         Ok(())
     }
 

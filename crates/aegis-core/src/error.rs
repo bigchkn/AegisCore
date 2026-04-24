@@ -117,6 +117,9 @@ pub enum AegisError {
         source: io::Error,
     },
 
+    #[error("IPC stream closed unexpectedly")]
+    IpcStreamClosed,
+
     #[error("IPC protocol error: {reason}")]
     IpcProtocol { reason: String },
 

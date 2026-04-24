@@ -10,6 +10,8 @@ aegis-core = { workspace = true }
 tokio      = { workspace = true }
 tracing    = { workspace = true }
 thiserror  = { workspace = true }
+tempfile   = "3"
+uuid       = { version = "1", features = ["v4"] }
 
 [dev-dependencies]
 tokio = { workspace = true }
