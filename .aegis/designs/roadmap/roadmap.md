@@ -33,7 +33,7 @@ All LLDs derived from the HLD (§15). Each must reach `done` before its mileston
 | Telegram bridge         | `lld/telegram.md`   | M9        | `aegis-telegram`         | `done`     |
 | Controller & dispatcher | `lld/controller.md` | M10       | `aegis-controller`       | `lld-done` |
 | Global daemon & IPC     | `lld/daemon.md`     | M11       | `aegis-controller`       | `done`     |
-| CLI binary              | `lld/cli.md`        | M12       | `src/`                   | `lld-done` |
+| CLI binary              | `lld/cli.md`        | M12       | `src/`                   | `done`     |
 | Taskflow engine         | `lld/taskflow.md`   | M13       | `aegis-taskflow`         | `done`     |
 | UI (TUI + web)          | `lld/ui.md`         | M14–M15   | `aegis-tui`, `aegis-web` | `pending`  |
 
@@ -301,26 +301,26 @@ All LLDs derived from the HLD (§15). Each must reach `done` before its mileston
 ## Milestone 12 — CLI Binary: `aegis`
 
 **LLD:** `lld/cli.md`  
-**Status:** `lld-done`  
+**Status:** `done`  
 **Depends on:** M11
 
 ### Tasks
 
-| #     | Task                                                                                         | Crate  | Status | Notes                                                                                      |
-| ----- | -------------------------------------------------------------------------------------------- | ------ | ------ | ------------------------------------------------------------------------------------------ |
-| 12.1  | Write `lld/cli.md`                                                                           | —      | `done` | Full command surface; `aegis init` scaffold; session anchoring walk-up; subcommand routing |
-| 12.2  | Implement session anchoring: walk up directory tree for `.aegis/`                            | `src/` |                                                                                            |
-| 12.3  | Implement `aegis init`: scaffold sequence; seed from `~/.aegis/config`; register with daemon | `src/` |                                                                                            |
-| 12.4  | Implement `aegis doctor`: check tmux, git, sandbox-exec, configured CLIs                     | `src/` |                                                                                            |
-| 12.5  | Implement daemon subcommands: `daemon start/stop/status`, `projects`                         | `src/` |                                                                                            |
-| 12.6  | Implement session subcommands: `start`, `stop`, `attach`                                     | `src/` |                                                                                            |
-| 12.7  | Implement agent subcommands: `agents`, `spawn`, `pause`, `resume`, `kill`, `failover`        | `src/` |                                                                                            |
-| 12.8  | Implement channel subcommands: `channel add/list/status/remove`                              | `src/` |                                                                                            |
-| 12.9  | Implement observation subcommands: `status`, `logs`                                          | `src/` |                                                                                            |
-| 12.10 | Implement config subcommands: `config validate`, `config show`                               | `src/` |                                                                                            |
-| 12.11 | Implement `aegis taskflow status/assign`                                                     | `src/` | `done` |                                                                                            |
- 12.12 | Shell completion generation (zsh, bash, fish)                                                | `src/` | via clap                                                                                   |
-| 12.13 | End-to-end tests: init → start → spawn → logs → kill cycle                                   | —      |                                                                                            |
+| #     | Task                                                                                         | Crate  | Status    | Notes                                                                                      |
+| ----- | -------------------------------------------------------------------------------------------- | ------ | --------- | ------------------------------------------------------------------------------------------ |
+| 12.1  | Write `lld/cli.md`                                                                           | —      | `done`    | Full command surface; `aegis init` scaffold; session anchoring walk-up; subcommand routing |
+| 12.2  | Implement session anchoring: walk up directory tree for `.aegis/`                            | `src/` | `done`    |                                                                                            |
+| 12.3  | Implement `aegis init`: scaffold sequence; seed from `~/.aegis/config`; register with daemon | `src/` | `done`    |                                                                                            |
+| 12.4  | Implement `aegis doctor`: check tmux, git, sandbox-exec, configured CLIs                     | `src/` | `done`    |                                                                                            |
+| 12.5  | Implement daemon subcommands: `daemon start/stop/status`, `projects`                         | `src/` | `done`    |                                                                                            |
+| 12.6  | Implement session subcommands: `start`, `stop`, `attach`                                     | `src/` | `done`    |                                                                                            |
+| 12.7  | Implement agent subcommands: `agents`, `spawn`, `pause`, `resume`, `kill`, `failover`        | `src/` | `done`    |                                                                                            |
+| 12.8  | Implement channel subcommands: `channel add/list/status/remove`                              | `src/` | `done`    |                                                                                            |
+| 12.9  | Implement observation subcommands: `status`, `logs`                                          | `src/` | `done`    |                                                                                            |
+| 12.10 | Implement config subcommands: `config validate`, `config show`                               | `src/` | `done`    |                                                                                            |
+| 12.11 | Implement `aegis taskflow status/assign`                                                     | `src/` | `done`    |                                                                                            |
+| 12.12 | Shell completion generation (zsh, bash, fish)                                                | `src/` | `done`    | via clap_complete                                                                          |
+| 12.13 | End-to-end tests: init → start → spawn → logs → kill cycle                                   | —      | `pending` |                                                                                            |
 
 ---
 

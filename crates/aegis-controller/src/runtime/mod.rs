@@ -1,7 +1,9 @@
 use std::{path::PathBuf, sync::Arc};
 
-use aegis_core::{EffectiveConfig, Result};
+use aegis_core::{EffectiveConfig, Recorder, Result, SandboxProfile, StorageBackend};
 use aegis_providers::ProviderRegistry;
+use aegis_recorder::FlightRecorder;
+use aegis_sandbox::SeatbeltSandbox;
 use aegis_taskflow::TaskflowEngine;
 use aegis_tmux::TmuxClient;
 use uuid::Uuid;
@@ -18,6 +20,8 @@ pub struct AegisRuntime {
     pub storage: Arc<ProjectStorage>,
     pub registry: Arc<FileRegistry>,
     pub tmux: Arc<TmuxClient>,
+    pub sandbox: Arc<dyn SandboxProfile>,
+    pub recorder: Arc<dyn Recorder>,
     pub providers: Arc<ProviderRegistry>,
     pub prompts: Arc<PromptManager>,
     pub dispatcher: Arc<Dispatcher>,
@@ -50,6 +54,13 @@ impl AegisRuntime {
 
         let registry = Arc::new(FileRegistry::new(storage.clone()));
         let tmux = Arc::new(TmuxClient::new());
+        let sandbox: Arc<dyn SandboxProfile> =
+            Arc::new(SeatbeltSandbox::with_logs_dir(storage.logs_dir()));
+        let recorder: Arc<dyn Recorder> = Arc::new(FlightRecorder::new(
+            tmux.clone(),
+            storage.clone(),
+            config.recorder.clone(),
+        ));
         let providers = Arc::new(ProviderRegistry::from_config(&config)?);
         let prompts = Arc::new(PromptManager::new(root_path.clone()));
         let state = Arc::new(StateManager::new(storage.clone()));
@@ -59,11 +70,10 @@ impl AegisRuntime {
         let dispatcher = Arc::new(Dispatcher::new(
             registry.clone(),
             Some(tmux.clone()),
-            None, // sandbox stub
-            None, // recorder stub
+            Some(sandbox.clone()),
+            Some(recorder.clone()),
             providers.clone(),
             prompts.clone(),
-            Some(taskflow.clone()),
             storage.clone(),
             events.clone(),
             config.clone(),
@@ -81,6 +91,8 @@ impl AegisRuntime {
             storage,
             registry,
             tmux,
+            sandbox,
+            recorder,
             providers,
             prompts,
             dispatcher,
@@ -119,7 +131,7 @@ impl AegisRuntime {
             self.registry.clone(),
             self.dispatcher.clone(),
             self.scheduler.clone(),
-            None,
+            Some(self.recorder.clone()),
             self.taskflow.clone(),
         )
     }

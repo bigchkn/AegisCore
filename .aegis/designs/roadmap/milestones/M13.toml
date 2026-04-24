@@ -1,0 +1,29 @@
+id = 13
+name = "Taskflow Engine"
+status = "in-progress"
+lld = "lld/taskflow.md"
+
+[[tasks]]
+id = "13.1"
+task = "Write lld/taskflow.md"
+status = "done"
+
+[[tasks]]
+id = "13.2"
+task = "Implement modular TOML parser"
+status = "done"
+
+[[tasks]]
+id = "13.3"
+task = "Implement Taskflow Link Registry"
+status = "done"
+
+[[tasks]]
+id = "13.4"
+task = "Implement Sync Logic"
+status = "done"
+
+[[tasks]]
+id = "13.5"
+task = "Implement CLI Subcommands"
+status = "done"

@@ -1,0 +1,8 @@
+[project]
+name = "AegisCore"
+current_milestone = 13
+
+[milestones]
+M11 = { path = "milestones/M11.toml", status = "done" }
+M12 = { path = "milestones/M12.toml", status = "in-progress" }
+M13 = { path = "milestones/M13.toml", status = "in-progress" }

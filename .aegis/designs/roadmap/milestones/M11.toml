@@ -1,0 +1,5 @@
+id = 11
+name = "Global Daemon & IPC"
+status = "done"
+lld = "lld/daemon.md"
+tasks = []

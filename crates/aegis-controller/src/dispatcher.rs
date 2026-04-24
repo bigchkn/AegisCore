@@ -5,7 +5,6 @@ use aegis_core::{
     Recorder, Result, SandboxProfile, StorageBackend, Task, TaskRegistry, TaskStatus,
 };
 use aegis_providers::ProviderRegistry;
-use aegis_taskflow::TaskflowEngine;
 use aegis_tmux::{TmuxClient, TmuxTarget};
 use chrono::Utc;
 use serde::Deserialize;
@@ -27,7 +26,6 @@ pub struct Dispatcher {
     recorder: Option<Arc<dyn Recorder>>,
     providers: Arc<ProviderRegistry>,
     prompts: Arc<PromptManager>,
-    taskflow: Option<Arc<TaskflowEngine>>,
     storage: Arc<ProjectStorage>,
     events: EventBus,
     config: aegis_core::EffectiveConfig,
@@ -41,7 +39,6 @@ impl Dispatcher {
         recorder: Option<Arc<dyn Recorder>>,
         providers: Arc<ProviderRegistry>,
         prompts: Arc<PromptManager>,
-        taskflow: Option<Arc<TaskflowEngine>>,
         storage: Arc<ProjectStorage>,
         events: EventBus,
         config: aegis_core::EffectiveConfig,
@@ -53,7 +50,6 @@ impl Dispatcher {
             recorder,
             providers,
             prompts,
-            taskflow,
             storage,
             events,
             config,
@@ -165,17 +161,15 @@ impl Dispatcher {
             spec.system_prompt.as_deref(),
         )?;
 
-        // Taskflow awareness injection (Task 13.7) - only if taskflow is active
-        if self.taskflow.is_some() {
-            let taskflow_snippet = r#"
+        // Taskflow awareness injection (Task 13.7).
+        let taskflow_snippet = r#"
 ### Project Context & Navigation
 You are operating within an AegisCore autonomous environment. To understand your place in the broader project roadmap, use the following tools:
 - Run `aegis taskflow status` to see the overall project health.
 - Run `aegis taskflow show <M-ID>` (e.g., M13) to see the specific tasks and design goals for your current milestone.
 - Read design documents directly at `.aegis/designs/` for deep technical context (Read-Only).
 "#;
-            initial_prompt.push_str(taskflow_snippet);
-        }
+        initial_prompt.push_str(taskflow_snippet);
 
         Ok(SpawnPlan {
             agent,
@@ -623,7 +617,6 @@ mod tests {
         let registry = Arc::new(FileRegistry::new(storage.clone()));
         let providers = Arc::new(ProviderRegistry::from_config(&config).unwrap());
         let prompts = Arc::new(PromptManager::new(dir.path().to_path_buf()));
-        let taskflow = Arc::new(TaskflowEngine::new(storage.clone(), registry.clone()));
         let dispatcher = Dispatcher::new(
             registry,
             None,
@@ -631,7 +624,6 @@ mod tests {
             None,
             providers,
             prompts,
-            Some(taskflow),
             storage,
             EventBus::default(),
             config,
