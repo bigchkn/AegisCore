@@ -176,3 +176,65 @@ fn handle_command_mode(key_event: KeyEvent, app: &mut AppState) -> AppAction {
         _ => AppAction::None,
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crossterm::event::{KeyEvent, KeyModifiers};
+
+    fn key(code: KeyCode) -> KeyEvent {
+        KeyEvent::new(code, KeyModifiers::empty())
+    }
+
+    #[test]
+    fn test_normal_mode_navigation() {
+        let mut app = AppState::new(std::path::PathBuf::from("/tmp"));
+        let agent_id = Uuid::new_v4();
+        app.agents.insert(agent_id, aegis_core::Agent {
+            agent_id,
+            name: "test-agent".to_string(),
+            kind: aegis_core::AgentKind::Bastion,
+            status: aegis_core::AgentStatus::Active,
+            role: "worker".to_string(),
+            parent_id: None,
+            task_id: None,
+            tmux_session: "aegis".to_string(),
+            tmux_window: 0,
+            tmux_pane: "%0".to_string(),
+            worktree_path: std::path::PathBuf::from("/tmp"),
+            cli_provider: "claude-code".to_string(),
+            fallback_cascade: vec![],
+            sandbox_profile: std::path::PathBuf::from("/tmp/sandbox"),
+            log_path: std::path::PathBuf::from("/tmp/log"),
+            created_at: chrono::Utc::now(),
+            updated_at: chrono::Utc::now(),
+            terminated_at: None,
+        });
+
+        assert_eq!(handle_key_events(key(KeyCode::Char('j')), &mut app), AppAction::None);
+        assert!(app.selected_agent_id.is_some());
+    }
+
+    #[test]
+    fn test_mode_switching() {
+        let mut app = AppState::new(std::path::PathBuf::from("/tmp"));
+        
+        handle_key_events(key(KeyCode::Char('i')), &mut app);
+        assert_eq!(app.mode, PaneMode::Input);
+        
+        handle_key_events(key(KeyCode::Esc), &mut app);
+        assert_eq!(app.mode, PaneMode::Normal);
+        
+        handle_key_events(key(KeyCode::Char(':')), &mut app);
+        assert_eq!(app.mode, PaneMode::Command);
+    }
+
+    #[test]
+    fn test_overlay_navigation() {
+        let mut app = AppState::new(std::path::PathBuf::from("/tmp"));
+        app.overlay = Overlay::Help;
+        
+        assert_eq!(handle_key_events(key(KeyCode::Esc), &mut app), AppAction::None);
+        assert_eq!(app.overlay, Overlay::None);
+    }
+}

@@ -347,7 +347,7 @@ All LLDs derived from the HLD (§15). Each must reach `done` before its mileston
 ## Milestone 14 — TUI: `aegis-tui`
 
 **LLD:** `lld/ui.md` (shared with M15)  
-**Status:** `lld-done`  
+**Status:** `done`  
 **Depends on:** M11 (daemon + socket); M14 protocol tasks (14.2–14.6) land in `aegis-controller` before TUI impl begins
 
 ### Tasks
@@ -367,7 +367,7 @@ All LLDs derived from the HLD (§15). Each must reach `done` before its mileston
 | 14.10 | Implement key bindings and overlays (spawn prompt, confirm-kill, help screen)                           | `aegis-tui`                             | `done`    |                                                              |
 | 14.11 | Implement multi-project switching                                                                       | `aegis-tui`                             | `done`    |                                                              |
 | 14.12 | Wire `aegis ui` subcommand in `src/`                                                                    | `src/`                                  | `done`    |                                                              |
-| 14.13 | TUI unit and integration tests                                                                          | `aegis-tui`                             | `pending` |                                                              |
+| 14.13 | TUI unit and integration tests                                                                          | `aegis-tui`                             | `done`    |                                                              |
 
 ---
 
