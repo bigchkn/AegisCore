@@ -129,22 +129,23 @@ All LLDs derived from the HLD (§15). Each must reach `done` before its mileston
 ## Milestone 4 — CLI Providers: `aegis-providers`
 
 **LLD:** `lld/providers.md`  
-**Status:** `lld-done`  
+**Status:** `in-progress`  
 **Depends on:** M0
 
 ### Tasks
 
 | # | Task | Crate | Status | Notes |
 |---|---|---|---|---|
-| 4.1 | Write `lld/providers.md` | — | `done` | Per-CLI specs; ProviderRegistry; cascade logic; handoff prompt template |
-| 4.2 | Implement `ClaudeProvider` | `aegis-providers` | `pending` | feature = `claude` |
-| 4.3 | Implement `GeminiProvider` (post-spawn resume via send-keys) | `aegis-providers` | `pending` | feature = `gemini` |
-| 4.4 | Implement `CodexProvider` | `aegis-providers` | `pending` | feature = `codex` |
-| 4.5 | Implement `OllamaProvider` | `aegis-providers` | `pending` | feature = `ollama`; no rate limits |
-| 4.6 | Implement `ProviderRegistry::from_config()` with feature-gated registration | `aegis-providers` | `pending` | |
+| 4.1 | Write `lld/providers.md` | — | `done` | Manifest-driven strategy; ProviderManifest schema; handoff template |
+| 4.2 | Implement `ProviderManifest` parser + embed `builtin_providers.yaml` | `aegis-providers` | `pending` | `include_str!` + `serde_yaml` |
+| 4.3 | Implement `ClaudeProvider`: manifest-driven flags + error detection | `aegis-providers` | `pending` | |
+| 4.4 | Implement `GeminiProvider`: manifest-driven flags + error detection | `aegis-providers` | `pending` | |
+| 4.5 | Implement `CodexProvider` & `OllamaProvider`: manifest-driven | `aegis-providers` | `pending` | |
+| 4.6 | Implement `ProviderRegistry`: manifest load + user config (binary) merge | `aegis-providers` | `pending` | |
 | 4.7 | Implement `cascade_for_agent()` + `next_in_cascade()` | `aegis-providers` | `pending` | |
-| 4.8 | Implement shared `render_handoff_prompt()` | `aegis-providers` | `pending` | |
-| 4.9 | Tests: pattern detection; cascade ordering; handoff prompt content | `aegis-providers` | `pending` | |
+| 4.8 | Implement shared `render_handoff_prompt()` in `handoff.rs` | `aegis-providers` | `pending` | |
+| 4.9 | Tests: manifest override (user binary wins); command generation (unattended) | `aegis-providers` | `pending` | |
+| 4.10 | Tests: error pattern matching from manifest | `aegis-providers` | `pending` | |
 
 ---
 
