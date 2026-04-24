@@ -226,6 +226,9 @@ Channel state is persisted in `.aegis/state/channels.json` and managed by the gl
 
 AegisCore uses `sandbox-exec` (Apple's Seatbelt / SBPL) to apply mandatory access control to every agent process. This provides syscall-level filesystem jailing without virtualization overhead.
 
+**Selective Visibility Model:**
+Agents are granted full access to their worktree, but specific sub-paths within `.aegis/` are restricted to maintain the integrity of the project's "Brain" and hide the "Engine Room."
+
 **Default policy (outbound-allowed):**
 ```scheme
 (version 1)
@@ -245,9 +248,20 @@ AegisCore uses `sandbox-exec` (Apple's Seatbelt / SBPL) to apply mandatory acces
   (subpath "/System/Library")
   (subpath "/private/var/folders"))
 
-; THE JAIL: agent's assigned worktree only
+; THE JAIL: agent's assigned worktree
 (allow file-read* file-write*
   (subpath "@@WORKTREE_PATH@@"))
+
+; OVERRIDE: Protect the project brain (Read-Only for non-Architects)
+(deny file-write*
+  (subpath "@@WORKTREE_PATH@@/.aegis/designs")
+  (subpath "@@WORKTREE_PATH@@/.aegis/prompts"))
+
+; OVERRIDE: Hide the engine room
+(deny file-read* file-write*
+  (subpath "@@WORKTREE_PATH@@/.aegis/state")
+  (subpath "@@WORKTREE_PATH@@/.aegis/profiles")
+  (subpath "@@WORKTREE_PATH@@/.aegis/run"))
 
 ; Temp space
 (allow file-read* file-write*
@@ -266,10 +280,11 @@ AegisCore uses `sandbox-exec` (Apple's Seatbelt / SBPL) to apply mandatory acces
 ### 5.2 Sandbox Factory
 
 At spawn time, the Sandbox Factory:
-1. Reads the agent's config for any `sandbox.extra_reads` overrides
-2. Substitutes `@@WORKTREE_PATH@@` and `@@HOME@@` into the template
-3. Writes the rendered profile to `.aegis/profiles/<agent_id>.sb`
-4. Returns the profile path to the Dispatcher
+1. Reads the agent's config for any `sandbox.extra_reads` overrides.
+2. If the agent role is `architect`, the `deny file-write*` rule for `.aegis/designs` is omitted.
+3. Substitutes `@@WORKTREE_PATH@@` and `@@HOME@@` into the template.
+4. Writes the rendered profile to `.aegis/profiles/<agent_id>.sb`.
+5. Returns the profile path to the Dispatcher.
 
 **Invocation pattern:**
 ```
@@ -590,51 +605,53 @@ auto_cleanup = true
 
 ```
 <project_root>/
-├── aegis.toml                          # User config
+├── aegis.toml                          # User config (TRACKED)
 │
 ├── .aegis/
-│   ├── designs/
+│   ├── designs/                        # Project Brain (TRACKED)
 │   │   └── hld/
 │   │       └── aegis.md               # This document
-│   │   (lld/ and roadmap/ added per LLD cycle)
 │   │
-│   ├── logs/
+│   ├── prompts/                        # System Instructions (TRACKED)
+│   │   ├── system/
+│   │   │   └── <role>.md
+│   │   ├── task/
+│   │   │   └── <task_type>.md
+│   │   └── handoff/
+│   │       ├── recovery.md
+│   │       └── resume.md
+│   │
+│   ├── logs/                           # Engine Room (IGNORED)
 │   │   ├── sessions/
 │   │   │   └── <agent_id>.log         # Live Flight Recorder output
 │   │   └── archive/
 │   │       └── <agent_id>_<ts>.log    # Terminated agent logs
 │   │
-│   ├── state/
+│   ├── state/                          # Engine Room (IGNORED)
 │   │   ├── registry.json              # Live agent registry
 │   │   ├── tasks.json                 # Live task registry
 │   │   ├── channels.json              # Active explicit channel configurations
 │   │   └── snapshots/
 │   │       └── registry_<ts>.json
 │   │
-│   ├── channels/
+│   ├── channels/                       # Engine Room (IGNORED)
 │   │   └── <agent_id>/
 │   │       └── inbox/
 │   │           └── <message_id>.json  # Pending mailbox messages
 │   │
-│   ├── profiles/
+│   ├── profiles/                       # Engine Room (IGNORED)
 │   │   └── <agent_id>.sb              # Generated sandbox profiles
 │   │
-│   ├── worktrees/
+│   ├── worktrees/                      # Engine Room (IGNORED)
 │   │   └── <agent_id>/                # Git worktrees (Splinters)
 │   │
-│   ├── handoff/
+│   ├── handoff/                        # Engine Room (IGNORED)
 │   │   └── <task_id>/
 │   │       ├── receipt.json           # Splinter completion receipt
 │   │       └── context.md             # Context checkpoint
 │   │
-│   └── prompts/
-│       ├── system/
-│       │   └── <role>.md
-│       ├── task/
-│       │   └── <task_type>.md
-│       └── handoff/
-│           ├── recovery.md
-│           └── resume.md
+│   └── run/                            # Engine Room (IGNORED)
+│       └── aegisd.sock                # Project-local socket (future)
 ```
 
 ---
@@ -851,12 +868,14 @@ aegis init
 ```
 
 What it does:
-1. Creates `.aegis/` in the current directory (errors if already initialized)
-2. Reads `~/.aegis/config` and writes `aegis.toml` at the project root with those values as defaults
-3. Creates `.aegis/designs/hld/` and `.aegis/designs/lld/` stubs
-4. Creates `.aegis/prompts/` with built-in default prompt templates
-5. Appends `.aegis/logs/`, `.aegis/state/`, `.aegis/channels/`, `.aegis/profiles/`, `.aegis/worktrees/`, `.aegis/handoff/` to `.gitignore`
-6. Registers the project with the global `aegisd` (adds entry to `~/.aegis/state/projects.json`)
+1. Creates `.aegis/` in the current directory (errors if already initialized).
+2. Reads `~/.aegis/config` and writes `aegis.toml` at the project root with those values as defaults.
+3. Creates `.aegis/designs/hld/` and `.aegis/designs/lld/` stubs.
+4. Creates `.aegis/prompts/` with built-in default prompt templates.
+5. Configures selective `.gitignore`:
+   - **Tracked**: `.aegis/designs/`, `.aegis/prompts/`, `aegis.toml`.
+   - **Ignored**: `.aegis/logs/`, `.aegis/state/`, `.aegis/channels/`, `.aegis/profiles/`, `.aegis/worktrees/`, `.aegis/handoff/`, `.aegis/run/`.
+6. Registers the project with the global `aegisd` (adds entry to `~/.aegis/state/projects.json`).
 
 Output:
 ```
