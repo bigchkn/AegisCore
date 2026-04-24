@@ -374,27 +374,27 @@ All LLDs derived from the HLD (§15). Each must reach `done` before its mileston
 ## Milestone 15 — Web UI: `aegis-web`
 
 **LLD:** `lld/ui.md` (shared with M14)  
-**Status:** `lld-done`  
+**Status:** `in-progress`  
 **Depends on:** M11 (HTTP + WebSocket server); M14 protocol tasks (14.2–14.6) are shared prerequisites
 
 ### Tasks
 
 | #     | Task                                                                             | Crate              | Status    | Notes                                                              |
 | ----- | -------------------------------------------------------------------------------- | ------------------ | --------- | ------------------------------------------------------------------ |
-| 15.1  | Scaffold `frontend/` with React + Redux Toolkit + xterm.js + Vite + TypeScript   | `aegis-web`        | `pending` | `npm create vite` base; task 14.2a must run first to populate `src/types/` |
-| 15.2  | Implement Redux store: all slices + WebSocket middleware                          | `aegis-web`        | `pending` |                                                                    |
-| 15.3  | Implement REST API client (`api/rest.ts`) and RTK async thunks                   | `aegis-web`        | `pending` |                                                                    |
-| 15.4  | Implement `AgentsView` + `StatusBadge` + Sidebar skeleton                        | `aegis-web`        | `pending` |                                                                    |
-| 15.5  | Implement `PaneView` with xterm.js + `/ws/pane` WebSocket relay                  | `aegis-web`        | `pending` | Interactive terminal — the "attach and communicate" feature        |
-| 15.6  | Implement `LogView` with `/ws/logs` WebSocket stream                             | `aegis-web`        | `pending` |                                                                    |
-| 15.7  | Implement `TasksView` and `ChannelsView`                                          | `aegis-web`        | `pending` |                                                                    |
-| 15.8  | Implement `TaskflowView` (collapsible HLD → LLD → Roadmap → Tasks tree)          | `aegis-web`        | `pending` |                                                                    |
-| 15.9  | Implement `Sidebar` project switcher with Redux dispatch                          | `aegis-web`        | `pending` |                                                                    |
-| 15.10 | Implement `build.rs` (ts-rs generation step + Vite build step)                   | `aegis-web`        | `pending` |                                                                    |
-| 15.11 | Implement rust-embed asset embedding + `asset_for_path` + `static_routes()`      | `aegis-web`        | `pending` |                                                                    |
-| 15.12 | Merge `static_routes()` into `HttpServer::new()` in `aegis-controller`           | `aegis-controller` | `pending` | Zero separate server process                                       |
-| 15.13 | TypeScript unit tests (Vitest)                                                   | `aegis-web`        | `pending` |                                                                    |
-| 15.14 | Rust asset embedding + pane relay WebSocket integration tests                    | `aegis-web`        | `pending` |                                                                    |
+| 15.1  | Scaffold `frontend/` with React + Redux Toolkit + xterm.js + Vite + TypeScript   | `aegis-web`        | `done`    | Vite/React/TypeScript scaffold committed                           |
+| 15.2  | Implement Redux store: all slices + WebSocket middleware                          | `aegis-web`        | `done`    | Store, slices, event middleware, connection state                   |
+| 15.3  | Implement REST API client (`api/rest.ts`) and RTK async thunks                   | `aegis-web`        | `done`    | Project/agent/task/channel/taskflow APIs and command thunks         |
+| 15.4  | Implement `AgentsView` + `StatusBadge` + Sidebar skeleton                        | `aegis-web`        | `done`    | Agents table with controls and status badges                        |
+| 15.5  | Implement `PaneView` with xterm.js + `/ws/pane` WebSocket relay                  | `aegis-web`        | `done`    | xterm.js relay implemented                                          |
+| 15.6  | Implement `LogView` with `/ws/logs` WebSocket stream                             | `aegis-web`        | `done`    | Streaming log view with filter/follow controls                      |
+| 15.7  | Implement `TasksView` and `ChannelsView`                                          | `aegis-web`        | `done`    | Task tabs and channel table                                         |
+| 15.8  | Implement `TaskflowView` (collapsible HLD → LLD → Roadmap → Tasks tree)          | `aegis-web`        | `done`    | Collapsible milestone/task tree                                     |
+| 15.9  | Implement `Sidebar` project switcher with Redux dispatch                          | `aegis-web`        | `done`    | Project auto-select and switch reload                               |
+| 15.10 | Implement `build.rs` (ts-rs generation step + Vite build step)                   | `aegis-web`        | `done`    | Vite build; optional `AEGIS_WEB_EXPORT_TS=1` binding export          |
+| 15.11 | Implement rust-embed asset embedding + `asset_for_path` + `static_routes()`      | `aegis-web`        | `done`    | Embedded SPA assets and static routes                               |
+| 15.12 | Merge `static_routes()` into `HttpServer::new()` in `aegis-controller`           | `aegis-controller` | `done`    | Zero separate server process                                        |
+| 15.13 | TypeScript unit tests (Vitest)                                                   | `aegis-web`        | `done`    | Slice, REST client, and WebSocket middleware coverage                |
+| 15.14 | Rust asset embedding + pane relay WebSocket integration tests                    | `aegis-web`        | `blocked` | Asset/static route tests done; pane WS test needs mockable relay boundary |
 
 ---
 
