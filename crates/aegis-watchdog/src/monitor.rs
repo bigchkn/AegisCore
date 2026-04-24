@@ -764,6 +764,29 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn duplicate_suppression_emits_same_event_once_within_window() {
+        let watchdog = test_watchdog(
+            Arc::new(FakeObserver {
+                capture: "work finished [AEGIS:DONE]".to_string(),
+                exit_status: None,
+                captures: Mutex::new(0),
+            }),
+            Arc::new(FakeAgentRegistry {
+                agents: vec![agent_with_status(AgentStatus::Active)],
+            }),
+            Arc::new(RecordingSink::default()),
+            Arc::new(RecordingExecutor::default()),
+            watchdog_config(&["[AEGIS:DONE]"]),
+        );
+
+        let first = watchdog.sweep_once().await.unwrap();
+        let second = watchdog.sweep_once().await.unwrap();
+
+        assert_eq!(first.len(), 1);
+        assert!(second.is_empty());
+    }
+
+    #[tokio::test]
     async fn handle_event_pauses_agent_when_sink_requests_notify() {
         let agent = agent_with_status(AgentStatus::Active);
         let executor = Arc::new(RecordingExecutor::default());

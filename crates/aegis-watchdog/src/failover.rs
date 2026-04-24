@@ -648,4 +648,54 @@ mod tests {
 
         assert!(executor.calls.lock().unwrap().is_empty());
     }
+
+    #[tokio::test]
+    async fn failover_follows_expected_transition_order() {
+        let agent = active_agent("claude-code", vec!["gemini-cli"]);
+        let task = Task {
+            task_id: agent.task_id.unwrap(),
+            description: "Recover the task".to_string(),
+            status: TaskStatus::Active,
+            assigned_agent_id: Some(agent.agent_id),
+            created_by: TaskCreator::System,
+            created_at: Utc::now(),
+            completed_at: None,
+            receipt_path: None,
+        };
+        let executor = Arc::new(RecordingExecutor::default());
+        let coordinator = FailoverCoordinator::with_backoff(
+            Arc::new(FakeAgentRegistry {
+                agent: agent.clone(),
+            }),
+            Arc::new(FakeTaskRegistry { task }),
+            Arc::new(FakeRecorder {
+                lines: vec!["tail line".to_string()],
+                log_path: std::env::temp_dir().join("watchdog-order.log"),
+            }),
+            default_registry(),
+            recorder_config(),
+            executor.clone(),
+            zero_backoff(),
+        );
+
+        coordinator
+            .initiate(DetectedEvent::RateLimit {
+                agent_id: agent.agent_id,
+                matched_pattern: "429".to_string(),
+            })
+            .await
+            .unwrap();
+
+        let calls = executor.calls.lock().unwrap().clone();
+        assert_eq!(
+            calls,
+            vec![
+                format!("cooling:{}", agent.agent_id),
+                format!("pause:{}", agent.agent_id),
+                "relaunch:gemini-cli".to_string(),
+                "inject".to_string(),
+                "active".to_string(),
+            ]
+        );
+    }
 }
