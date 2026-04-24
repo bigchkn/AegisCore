@@ -3,7 +3,9 @@ providers:
     binary: "claude"
     auto_approve_flags: ["--yolo"]
     non_interactive_flags: ["--non-interactive"]
+    resume_mechanism: "cli_flag"
     resume_flag: "--resume"
+    export_command: "/export"
     error_patterns:
       rate_limit: ["rate limit", "429", "usage limit reached"]
       auth: ["401", "authentication failed"]
@@ -12,23 +14,9 @@ providers:
     binary: "gemini"
     auto_approve_flags: ["--yes"]
     non_interactive_flags: []
-    resume_command: "/resume {session_id}" # Injected via send-keys
+    resume_mechanism: "injection"
+    resume_command: "/resume {session_id}"
+    export_command: "/checkpoint save aegis-handoff"
     error_patterns:
       rate_limit: ["quota exceeded", "429"]
       auth: ["401", "permission denied"]
-
-  codex:
-    binary: "codex"
-    auto_approve_flags: []
-    non_interactive_flags: []
-    error_patterns:
-      rate_limit: ["rate limit", "429", "insufficient_quota"]
-      auth: ["401", "incorrect api key"]
-
-  ollama:
-    binary: "ollama"
-    auto_approve_flags: []
-    non_interactive_flags: []
-    error_patterns:
-      rate_limit: [] # local
-      auth: [] # no auth

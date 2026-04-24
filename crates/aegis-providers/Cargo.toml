@@ -9,8 +9,6 @@ license = "MIT"
 default = ["claude", "gemini"]
 claude  = []
 gemini  = []
-codex   = []
-ollama  = []
 
 [dependencies]
 aegis-core = { workspace = true }

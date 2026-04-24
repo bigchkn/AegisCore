@@ -6,13 +6,24 @@ pub struct BuiltinManifest {
     pub providers: HashMap<String, ProviderDefinition>,
 }
 
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ResumeMechanism {
+    /// Resumed via CLI flags (e.g. --resume <id>)
+    CliFlag,
+    /// Resumed via post-spawn command injection (e.g. /resume <id>)
+    Injection,
+}
+
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ProviderDefinition {
     pub binary: String,
     pub auto_approve_flags: Vec<String>,
     pub non_interactive_flags: Vec<String>,
+    pub resume_mechanism: ResumeMechanism,
     pub resume_flag: Option<String>,
     pub resume_command: Option<String>,
+    pub export_command: Option<String>,
     pub error_patterns: ErrorPatterns,
 }
 

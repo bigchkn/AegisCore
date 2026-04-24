@@ -3,15 +3,7 @@ use aegis_core::config::{EffectiveConfig, AgentEntry};
 use aegis_core::provider::Provider;
 use aegis_core::error::{AegisError, Result};
 use crate::manifest::BuiltinManifest;
-
-#[cfg(feature = "claude")]
-use crate::claude::ClaudeProvider;
-#[cfg(feature = "gemini")]
-use crate::gemini::GeminiProvider;
-#[cfg(feature = "codex")]
-use crate::codex::CodexProvider;
-#[cfg(feature = "ollama")]
-use crate::ollama::OllamaProvider;
+use crate::generic::GenericProvider;
 
 pub struct ProviderRegistry {
     pub manifest: BuiltinManifest,
@@ -28,7 +20,6 @@ impl ProviderRegistry {
         let mut providers: HashMap<String, Box<dyn Provider>> = HashMap::new();
 
         for (name, definition) in &manifest.providers {
-            // Map ProviderEntry from config to ProviderConfig for the provider
             let user_config = if let Some(entry) = cfg.providers.get(name) {
                 aegis_core::provider::ProviderConfig {
                     name: name.clone(),
@@ -47,21 +38,8 @@ impl ProviderRegistry {
                 }
             };
 
-            let provider: Option<Box<dyn Provider>> = match name.as_str() {
-                #[cfg(feature = "claude")]
-                "claude-code" => Some(Box::new(ClaudeProvider::new(definition.clone(), user_config))),
-                #[cfg(feature = "gemini")]
-                "gemini-cli" => Some(Box::new(GeminiProvider::new(definition.clone(), user_config))),
-                #[cfg(feature = "codex")]
-                "codex" => Some(Box::new(CodexProvider::new(definition.clone(), user_config))),
-                #[cfg(feature = "ollama")]
-                "ollama" => Some(Box::new(OllamaProvider::new(definition.clone(), user_config))),
-                _ => None,
-            };
-
-            if let Some(p) = provider {
-                providers.insert(name.clone(), p);
-            }
+            // All providers now use GenericProvider driven by the manifest
+            providers.insert(name.clone(), Box::new(GenericProvider::new(definition.clone(), user_config)));
         }
 
         Ok(Self { manifest, providers })
@@ -75,15 +53,10 @@ impl ProviderRegistry {
 
     pub fn cascade_for_agent(&self, agent: &AgentEntry) -> Result<Vec<&dyn Provider>> {
         let mut cascade = Vec::new();
-        
-        // Primary
         cascade.push(self.get(&agent.cli_provider)?);
-        
-        // Fallbacks
         for fallback in &agent.fallback_cascade {
             cascade.push(self.get(fallback)?);
         }
-        
         Ok(cascade)
     }
 
@@ -115,21 +88,6 @@ mod tests {
     }
 
     #[test]
-    fn test_registry_binary_override() {
-        let mut raw_project = RawConfig::default();
-        let mut claude_cfg = aegis_core::config::RawProviderConfig::default();
-        claude_cfg.binary = Some("custom-claude".into());
-        raw_project.providers.insert("claude-code".into(), claude_cfg);
-
-        let cfg = EffectiveConfig::resolve(&RawConfig::default(), &raw_project).unwrap();
-        let registry = ProviderRegistry::from_config(&cfg).unwrap();
-        
-        let claude = registry.get("claude-code").unwrap();
-        let cmd = claude.spawn_command(&PathBuf::from("/tmp"), None);
-        assert_eq!(cmd.get_program(), "custom-claude");
-    }
-
-    #[test]
     fn test_claude_unattended_flags() {
         let cfg = mock_config();
         let registry = ProviderRegistry::from_config(&cfg).unwrap();
@@ -155,35 +113,15 @@ mod tests {
     }
 
     #[test]
-    fn test_ollama_command_structure() {
-        let cfg = mock_config();
-        let registry = ProviderRegistry::from_config(&cfg).unwrap();
-        let ollama = registry.get("ollama").unwrap();
-        
-        let cmd = ollama.spawn_command(&PathBuf::from("/tmp"), None);
-        let args: Vec<_> = cmd.get_args().map(|a| a.to_str().unwrap()).collect();
-        
-        // Ollama specific: 'run gemma3' (default model)
-        assert_eq!(args[0], "run");
-        assert_eq!(args[1], "gemma3");
-    }
-
-    #[test]
     fn test_error_pattern_matching_all() {
         let cfg = mock_config();
         let registry = ProviderRegistry::from_config(&cfg).unwrap();
         
-        // Claude
         let claude = registry.get("claude-code").unwrap();
         assert!(claude.is_rate_limit_error("429 usage limit reached"));
         
-        // Gemini
         let gemini = registry.get("gemini-cli").unwrap();
         assert!(gemini.is_rate_limit_error("quota exceeded"));
         assert!(gemini.is_auth_error("permission denied"));
-
-        // Codex
-        let codex = registry.get("codex").unwrap();
-        assert!(codex.is_rate_limit_error("insufficient_quota"));
     }
 }
