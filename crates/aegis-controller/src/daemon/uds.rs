@@ -235,6 +235,8 @@ async fn dispatch_command(
     match request.command.as_str() {
         "status" => Ok(serde_json::to_value(commands.status()?).unwrap()),
         "agents.list" => Ok(serde_json::to_value(commands.list_agents()?).unwrap()),
+        "tasks.list" => Ok(serde_json::to_value(commands.list_tasks()?).unwrap()),
+        "channels.list" => Ok(serde_json::to_value(commands.list_channels()?).unwrap()),
         "agents.spawn" => {
             let task = request
                 .params

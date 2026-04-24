@@ -4,7 +4,7 @@ use crate::runtime::AegisRuntime;
 use aegis_core::Result;
 use axum::{
     extract::ws::{Message, WebSocket},
-    extract::{Path, State, Query, WebSocketUpgrade},
+    extract::{Path, Query, State, WebSocketUpgrade},
     response::IntoResponse,
     routing::{get, post},
     Json, Router,
@@ -34,8 +34,13 @@ impl HttpServer {
     pub fn new(state: HttpState) -> Self {
         let router = Router::new()
             .route("/projects", get(list_projects))
+            .route("/projects/:id/status", get(project_status))
             .route("/projects/:id/agents", get(list_agents))
+            .route("/projects/:id/tasks", get(list_tasks))
+            .route("/projects/:id/channels", get(list_channels))
             .route("/projects/:id/commands", post(dispatch_command))
+            .route("/projects/:id/taskflow/status", get(taskflow_status))
+            .route("/projects/:id/taskflow/show/:milestone_id", get(taskflow_show))
             .route("/ws/events", get(ws_handler))
             .route("/ws/logs/:agent_id", get(ws_logs_handler))
             .route("/ws/pane/:agent_id", get(ws_pane_handler))
@@ -63,27 +68,130 @@ impl HttpServer {
     }
 }
 
+async fn get_runtime(state: &HttpState, project_id: Uuid) -> Result<AegisRuntime> {
+    let mut runtimes = state.active_runtimes.lock().await;
+    if let Some(r) = runtimes.get(&project_id) {
+        return Ok(r.clone());
+    }
+
+    let project = state
+        .projects
+        .find_by_id(project_id)?
+        .ok_or_else(|| aegis_core::AegisError::Config {
+            field: "project_id".to_string(),
+            reason: "project not found".to_string(),
+        })?;
+
+    let r = AegisRuntime::load(project.root_path.clone()).await?;
+    r.recover().await?;
+    runtimes.insert(project_id, r.clone());
+    Ok(r)
+}
+
 async fn list_projects(State(state): State<HttpState>) -> Json<Vec<ProjectRecord>> {
     let projects = state.projects.load().unwrap_or_default();
     Json(projects)
 }
 
+async fn project_status(
+    Path(id): Path<Uuid>,
+    State(state): State<HttpState>,
+) -> std::result::Result<Json<serde_json::Value>, String> {
+    let runtime = get_runtime(&state, id).await.map_err(|e| e.to_string())?;
+    let status = runtime.commands().status().map_err(|e| e.to_string())?;
+    Ok(Json(serde_json::to_value(status).unwrap()))
+}
+
 async fn list_agents(
     Path(id): Path<Uuid>,
-    State(_state): State<HttpState>,
-) -> Json<serde_json::Value> {
-    // STUB: To be implemented with M10 AegisRuntime integration
-    Json(serde_json::json!({ "project_id": id, "agents": [] }))
+    State(state): State<HttpState>,
+) -> std::result::Result<Json<serde_json::Value>, String> {
+    let runtime = get_runtime(&state, id).await.map_err(|e| e.to_string())?;
+    let agents = runtime.commands().list_agents().map_err(|e| e.to_string())?;
+    Ok(Json(serde_json::to_value(agents).unwrap()))
+}
+
+async fn list_tasks(
+    Path(id): Path<Uuid>,
+    State(state): State<HttpState>,
+) -> std::result::Result<Json<serde_json::Value>, String> {
+    let runtime = get_runtime(&state, id).await.map_err(|e| e.to_string())?;
+    let tasks = runtime.commands().list_tasks().map_err(|e| e.to_string())?;
+    Ok(Json(serde_json::to_value(tasks).unwrap()))
+}
+
+async fn list_channels(
+    Path(id): Path<Uuid>,
+    State(state): State<HttpState>,
+) -> std::result::Result<Json<serde_json::Value>, String> {
+    let runtime = get_runtime(&state, id).await.map_err(|e| e.to_string())?;
+    let channels = runtime.commands().list_channels().map_err(|e| e.to_string())?;
+    Ok(Json(serde_json::to_value(channels).unwrap()))
 }
 
 async fn dispatch_command(
     Path(id): Path<Uuid>,
-    State(_state): State<HttpState>,
+    State(state): State<HttpState>,
     Json(payload): Json<serde_json::Value>,
-) -> Json<serde_json::Value> {
-    // STUB: To be implemented with M10 AegisRuntime integration
-    info!("HTTP Command for project {}: {:?}", id, payload);
-    Json(serde_json::json!({ "status": "success", "message": "Command received (stub)" }))
+) -> std::result::Result<Json<serde_json::Value>, String> {
+    let runtime = get_runtime(&state, id).await.map_err(|e| e.to_string())?;
+    let commands = runtime.commands();
+
+    let cmd = payload
+        .get("command")
+        .and_then(|v| v.as_str())
+        .ok_or("Missing command field")?;
+    let params = payload.get("params").unwrap_or(&serde_json::Value::Null);
+
+    match cmd {
+        "spawn" => {
+            let task = params.as_str().ok_or("Missing task string in params")?;
+            let task_id = commands.spawn(task).map_err(|e| e.to_string())?;
+            Ok(Json(serde_json::json!({ "task_id": task_id })))
+        }
+        "pause" => {
+            let agent_id = parse_uuid_param(params, "agent_id")?;
+            commands.pause(agent_id).await.map_err(|e| e.to_string())?;
+            Ok(Json(serde_json::json!({ "status": "ok" })))
+        }
+        "resume" => {
+            let agent_id = parse_uuid_param(params, "agent_id")?;
+            commands.resume(agent_id).await.map_err(|e| e.to_string())?;
+            Ok(Json(serde_json::json!({ "status": "ok" })))
+        }
+        "kill" => {
+            let agent_id = parse_uuid_param(params, "agent_id")?;
+            commands.kill(agent_id).await.map_err(|e| e.to_string())?;
+            Ok(Json(serde_json::json!({ "status": "ok" })))
+        }
+        _ => Err(format!("Unknown command: {}", cmd)),
+    }
+}
+
+fn parse_uuid_param(params: &serde_json::Value, name: &str) -> std::result::Result<Uuid, String> {
+    params
+        .get(name)
+        .and_then(|v| v.as_str())
+        .and_then(|v| Uuid::parse_str(v).ok())
+        .ok_or_else(|| format!("Missing or invalid {}", name))
+}
+
+async fn taskflow_status(
+    Path(id): Path<Uuid>,
+    State(state): State<HttpState>,
+) -> std::result::Result<Json<serde_json::Value>, String> {
+    let runtime = get_runtime(&state, id).await.map_err(|e| e.to_string())?;
+    let status = runtime.commands().taskflow_status().map_err(|e| e.to_string())?;
+    Ok(Json(serde_json::to_value(status).unwrap()))
+}
+
+async fn taskflow_show(
+    Path((id, milestone_id)): Path<(Uuid, String)>,
+    State(state): State<HttpState>,
+) -> std::result::Result<Json<serde_json::Value>, String> {
+    let runtime = get_runtime(&state, id).await.map_err(|e| e.to_string())?;
+    let milestone = runtime.commands().taskflow_show(&milestone_id).map_err(|e| e.to_string())?;
+    Ok(Json(serde_json::to_value(milestone).unwrap()))
 }
 
 async fn ws_handler(ws: WebSocketUpgrade, State(state): State<HttpState>) -> impl IntoResponse {

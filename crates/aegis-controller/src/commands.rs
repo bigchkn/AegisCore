@@ -55,6 +55,14 @@ impl ControllerCommands {
         AgentRegistry::list_active(self.registry.as_ref())
     }
 
+    pub fn list_tasks(&self) -> Result<Vec<aegis_core::Task>> {
+        aegis_core::TaskRegistry::list_all(self.registry.as_ref())
+    }
+
+    pub fn list_channels(&self) -> Result<Vec<aegis_core::ChannelRecord>> {
+        aegis_core::ChannelRegistry::list(self.registry.as_ref())
+    }
+
     pub fn spawn(&self, task: &str) -> Result<Uuid> {
         self.scheduler
             .enqueue_splinter_task(task, TaskCreator::System)

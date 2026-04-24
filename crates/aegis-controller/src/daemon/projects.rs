@@ -127,4 +127,8 @@ impl ProjectRegistry {
         let abs = path.canonicalize().unwrap_or_else(|_| path.clone());
         Ok(self.load()?.into_iter().find(|p| p.root_path == abs))
     }
+
+    pub fn find_by_id(&self, id: Uuid) -> Result<Option<ProjectRecord>> {
+        Ok(self.load()?.into_iter().find(|p| p.id == id))
+    }
 }
