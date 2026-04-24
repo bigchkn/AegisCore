@@ -170,6 +170,8 @@ dependencies = [
  "aegis-core",
  "aegis-providers",
  "aegis-tmux",
+ "async-trait",
+ "chrono",
  "rand",
  "regex",
  "tempfile",
