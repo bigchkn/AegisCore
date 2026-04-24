@@ -90,6 +90,7 @@ mod tests {
         let prompts = Arc::new(PromptManager::new(dir.path().to_path_buf()));
         let dispatcher = Arc::new(Dispatcher::new(
             registry.clone(),
+            None,
             providers,
             prompts,
             storage,

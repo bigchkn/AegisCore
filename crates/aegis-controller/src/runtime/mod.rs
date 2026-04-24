@@ -2,6 +2,7 @@ use std::{path::PathBuf, sync::Arc};
 
 use aegis_core::{EffectiveConfig, Result};
 use aegis_providers::ProviderRegistry;
+use aegis_tmux::TmuxClient;
 use uuid::Uuid;
 
 use crate::{
@@ -15,6 +16,7 @@ pub struct AegisRuntime {
     pub config: EffectiveConfig,
     pub storage: Arc<ProjectStorage>,
     pub registry: Arc<FileRegistry>,
+    pub tmux: Arc<TmuxClient>,
     pub providers: Arc<ProviderRegistry>,
     pub prompts: Arc<PromptManager>,
     pub dispatcher: Arc<Dispatcher>,
@@ -45,12 +47,14 @@ impl AegisRuntime {
         FileRegistry::init(storage.as_ref())?;
 
         let registry = Arc::new(FileRegistry::new(storage.clone()));
+        let tmux = Arc::new(TmuxClient::new());
         let providers = Arc::new(ProviderRegistry::from_config(&config)?);
         let prompts = Arc::new(PromptManager::new(root_path.clone()));
         let state = Arc::new(StateManager::new(storage.clone()));
         let events = EventBus::default();
         let dispatcher = Arc::new(Dispatcher::new(
             registry.clone(),
+            Some(tmux.clone()),
             providers.clone(),
             prompts.clone(),
             storage.clone(),
@@ -69,6 +73,7 @@ impl AegisRuntime {
             config,
             storage,
             registry,
+            tmux,
             providers,
             prompts,
             dispatcher,

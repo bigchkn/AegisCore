@@ -5,6 +5,7 @@ use aegis_core::{
     Result, StorageBackend, Task, TaskRegistry,
 };
 use aegis_providers::ProviderRegistry;
+use aegis_tmux::{TmuxClient, TmuxTarget};
 use chrono::Utc;
 use uuid::Uuid;
 
@@ -18,6 +19,7 @@ use crate::{
 
 pub struct Dispatcher {
     registry: Arc<FileRegistry>,
+    tmux: Option<Arc<TmuxClient>>,
     providers: Arc<ProviderRegistry>,
     prompts: Arc<PromptManager>,
     storage: Arc<ProjectStorage>,
@@ -28,6 +30,7 @@ pub struct Dispatcher {
 impl Dispatcher {
     pub fn new(
         registry: Arc<FileRegistry>,
+        tmux: Option<Arc<TmuxClient>>,
         providers: Arc<ProviderRegistry>,
         prompts: Arc<PromptManager>,
         storage: Arc<ProjectStorage>,
@@ -36,6 +39,7 @@ impl Dispatcher {
     ) -> Self {
         Self {
             registry,
+            tmux,
             providers,
             prompts,
             storage,
@@ -155,8 +159,10 @@ impl Dispatcher {
 
     pub async fn spawn_bastion(&self, name: &str) -> Result<Agent> {
         let spec = self.build_bastion_spec(name)?;
-        let plan = self.build_spawn_plan(spec, Uuid::new_v4(), 0, "%0")?;
-        self.insert_planned_agent(plan.agent)
+        let agent_id = Uuid::new_v4();
+        let (window, pane) = self.prepare_tmux_window(agent_id, name).await?;
+        let plan = self.build_spawn_plan(spec, agent_id, window, pane)?;
+        self.launch_or_insert_plan(plan).await
     }
 
     pub async fn spawn_splinter(
@@ -177,9 +183,56 @@ impl Dispatcher {
         parent_id: Option<Uuid>,
     ) -> Result<Agent> {
         let spec = self.build_splinter_spec(role, task, parent_id);
-        let plan = self.build_spawn_plan(spec, agent_id, 0, "%0")?;
+        let worktree = self.storage.agent_worktree_path(agent_id);
+        std::fs::create_dir_all(&worktree).map_err(|source| AegisError::StorageIo {
+            path: worktree,
+            source,
+        })?;
+        let window_name = format!("splinter-{role}-{}", short_id(agent_id));
+        let (window, pane) = self.prepare_tmux_window(agent_id, &window_name).await?;
+        let plan = self.build_spawn_plan(spec, agent_id, window, pane)?;
         TaskRegistry::assign(self.registry.as_ref(), task.task_id, agent_id)?;
-        self.insert_planned_agent(plan.agent)
+        self.launch_or_insert_plan(plan).await
+    }
+
+    async fn prepare_tmux_window(
+        &self,
+        agent_id: Uuid,
+        window_name: &str,
+    ) -> Result<(u32, String)> {
+        let Some(tmux) = &self.tmux else {
+            return Ok((0, "%0".to_string()));
+        };
+
+        let session = &self.config.global.tmux_session_name;
+        if !tmux.session_exists(session).await? {
+            tmux.new_session(session).await?;
+        }
+
+        let window = tmux.new_window(session, Some(window_name)).await?;
+        let target = TmuxTarget::new(session, window, "%0");
+        let pane = tmux
+            .list_panes(&target)
+            .await?
+            .into_iter()
+            .next()
+            .unwrap_or_else(|| "%0".to_string());
+
+        tracing::debug!(%agent_id, session, window, pane, "prepared tmux window");
+        Ok((window, pane))
+    }
+
+    async fn launch_or_insert_plan(&self, plan: SpawnPlan) -> Result<Agent> {
+        if let Some(tmux) = &self.tmux {
+            let target = TmuxTarget::parse(&plan.agent.tmux_target())?;
+            tmux.send_text(&target, &shell_command(&plan.launch_command))
+                .await?;
+            let agent = self.insert_planned_agent(plan.agent)?;
+            tmux.send_text(&target, &plan.initial_prompt).await?;
+            Ok(agent)
+        } else {
+            self.insert_planned_agent(plan.agent)
+        }
     }
 
     fn insert_planned_agent(&self, mut agent: Agent) -> Result<Agent> {
@@ -248,6 +301,29 @@ fn command_parts(command: &std::process::Command) -> Vec<String> {
         .collect()
 }
 
+fn shell_command(parts: &[String]) -> String {
+    parts
+        .iter()
+        .map(|part| shell_quote(part))
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+fn shell_quote(value: &str) -> String {
+    if value.is_empty() {
+        return "''".to_string();
+    }
+
+    if value
+        .bytes()
+        .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'/' | b'.' | b'_' | b'-' | b':' | b'='))
+    {
+        return value.to_string();
+    }
+
+    format!("'{}'", value.replace('\'', r#"'\''"#))
+}
+
 fn short_id(id: Uuid) -> String {
     id.to_string().chars().take(8).collect()
 }
@@ -295,6 +371,7 @@ mod tests {
         let prompts = Arc::new(PromptManager::new(dir.path().to_path_buf()));
         let dispatcher = Dispatcher::new(
             registry,
+            None,
             providers,
             prompts,
             storage,
@@ -322,6 +399,10 @@ mod tests {
         assert!(plan.agent.log_path.ends_with(format!("{agent_id}.log")));
         assert!(plan.launch_command.contains(&"claude".to_string()));
         assert!(plan.initial_prompt.contains("architect"));
+        assert_eq!(
+            shell_command(&["echo".into(), "hello world".into(), "it's".into()]),
+            "echo 'hello world' 'it'\\''s'"
+        );
     }
 
     #[tokio::test]
