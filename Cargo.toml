@@ -1,0 +1,57 @@
+[workspace]
+members = [
+    "crates/aegis-core",
+    "crates/aegis-tmux",
+    "crates/aegis-sandbox",
+    "crates/aegis-channels",
+    "crates/aegis-providers",
+    "crates/aegis-watchdog",
+    "crates/aegis-recorder",
+    "crates/aegis-telegram",
+    "crates/aegis-taskflow",
+    "crates/aegis-tui",
+    "crates/aegis-web",
+    "crates/aegis-controller",
+]
+resolver = "2"
+
+[workspace.dependencies]
+aegis-core       = { path = "crates/aegis-core" }
+aegis-tmux       = { path = "crates/aegis-tmux" }
+aegis-sandbox    = { path = "crates/aegis-sandbox" }
+aegis-channels   = { path = "crates/aegis-channels" }
+aegis-providers  = { path = "crates/aegis-providers" }
+aegis-watchdog   = { path = "crates/aegis-watchdog" }
+aegis-recorder   = { path = "crates/aegis-recorder" }
+aegis-telegram   = { path = "crates/aegis-telegram" }
+aegis-taskflow   = { path = "crates/aegis-taskflow" }
+aegis-tui        = { path = "crates/aegis-tui" }
+aegis-web        = { path = "crates/aegis-web" }
+aegis-controller = { path = "crates/aegis-controller" }
+
+uuid       = { version = "1", features = ["v4", "serde"] }
+chrono     = { version = "0.4", features = ["serde"] }
+serde      = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror  = "2"
+toml       = "0.8"
+tracing    = "0.1"
+tokio      = { version = "1", features = ["full"] }
+
+[package]
+name = "aegis"
+version = "0.1.0"
+edition = "2021"
+description = "AegisCore — multi-agent AI orchestration engine for macOS"
+license = "MIT"
+
+[[bin]]
+name = "aegis"
+path = "src/main.rs"
+
+[[bin]]
+name = "aegisd"
+path = "src/daemon.rs"
+
+[dependencies]
+aegis-controller = { workspace = true }

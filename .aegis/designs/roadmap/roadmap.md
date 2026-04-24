@@ -42,7 +42,7 @@ All LLDs derived from the HLD (§15). Each must reach `done` before its mileston
 ## Milestone 0 — Foundation: `aegis-core` + Config
 
 **LLD:** `lld/core.md` + `lld/config.md`  
-**Status:** `lld-done`  
+**Status:** `in-progress`  
 **Depends on:** Nothing — must be first.  
 **Why first:** Every other crate implements traits defined here. Config schema governs all other LLDs.
 
@@ -52,18 +52,18 @@ All LLDs derived from the HLD (§15). Each must reach `done` before its mileston
 |---|---|---|---|---|
 | 0.1 | Write `lld/core.md` | — | `done` | Trait surface, type definitions, AegisError taxonomy |
 | 0.2 | Write `lld/config.md` | — | `done` | Full `aegis.toml` + `~/.aegis/config` schema, merge semantics |
-| 0.3 | Scaffold Cargo workspace (`Cargo.toml`, all `crates/` stubs) | workspace | Create all crate directories with placeholder `lib.rs` |
-| 0.4 | Implement `aegis-core`: agent types, status enum, AgentHandle trait | `aegis-core` | |
-| 0.5 | Implement `aegis-core`: Task, TaskStatus, TaskQueue trait | `aegis-core` | |
-| 0.6 | Implement `aegis-core`: AgentRegistry + TaskRegistry traits | `aegis-core` | |
-| 0.7 | Implement `aegis-core`: Channel trait + Message types | `aegis-core` | |
-| 0.8 | Implement `aegis-core`: Provider trait + ProviderConfig + SessionRef | `aegis-core` | |
-| 0.9 | Implement `aegis-core`: SandboxProfile trait + SandboxPolicy enum | `aegis-core` | |
-| 0.10 | Implement `aegis-core`: Recorder trait + WatchdogSink trait | `aegis-core` | |
-| 0.11 | Implement `aegis-core`: StorageBackend trait + path conventions | `aegis-core` | |
-| 0.12 | Implement `aegis-core`: AegisError + Result alias | `aegis-core` | |
-| 0.13 | Implement config TOML parsing + two-layer merge (`~/.aegis/config` → `aegis.toml`) | `aegis-core` | serde + toml crates |
-| 0.14 | Unit tests: trait object safety; config merge correctness | `aegis-core` | |
+| 0.3 | Scaffold Cargo workspace (`Cargo.toml`, all `crates/` stubs) | workspace | `done` | Root package + virtual workspace; stub lib.rs per crate |
+| 0.4 | Implement `aegis-core`: agent types, status enum, AgentHandle trait | `aegis-core` | `done` | |
+| 0.5 | Implement `aegis-core`: Task, TaskStatus, TaskQueue trait | `aegis-core` | `done` | |
+| 0.6 | Implement `aegis-core`: AgentRegistry + TaskRegistry traits | `aegis-core` | `done` | |
+| 0.7 | Implement `aegis-core`: Channel trait + Message types | `aegis-core` | `done` | |
+| 0.8 | Implement `aegis-core`: Provider trait + ProviderConfig + SessionRef | `aegis-core` | `done` | |
+| 0.9 | Implement `aegis-core`: SandboxProfile trait + SandboxPolicy enum | `aegis-core` | `done` | |
+| 0.10 | Implement `aegis-core`: Recorder trait + WatchdogSink trait | `aegis-core` | `done` | |
+| 0.11 | Implement `aegis-core`: StorageBackend trait + path conventions | `aegis-core` | `done` | |
+| 0.12 | Implement `aegis-core`: AegisError + Result alias | `aegis-core` | `done` | |
+| 0.13 | Implement config TOML parsing + two-layer merge (`~/.aegis/config` → `aegis.toml`) | `aegis-core` | `pending` | Covered by `lld/config.md`; separate task |
+| 0.14 | Unit tests: trait object safety | `aegis-core` | `done` | Config merge tests deferred to 0.13 |
 
 ---
 

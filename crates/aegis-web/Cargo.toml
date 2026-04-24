@@ -1,0 +1,11 @@
+[package]
+name = "aegis-web"
+version = "0.1.0"
+edition = "2021"
+description = "Web UI assets and HTTP handlers for AegisCore"
+license = "MIT"
+
+[dependencies]
+aegis-core = { workspace = true }
+tokio      = { workspace = true }
+tracing    = { workspace = true }

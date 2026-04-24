@@ -1,0 +1,11 @@
+[package]
+name = "aegis-telegram"
+version = "0.1.0"
+edition = "2021"
+description = "Telegram bridge for AegisCore"
+license = "MIT"
+
+[dependencies]
+aegis-core = { workspace = true }
+tokio      = { workspace = true }
+tracing    = { workspace = true }

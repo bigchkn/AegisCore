@@ -1,0 +1,11 @@
+[package]
+name = "aegis-channels"
+version = "0.1.0"
+edition = "2021"
+description = "Channel implementations for AegisCore"
+license = "MIT"
+
+[dependencies]
+aegis-core = { workspace = true }
+aegis-tmux = { workspace = true }
+tracing    = { workspace = true }

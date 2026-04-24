@@ -1,0 +1,11 @@
+[package]
+name = "aegis-tmux"
+version = "0.1.0"
+edition = "2021"
+description = "tmux abstraction layer for AegisCore"
+license = "MIT"
+
+[dependencies]
+aegis-core = { workspace = true }
+tokio      = { workspace = true }
+tracing    = { workspace = true }

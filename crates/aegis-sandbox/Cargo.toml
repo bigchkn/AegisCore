@@ -1,0 +1,10 @@
+[package]
+name = "aegis-sandbox"
+version = "0.1.0"
+edition = "2021"
+description = "macOS Seatbelt sandbox profile factory for AegisCore"
+license = "MIT"
+
+[dependencies]
+aegis-core = { workspace = true }
+tracing    = { workspace = true }

@@ -1,0 +1,14 @@
+[package]
+name = "aegis-core"
+version = "0.1.0"
+edition = "2021"
+description = "Core traits, types, and error definitions for AegisCore"
+license = "MIT"
+
+[dependencies]
+uuid       = { workspace = true }
+chrono     = { workspace = true }
+serde      = { workspace = true }
+serde_json = { workspace = true }
+thiserror  = { workspace = true }
+toml       = { workspace = true }

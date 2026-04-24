@@ -1,0 +1,17 @@
+[package]
+name = "aegis-providers"
+version = "0.1.0"
+edition = "2021"
+description = "CLI provider implementations for AegisCore"
+license = "MIT"
+
+[features]
+default = ["claude", "gemini"]
+claude  = []
+gemini  = []
+codex   = []
+ollama  = []
+
+[dependencies]
+aegis-core = { workspace = true }
+tracing    = { workspace = true }

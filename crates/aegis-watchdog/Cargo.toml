@@ -1,0 +1,13 @@
+[package]
+name = "aegis-watchdog"
+version = "0.1.0"
+edition = "2021"
+description = "Watchdog monitor and failover cascade for AegisCore"
+license = "MIT"
+
+[dependencies]
+aegis-core      = { workspace = true }
+aegis-tmux      = { workspace = true }
+aegis-providers = { workspace = true }
+tokio           = { workspace = true }
+tracing         = { workspace = true }

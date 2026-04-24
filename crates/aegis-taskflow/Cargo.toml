@@ -1,0 +1,10 @@
+[package]
+name = "aegis-taskflow"
+version = "0.1.0"
+edition = "2021"
+description = "HLD → LLD → Roadmap → Task pipeline engine for AegisCore"
+license = "MIT"
+
+[dependencies]
+aegis-core = { workspace = true }
+tracing    = { workspace = true }
