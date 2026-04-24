@@ -1,11 +1,11 @@
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
-    widgets::{Block, Borders, List, ListItem, Paragraph, Wrap},
+    widgets::{Block, Borders, List, ListItem, Paragraph, Wrap, Clear},
     Frame,
 };
 
-use crate::app::{AppState, ConnectionStatus, PaneMode};
+use crate::app::{AppState, ConnectionStatus, PaneMode, Overlay};
 
 pub fn render(app: &mut AppState, frame: &mut Frame) {
     let chunks = Layout::default()
@@ -20,6 +20,10 @@ pub fn render(app: &mut AppState, frame: &mut Frame) {
     render_header(app, frame, chunks[0]);
     render_main(app, frame, chunks[1]);
     render_footer(app, frame, chunks[2]);
+
+    if app.overlay != Overlay::None {
+        render_overlay(app, frame);
+    }
 }
 
 fn render_header(app: &AppState, frame: &mut Frame, area: Rect) {
@@ -61,7 +65,11 @@ fn render_left_sidebar(app: &AppState, frame: &mut Frame, area: Rect) {
         .split(area);
 
     // Agents
-    let agents: Vec<ListItem> = app.agents.values()
+    let mut agents_vec: Vec<_> = app.agents.values().collect();
+    agents_vec.sort_by_key(|a| a.name.clone());
+
+    let agents: Vec<ListItem> = agents_vec
+        .iter()
         .map(|a| {
             let style = if Some(a.agent_id) == app.selected_agent_id {
                 Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)
@@ -89,13 +97,10 @@ fn render_left_sidebar(app: &AppState, frame: &mut Frame, area: Rect) {
 fn render_center_panel(app: &mut AppState, frame: &mut Frame, area: Rect) {
     match app.mode {
         PaneMode::Input => {
-            // Interactive Terminal
-            // For now, a placeholder until we wire the backend relay
             let terminal = Block::default().borders(Borders::ALL).title(" Terminal (INTERACTIVE) ");
             frame.render_widget(terminal, area);
         }
         _ => {
-            // Logs
             let agent_logs = if let Some(id) = app.selected_agent_id {
                 app.logs.get(&id).map(|l| l.join("\n")).unwrap_or_else(|| "No logs found for selected agent.".to_string())
             } else {
@@ -128,7 +133,7 @@ fn render_footer(app: &AppState, frame: &mut Frame, area: Rect) {
     };
 
     let help_text = match app.mode {
-        PaneMode::Normal => " [q]uit | [i]nput | [:]command | [j/k] navigate ",
+        PaneMode::Normal => " [q]uit | [s]pawn | [x]kill | [?]help | [j/k] navigate ",
         PaneMode::Input => " [Esc] back to normal | Terminal interactive ",
         PaneMode::Command => " [Esc] cancel | [Enter] execute ",
     };
@@ -137,4 +142,85 @@ fn render_footer(app: &AppState, frame: &mut Frame, area: Rect) {
         .block(Block::default().borders(Borders::ALL))
         .style(Style::default().fg(Color::Cyan));
     frame.render_widget(footer, area);
+}
+
+fn render_overlay(app: &AppState, frame: &mut Frame) {
+    let area = centered_rect(60, 40, frame.area());
+    frame.render_widget(Clear, area);
+
+    match &app.overlay {
+        Overlay::Help => render_help_overlay(frame, area),
+        Overlay::SpawnPrompt { input } => render_spawn_overlay(frame, area, input),
+        Overlay::ConfirmKill { agent_id } => render_kill_overlay(frame, area, *agent_id, app),
+        Overlay::None => {}
+    }
+}
+
+fn render_help_overlay(frame: &mut Frame, area: Rect) {
+    let help_text = r#"
+  AegisCore TUI Help
+  ──────────────────
+  [q]       Quit
+  [s]       Spawn new Splinter agent
+  [x]       Kill selected agent
+  [i]       Enter interactive terminal mode
+  [j/k]     Navigate agent list
+  [:]       Enter command mode
+  [?]       This help screen
+  
+  [Esc]     Back to Normal mode / Close overlay
+  "#;
+
+    let help = Paragraph::new(help_text)
+        .block(Block::default().borders(Borders::ALL).title(" Help "))
+        .wrap(Wrap { trim: false });
+    frame.render_widget(help, area);
+}
+
+fn render_spawn_overlay(frame: &mut Frame, area: Rect, input: &str) {
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(3),
+            Constraint::Min(0),
+        ])
+        .split(area);
+
+    let title = Paragraph::new(" Task Description for New Agent: ")
+        .style(Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD));
+    frame.render_widget(title, chunks[0]);
+
+    let input_field = Paragraph::new(input)
+        .block(Block::default().borders(Borders::ALL).border_style(Style::default().fg(Color::Cyan)));
+    frame.render_widget(input_field, chunks[1]);
+}
+
+fn render_kill_overlay(frame: &mut Frame, area: Rect, agent_id: uuid::Uuid, app: &AppState) {
+    let agent_name = app.agents.get(&agent_id).map(|a| a.name.as_str()).unwrap_or("unknown");
+    
+    let text = format!("\n  Are you sure you want to KILL agent '{}'?\n\n  [y] Yes, Terminate  [n] No, Cancel", agent_name);
+    let para = Paragraph::new(text)
+        .block(Block::default().borders(Borders::ALL).title(" Confirm Kill "))
+        .style(Style::default().fg(Color::Red));
+    frame.render_widget(para, area);
+}
+
+fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
+    let popup_layout = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Percentage((100 - percent_y) / 2),
+            Constraint::Percentage(percent_y),
+            Constraint::Percentage((100 - percent_y) / 2),
+        ])
+        .split(r);
+
+    Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([
+            Constraint::Percentage((100 - percent_x) / 2),
+            Constraint::Percentage(percent_x),
+            Constraint::Percentage((100 - percent_x) / 2),
+        ])
+        .split(popup_layout[1])[1]
 }

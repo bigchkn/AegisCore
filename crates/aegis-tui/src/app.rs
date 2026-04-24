@@ -10,6 +10,14 @@ pub enum PaneMode {
     Input, // Interactive terminal input
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub enum Overlay {
+    None,
+    Help,
+    SpawnPrompt { input: String },
+    ConfirmKill { agent_id: Uuid },
+}
+
 pub struct AppState {
     pub project_path: std::path::PathBuf,
     pub agents: HashMap<Uuid, Agent>,
@@ -17,6 +25,7 @@ pub struct AppState {
     pub channels: Vec<ChannelRecord>,
     pub selected_agent_id: Option<Uuid>,
     pub mode: PaneMode,
+    pub overlay: Overlay,
     pub logs: HashMap<Uuid, Vec<String>>,
     pub connection_status: ConnectionStatus,
 }
@@ -38,6 +47,7 @@ impl AppState {
             channels: Vec::new(),
             selected_agent_id: None,
             mode: PaneMode::Normal,
+            overlay: Overlay::None,
             logs: HashMap::new(),
             connection_status: ConnectionStatus::Disconnected,
         }
