@@ -1,6 +1,11 @@
 # Rust build artifacts
 /target/
 
+# Web build artifacts
+node_modules/
+crates/aegis-web/frontend/node_modules/
+crates/aegis-web/frontend/dist/
+
 # macOS
 .DS_Store
 .AppleDouble
