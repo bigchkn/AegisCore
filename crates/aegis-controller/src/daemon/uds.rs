@@ -254,7 +254,7 @@ async fn dispatch_command(
                 .ok_or_else(|| AegisError::IpcProtocol {
                     reason: "Missing task".to_string(),
                 })?;
-            let task_id = commands.spawn(task)?;
+            let task_id = commands.spawn(task).await?;
             Ok(serde_json::json!({ "task_id": task_id }))
         }
         "agents.pause" => {

@@ -157,7 +157,7 @@ async fn dispatch_command(
     match cmd {
         "spawn" => {
             let task = params.as_str().ok_or("Missing task string in params")?;
-            let task_id = commands.spawn(task).map_err(|e| e.to_string())?;
+            let task_id = commands.spawn(task).await.map_err(|e| e.to_string())?;
             Ok(Json(serde_json::json!({ "task_id": task_id })))
         }
         "pause" => {

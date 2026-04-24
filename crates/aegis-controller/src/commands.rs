@@ -63,9 +63,12 @@ impl ControllerCommands {
         aegis_core::ChannelRegistry::list(self.registry.as_ref())
     }
 
-    pub fn spawn(&self, task: &str) -> Result<Uuid> {
-        self.scheduler
-            .enqueue_splinter_task(task, TaskCreator::System)
+    pub async fn spawn(&self, task: &str) -> Result<Uuid> {
+        let task_id = self.scheduler.enqueue_splinter_task(task, TaskCreator::System)?;
+        // Attempt immediate dispatch; if max_splinters is saturated the task
+        // stays queued until a slot opens (no-op on None return).
+        let _ = self.scheduler.dispatch_once("splinter").await;
+        Ok(task_id)
     }
 
     pub async fn pause(&self, agent_id: Uuid) -> Result<()> {
