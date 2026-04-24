@@ -5,7 +5,10 @@ use axum::{
     Router,
 };
 
-pub fn static_routes() -> Router {
+pub fn static_routes<S>() -> Router<S>
+where
+    S: Clone + Send + Sync + 'static,
+{
     Router::new().fallback(get(serve_static))
 }
 

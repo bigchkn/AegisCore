@@ -51,6 +51,7 @@ dependencies = [
  "aegis-sandbox",
  "aegis-taskflow",
  "aegis-tmux",
+ "aegis-web",
  "async-trait",
  "axum",
  "base64 0.22.1",

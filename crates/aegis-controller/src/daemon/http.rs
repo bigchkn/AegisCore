@@ -40,10 +40,14 @@ impl HttpServer {
             .route("/projects/:id/channels", get(list_channels))
             .route("/projects/:id/commands", post(dispatch_command))
             .route("/projects/:id/taskflow/status", get(taskflow_status))
-            .route("/projects/:id/taskflow/show/:milestone_id", get(taskflow_show))
+            .route(
+                "/projects/:id/taskflow/show/:milestone_id",
+                get(taskflow_show),
+            )
             .route("/ws/events", get(ws_handler))
             .route("/ws/logs/:agent_id", get(ws_logs_handler))
             .route("/ws/pane/:agent_id", get(ws_pane_handler))
+            .merge(aegis_web::routes::static_routes())
             .with_state(state);
 
         Self { router }
@@ -74,13 +78,14 @@ async fn get_runtime(state: &HttpState, project_id: Uuid) -> Result<AegisRuntime
         return Ok(r.clone());
     }
 
-    let project = state
-        .projects
-        .find_by_id(project_id)?
-        .ok_or_else(|| aegis_core::AegisError::Config {
-            field: "project_id".to_string(),
-            reason: "project not found".to_string(),
-        })?;
+    let project =
+        state
+            .projects
+            .find_by_id(project_id)?
+            .ok_or_else(|| aegis_core::AegisError::Config {
+                field: "project_id".to_string(),
+                reason: "project not found".to_string(),
+            })?;
 
     let r = AegisRuntime::load(project.root_path.clone()).await?;
     r.recover().await?;
@@ -107,7 +112,10 @@ async fn list_agents(
     State(state): State<HttpState>,
 ) -> std::result::Result<Json<serde_json::Value>, String> {
     let runtime = get_runtime(&state, id).await.map_err(|e| e.to_string())?;
-    let agents = runtime.commands().list_agents().map_err(|e| e.to_string())?;
+    let agents = runtime
+        .commands()
+        .list_agents()
+        .map_err(|e| e.to_string())?;
     Ok(Json(serde_json::to_value(agents).unwrap()))
 }
 
@@ -125,7 +133,10 @@ async fn list_channels(
     State(state): State<HttpState>,
 ) -> std::result::Result<Json<serde_json::Value>, String> {
     let runtime = get_runtime(&state, id).await.map_err(|e| e.to_string())?;
-    let channels = runtime.commands().list_channels().map_err(|e| e.to_string())?;
+    let channels = runtime
+        .commands()
+        .list_channels()
+        .map_err(|e| e.to_string())?;
     Ok(Json(serde_json::to_value(channels).unwrap()))
 }
 
@@ -181,7 +192,10 @@ async fn taskflow_status(
     State(state): State<HttpState>,
 ) -> std::result::Result<Json<serde_json::Value>, String> {
     let runtime = get_runtime(&state, id).await.map_err(|e| e.to_string())?;
-    let status = runtime.commands().taskflow_status().map_err(|e| e.to_string())?;
+    let status = runtime
+        .commands()
+        .taskflow_status()
+        .map_err(|e| e.to_string())?;
     Ok(Json(serde_json::to_value(status).unwrap()))
 }
 
@@ -190,7 +204,10 @@ async fn taskflow_show(
     State(state): State<HttpState>,
 ) -> std::result::Result<Json<serde_json::Value>, String> {
     let runtime = get_runtime(&state, id).await.map_err(|e| e.to_string())?;
-    let milestone = runtime.commands().taskflow_show(&milestone_id).map_err(|e| e.to_string())?;
+    let milestone = runtime
+        .commands()
+        .taskflow_show(&milestone_id)
+        .map_err(|e| e.to_string())?;
     Ok(Json(serde_json::to_value(milestone).unwrap()))
 }
 
@@ -259,24 +276,50 @@ async fn ws_logs_handler(
                 S: Sink<Message, Error = axum::Error> + Unpin,
             {
                 type Error = aegis_core::AegisError;
-                fn poll_ready(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::result::Result<(), Self::Error>> {
-                    Pin::new(&mut self.inner).poll_ready(cx).map_err(|e| aegis_core::AegisError::Unexpected(Box::new(e)))
+                fn poll_ready(
+                    mut self: Pin<&mut Self>,
+                    cx: &mut Context<'_>,
+                ) -> Poll<std::result::Result<(), Self::Error>> {
+                    Pin::new(&mut self.inner)
+                        .poll_ready(cx)
+                        .map_err(|e| aegis_core::AegisError::Unexpected(Box::new(e)))
                 }
-                fn start_send(mut self: Pin<&mut Self>, item: String) -> std::result::Result<(), Self::Error> {
-                    let msg = MessageWrapper { kind: "line".to_string(), data: item };
+                fn start_send(
+                    mut self: Pin<&mut Self>,
+                    item: String,
+                ) -> std::result::Result<(), Self::Error> {
+                    let msg = MessageWrapper {
+                        kind: "line".to_string(),
+                        data: item,
+                    };
                     let json = serde_json::to_string(&msg).unwrap();
-                    Pin::new(&mut self.inner).start_send(Message::Text(json.into())).map_err(|e| aegis_core::AegisError::Unexpected(Box::new(e)))
+                    Pin::new(&mut self.inner)
+                        .start_send(Message::Text(json.into()))
+                        .map_err(|e| aegis_core::AegisError::Unexpected(Box::new(e)))
                 }
-                fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::result::Result<(), Self::Error>> {
-                    Pin::new(&mut self.inner).poll_flush(cx).map_err(|e| aegis_core::AegisError::Unexpected(Box::new(e)))
+                fn poll_flush(
+                    mut self: Pin<&mut Self>,
+                    cx: &mut Context<'_>,
+                ) -> Poll<std::result::Result<(), Self::Error>> {
+                    Pin::new(&mut self.inner)
+                        .poll_flush(cx)
+                        .map_err(|e| aegis_core::AegisError::Unexpected(Box::new(e)))
                 }
-                fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::result::Result<(), Self::Error>> {
-                    Pin::new(&mut self.inner).poll_close(cx).map_err(|e| aegis_core::AegisError::Unexpected(Box::new(e)))
+                fn poll_close(
+                    mut self: Pin<&mut Self>,
+                    cx: &mut Context<'_>,
+                ) -> Poll<std::result::Result<(), Self::Error>> {
+                    Pin::new(&mut self.inner)
+                        .poll_close(cx)
+                        .map_err(|e| aegis_core::AegisError::Unexpected(Box::new(e)))
                 }
             }
 
             let mut ws_sink = WsSink { inner: sender };
-            let _ = runtime.log_tailer.tail(agent_id, last_n, &mut ws_sink).await;
+            let _ = runtime
+                .log_tailer
+                .tail(agent_id, last_n, &mut ws_sink)
+                .await;
         }
     })
 }
@@ -300,19 +343,42 @@ async fn ws_pane_handler(
                 S: Sink<Message, Error = axum::Error> + Unpin,
             {
                 type Error = aegis_core::AegisError;
-                fn poll_ready(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::result::Result<(), Self::Error>> {
-                    Pin::new(&mut self.inner).poll_ready(cx).map_err(|e| aegis_core::AegisError::Unexpected(Box::new(e)))
+                fn poll_ready(
+                    mut self: Pin<&mut Self>,
+                    cx: &mut Context<'_>,
+                ) -> Poll<std::result::Result<(), Self::Error>> {
+                    Pin::new(&mut self.inner)
+                        .poll_ready(cx)
+                        .map_err(|e| aegis_core::AegisError::Unexpected(Box::new(e)))
                 }
-                fn start_send(mut self: Pin<&mut Self>, item: Vec<u8>) -> std::result::Result<(), Self::Error> {
-                    let msg = MessageWrapper { kind: "output".to_string(), data: BASE64_STANDARD.encode(item) };
+                fn start_send(
+                    mut self: Pin<&mut Self>,
+                    item: Vec<u8>,
+                ) -> std::result::Result<(), Self::Error> {
+                    let msg = MessageWrapper {
+                        kind: "output".to_string(),
+                        data: BASE64_STANDARD.encode(item),
+                    };
                     let json = serde_json::to_string(&msg).unwrap();
-                    Pin::new(&mut self.inner).start_send(Message::Text(json.into())).map_err(|e| aegis_core::AegisError::Unexpected(Box::new(e)))
+                    Pin::new(&mut self.inner)
+                        .start_send(Message::Text(json.into()))
+                        .map_err(|e| aegis_core::AegisError::Unexpected(Box::new(e)))
                 }
-                fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::result::Result<(), Self::Error>> {
-                    Pin::new(&mut self.inner).poll_flush(cx).map_err(|e| aegis_core::AegisError::Unexpected(Box::new(e)))
+                fn poll_flush(
+                    mut self: Pin<&mut Self>,
+                    cx: &mut Context<'_>,
+                ) -> Poll<std::result::Result<(), Self::Error>> {
+                    Pin::new(&mut self.inner)
+                        .poll_flush(cx)
+                        .map_err(|e| aegis_core::AegisError::Unexpected(Box::new(e)))
                 }
-                fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::result::Result<(), Self::Error>> {
-                    Pin::new(&mut self.inner).poll_close(cx).map_err(|e| aegis_core::AegisError::Unexpected(Box::new(e)))
+                fn poll_close(
+                    mut self: Pin<&mut Self>,
+                    cx: &mut Context<'_>,
+                ) -> Poll<std::result::Result<(), Self::Error>> {
+                    Pin::new(&mut self.inner)
+                        .poll_close(cx)
+                        .map_err(|e| aegis_core::AegisError::Unexpected(Box::new(e)))
                 }
             }
 
@@ -332,7 +398,10 @@ async fn ws_pane_handler(
 
             let mut ws_sink = PaneWsSink { inner: ws_sender };
             let mut pinned_in_rx = Box::pin(in_rx);
-            let _ = runtime.pane_relay.relay(agent_id, &mut ws_sink, &mut pinned_in_rx).await;
+            let _ = runtime
+                .pane_relay
+                .relay(agent_id, &mut ws_sink, &mut pinned_in_rx)
+                .await;
         }
     })
 }
