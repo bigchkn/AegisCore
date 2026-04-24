@@ -62,8 +62,13 @@ All LLDs derived from the HLD (§15). Each must reach `done` before its mileston
 | 0.10 | Implement `aegis-core`: Recorder trait + WatchdogSink trait | `aegis-core` | `done` | |
 | 0.11 | Implement `aegis-core`: StorageBackend trait + path conventions | `aegis-core` | `done` | |
 | 0.12 | Implement `aegis-core`: AegisError + Result alias | `aegis-core` | `done` | |
-| 0.13 | Implement config TOML parsing + two-layer merge (`~/.aegis/config` → `aegis.toml`) | `aegis-core` | `pending` | Covered by `lld/config.md`; separate task |
-| 0.14 | Unit tests: trait object safety | `aegis-core` | `done` | Config merge tests deferred to 0.13 |
+| 0.13 | Implement `RawConfig` structs (serde deserialization targets) | `aegis-core` | `done` | All fields `Option<T>` for merging |
+| 0.14 | Implement `EffectiveConfig` structs (resolved runtime config) | `aegis-core` | `done` | Concrete types with defaults |
+| 0.15 | Implement `EffectiveConfig::resolve()` (two-layer merge logic) | `aegis-core` | `done` | Project overlay with built-in defaults |
+| 0.16 | Implement `load_global()` and `load_project()` file I/O | `aegis-core` | `done` | `~/.aegis/config` and `aegis.toml` |
+| 0.17 | Implement `EffectiveConfig::validate()` | `aegis-core` | `done` | §6 validation rules |
+| 0.18 | Unit tests: Merge logic, defaults, and validation rules | `aegis-core` | `done` | |
+| 0.19 | Unit tests: trait object safety | `aegis-core` | `done` | |
 
 ---
 

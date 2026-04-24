@@ -1,5 +1,6 @@
 pub mod agent;
 pub mod channel;
+pub mod config;
 pub mod error;
 pub mod provider;
 pub mod recorder;
@@ -12,6 +13,7 @@ pub use agent::{Agent, AgentHandle, AgentKind, AgentRegistry, AgentStatus};
 pub use channel::{
     Channel, ChannelKind, ChannelRecord, ChannelRegistry, Message, MessageSource, MessageType,
 };
+pub use config::{ConfigError, EffectiveConfig, RawConfig};
 pub use error::{AegisError, Result};
 pub use provider::{FailoverContext, Provider, ProviderConfig, SessionRef};
 pub use recorder::{LogQuery, Recorder};

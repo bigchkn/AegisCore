@@ -5,6 +5,12 @@ pub type Result<T> = std::result::Result<T, AegisError>;
 
 #[derive(Debug, thiserror::Error)]
 pub enum AegisError {
+    #[error("I/O error: {0}")]
+    Io(#[from] io::Error),
+
+    #[error("config error — field `{field}`: {reason}")]
+    Config { field: String, reason: String },
+
     // ── Config ───────────────────────────────────────────────────────
     #[error("config file not found: {path}")]
     ConfigNotFound { path: PathBuf },
