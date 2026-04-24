@@ -167,6 +167,7 @@ dependencies = [
  "aegis-core",
  "anyhow",
  "base64 0.22.1",
+ "chrono",
  "crossterm",
  "futures-util",
  "ratatui 0.29.0",

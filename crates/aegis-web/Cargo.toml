@@ -9,3 +9,5 @@ license = "MIT"
 aegis-core = { workspace = true }
 tokio      = { workspace = true }
 tracing    = { workspace = true }
+axum       = { version = "0.7" }
+rust-embed = { version = "8", features = ["debug-embed"] }

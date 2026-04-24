@@ -6,6 +6,7 @@ use ratatui::{
 };
 
 use crate::app::{AppState, ConnectionStatus, PaneMode, Overlay};
+use crate::client::ProjectRecord;
 
 pub fn render(app: &mut AppState, frame: &mut Frame) {
     let chunks = Layout::default()
@@ -133,7 +134,7 @@ fn render_footer(app: &AppState, frame: &mut Frame, area: Rect) {
     };
 
     let help_text = match app.mode {
-        PaneMode::Normal => " [q]uit | [s]pawn | [x]kill | [?]help | [j/k] navigate ",
+        PaneMode::Normal => " [q]uit | [p]rojects | [s]pawn | [x]kill | [?]help ",
         PaneMode::Input => " [Esc] back to normal | Terminal interactive ",
         PaneMode::Command => " [Esc] cancel | [Enter] execute ",
     };
@@ -150,10 +151,28 @@ fn render_overlay(app: &AppState, frame: &mut Frame) {
 
     match &app.overlay {
         Overlay::Help => render_help_overlay(frame, area),
+        Overlay::ProjectSwitcher { projects, selected_idx } => render_project_switcher_overlay(frame, area, projects, *selected_idx),
         Overlay::SpawnPrompt { input } => render_spawn_overlay(frame, area, input),
         Overlay::ConfirmKill { agent_id } => render_kill_overlay(frame, area, *agent_id, app),
         Overlay::None => {}
     }
+}
+
+fn render_project_switcher_overlay(frame: &mut Frame, area: Rect, projects: &Vec<ProjectRecord>, selected_idx: usize) {
+    let items: Vec<ListItem> = projects.iter().enumerate()
+        .map(|(i, p)| {
+            let style = if i == selected_idx {
+                Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)
+            } else {
+                Style::default().fg(Color::White)
+            };
+            ListItem::new(format!("{} ({})", p.id, p.root_path.display())).style(style)
+        })
+        .collect();
+
+    let list = List::new(items)
+        .block(Block::default().borders(Borders::ALL).title(" Switch Project "));
+    frame.render_widget(list, area);
 }
 
 fn render_help_overlay(frame: &mut Frame, area: Rect) {
@@ -161,6 +180,7 @@ fn render_help_overlay(frame: &mut Frame, area: Rect) {
   AegisCore TUI Help
   ──────────────────
   [q]       Quit
+  [p]       Project Switcher
   [s]       Spawn new Splinter agent
   [x]       Kill selected agent
   [i]       Enter interactive terminal mode

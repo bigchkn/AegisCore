@@ -9,6 +9,14 @@ use tokio::sync::mpsc;
 use tokio_util::codec::{Framed, LinesCodec};
 use uuid::Uuid;
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ProjectRecord {
+    pub id: Uuid,
+    pub root_path: PathBuf,
+    pub auto_start: bool,
+    pub last_seen: chrono::DateTime<chrono::Utc>,
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct UdsRequest {
     pub id: Uuid,

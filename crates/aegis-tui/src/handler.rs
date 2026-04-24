@@ -1,12 +1,14 @@
 use crate::app::{AppState, PaneMode, Overlay};
 use crossterm::event::{KeyCode, KeyEvent};
 use uuid::Uuid;
+use crate::client::ProjectRecord;
 
 #[derive(Debug, PartialEq)]
 pub enum AppAction {
     Quit,
     SpawnAgent(String),
     KillAgent(Uuid),
+    SwitchProject(std::path::PathBuf),
     None,
 }
 
@@ -28,18 +30,43 @@ fn handle_overlay(key_event: KeyEvent, app: &mut AppState) -> AppAction {
         Overlay::Help => {
             AppAction::None
         }
+        Overlay::ProjectSwitcher { projects, selected_idx } => handle_project_switcher(key_event, projects, selected_idx),
         Overlay::SpawnPrompt { input } => handle_spawn_prompt(key_event, input),
         Overlay::ConfirmKill { agent_id } => handle_confirm_kill(key_event, *agent_id),
         Overlay::None => AppAction::None,
     };
 
-    // If no action was taken (meaning overlay wasn't closed by Enter/Action),
-    // and it's not Esc, put it back.
     if action == AppAction::None && overlay != Overlay::None && key_event.code != KeyCode::Esc {
         app.overlay = overlay;
     }
 
     action
+}
+
+fn handle_project_switcher(key_event: KeyEvent, projects: &Vec<ProjectRecord>, selected_idx: &mut usize) -> AppAction {
+    match key_event.code {
+        KeyCode::Up | KeyCode::Char('k') => {
+            if !projects.is_empty() {
+                *selected_idx = (*selected_idx + projects.len() - 1) % projects.len();
+            }
+            AppAction::None
+        }
+        KeyCode::Down | KeyCode::Char('j') => {
+            if !projects.is_empty() {
+                *selected_idx = (*selected_idx + 1) % projects.len();
+            }
+            AppAction::None
+        }
+        KeyCode::Enter => {
+            if let Some(project) = projects.get(*selected_idx) {
+                AppAction::SwitchProject(project.root_path.clone())
+            } else {
+                AppAction::None
+            }
+        }
+        KeyCode::Esc => AppAction::None,
+        _ => AppAction::None,
+    }
 }
 
 fn handle_spawn_prompt(key_event: KeyEvent, input: &mut String) -> AppAction {
@@ -80,6 +107,13 @@ fn handle_normal_mode(key_event: KeyEvent, app: &mut AppState) -> AppAction {
             app.overlay = Overlay::Help;
             AppAction::None
         }
+        KeyCode::Char('p') => {
+            app.overlay = Overlay::ProjectSwitcher { 
+                projects: app.projects.clone(), 
+                selected_idx: 0 
+            };
+            AppAction::None
+        }
         KeyCode::Char('s') => {
             app.overlay = Overlay::SpawnPrompt { input: String::new() };
             AppAction::None
@@ -113,7 +147,7 @@ fn handle_normal_mode(key_event: KeyEvent, app: &mut AppState) -> AppAction {
 fn navigate_agents(app: &mut AppState, delta: i32) {
     let mut ids: Vec<Uuid> = app.agents.keys().cloned().collect();
     if ids.is_empty() { return; }
-    ids.sort(); // Consistent order
+    ids.sort();
 
     let current_idx = app.selected_agent_id
         .and_then(|id| ids.iter().position(|&x| x == id))

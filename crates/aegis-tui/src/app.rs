@@ -2,6 +2,7 @@ use std::collections::HashMap;
 
 use aegis_core::{AegisEvent, Agent, AgentStatus, Task, ChannelRecord};
 use uuid::Uuid;
+use crate::client::ProjectRecord;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum PaneMode {
@@ -14,12 +15,14 @@ pub enum PaneMode {
 pub enum Overlay {
     None,
     Help,
+    ProjectSwitcher { projects: Vec<ProjectRecord>, selected_idx: usize },
     SpawnPrompt { input: String },
     ConfirmKill { agent_id: Uuid },
 }
 
 pub struct AppState {
     pub project_path: std::path::PathBuf,
+    pub projects: Vec<ProjectRecord>,
     pub agents: HashMap<Uuid, Agent>,
     pub tasks: Vec<Task>,
     pub channels: Vec<ChannelRecord>,
@@ -42,6 +45,7 @@ impl AppState {
     pub fn new(project_path: std::path::PathBuf) -> Self {
         Self {
             project_path,
+            projects: Vec::new(),
             agents: HashMap::new(),
             tasks: Vec::new(),
             channels: Vec::new(),
@@ -56,8 +60,7 @@ impl AppState {
     pub fn handle_aegis_event(&mut self, event: AegisEvent) {
         match event {
             AegisEvent::AgentSpawned { agent_id: _, role: _ } => {
-                // We'll need a full refresh to get the Agent record, 
-                // but we can at least mark it as unknown for now or wait for refresh
+                // We'll need a full refresh to get the Agent record
             }
             AegisEvent::AgentStatusChanged { agent_id, new_status, .. } => {
                 if let Some(agent) = self.agents.get_mut(&agent_id) {
