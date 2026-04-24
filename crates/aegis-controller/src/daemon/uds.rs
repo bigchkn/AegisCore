@@ -1,12 +1,15 @@
+use crate::daemon::logs::{LogTailer, PaneRelay};
 use crate::daemon::projects::ProjectRegistry;
 use crate::events::EventBus;
 use crate::runtime::AegisRuntime;
 use aegis_core::{AegisError, Result};
-use futures_util::{SinkExt, StreamExt};
+use futures_util::{Sink, SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
+use std::pin::Pin;
 use std::sync::Arc;
+use std::task::{Context, Poll};
 use tokio::net::{UnixListener, UnixStream};
 use tokio::sync::Mutex;
 use tokio_util::codec::{Framed, LinesCodec};
@@ -108,6 +111,36 @@ async fn handle_connection(
 
         if request.command == "subscribe" {
             handle_subscription(lines, event_bus).await;
+            return Ok(());
+        }
+
+        if request.command == "logs.tail" || request.command == "pane.attach" {
+            let project_path = request.project_path.as_ref().ok_or_else(|| {
+                AegisError::IpcProtocol {
+                    reason: "Missing project_path".to_string(),
+                }
+            })?;
+            let project = project_registry.find_by_path(project_path)?.ok_or_else(|| {
+                AegisError::ProjectNotInitialized {
+                    path: project_path.clone(),
+                }
+            })?;
+
+            let mut runtimes = active_runtimes.lock().await;
+            let runtime = if let Some(r) = runtimes.get(&project.id) {
+                r
+            } else {
+                let r = AegisRuntime::load(project.root_path.clone()).await?;
+                r.recover().await?;
+                runtimes.insert(project.id, r);
+                runtimes.get(&project.id).unwrap()
+            };
+
+            if request.command == "logs.tail" {
+                handle_log_tail(lines, &request, runtime.log_tailer.clone()).await;
+            } else {
+                handle_pane_attach(lines, &request, runtime.pane_relay.clone()).await;
+            }
             return Ok(());
         }
 
@@ -295,4 +328,194 @@ async fn handle_subscription(mut lines: Framed<UnixStream, LinesCodec>, event_bu
             break;
         }
     }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct MessageWrapper {
+    #[serde(rename = "type")]
+    kind: String,
+    data: String,
+}
+
+struct GenericSink<S> {
+    inner: S,
+    kind: String,
+}
+
+impl<S> Sink<String> for GenericSink<S>
+where
+    S: Sink<String, Error = tokio_util::codec::LinesCodecError> + Unpin,
+{
+    type Error = AegisError;
+
+    fn poll_ready(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<()>> {
+        Pin::new(&mut self.inner)
+            .poll_ready(cx)
+            .map_err(|e| AegisError::IpcConnection {
+                source: io_error_from_codec(e),
+            })
+    }
+
+    fn start_send(mut self: Pin<&mut Self>, item: String) -> Result<()> {
+        let msg = MessageWrapper {
+            kind: self.kind.clone(),
+            data: item,
+        };
+        let json = serde_json::to_string(&msg).unwrap();
+        Pin::new(&mut self.inner)
+            .start_send(json)
+            .map_err(|e| AegisError::IpcConnection {
+                source: io_error_from_codec(e),
+            })
+    }
+
+    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<()>> {
+        Pin::new(&mut self.inner)
+            .poll_flush(cx)
+            .map_err(|e| AegisError::IpcConnection {
+                source: io_error_from_codec(e),
+            })
+    }
+
+    fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<()>> {
+        Pin::new(&mut self.inner)
+            .poll_close(cx)
+            .map_err(|e| AegisError::IpcConnection {
+                source: io_error_from_codec(e),
+            })
+    }
+}
+
+impl<S> Sink<Vec<u8>> for GenericSink<S>
+where
+    S: Sink<String, Error = tokio_util::codec::LinesCodecError> + Unpin,
+{
+    type Error = AegisError;
+
+    fn poll_ready(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<()>> {
+        Pin::new(&mut self.inner)
+            .poll_ready(cx)
+            .map_err(|e| AegisError::IpcConnection {
+                source: io_error_from_codec(e),
+            })
+    }
+
+    fn start_send(mut self: Pin<&mut Self>, item: Vec<u8>) -> Result<()> {
+        use base64::prelude::*;
+        let msg = MessageWrapper {
+            kind: self.kind.clone(),
+            data: BASE64_STANDARD.encode(item),
+        };
+        let json = serde_json::to_string(&msg).unwrap();
+        Pin::new(&mut self.inner)
+            .start_send(json)
+            .map_err(|e| AegisError::IpcConnection {
+                source: io_error_from_codec(e),
+            })
+    }
+
+    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<()>> {
+        Pin::new(&mut self.inner)
+            .poll_flush(cx)
+            .map_err(|e| AegisError::IpcConnection {
+                source: io_error_from_codec(e),
+            })
+    }
+
+    fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<()>> {
+        Pin::new(&mut self.inner)
+            .poll_close(cx)
+            .map_err(|e| AegisError::IpcConnection {
+                source: io_error_from_codec(e),
+            })
+    }
+}
+
+async fn handle_log_tail(
+    mut lines: Framed<UnixStream, LinesCodec>,
+    request: &UdsRequest,
+    tailer: Arc<LogTailer>,
+) {
+    let agent_id = match parse_agent_id(&request.params) {
+        Ok(id) => id,
+        Err(e) => {
+            send_error(&mut lines, request.id, e).await;
+            return;
+        }
+    };
+
+    let last_n = request
+        .params
+        .get("last_n")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(100) as usize;
+
+    let mut log_sink = GenericSink {
+        inner: lines,
+        kind: "line".to_string(),
+    };
+    if let Err(e) = tailer.tail(agent_id, last_n, &mut log_sink).await {
+        error!("Log tail error for agent {}: {}", agent_id, e);
+    }
+}
+
+async fn handle_pane_attach(
+    lines: Framed<UnixStream, LinesCodec>,
+    request: &UdsRequest,
+    relay: Arc<PaneRelay>,
+) {
+    let agent_id = match parse_agent_id(&request.params) {
+        Ok(id) => id,
+        Err(e) => {
+            let mut lines = lines;
+            send_error(&mut lines, request.id, e).await;
+            return;
+        }
+    };
+
+    use base64::prelude::*;
+    let (uds_sink, uds_stream) = lines.split();
+
+    let in_rx = uds_stream.filter_map(|line_res| async move {
+        match line_res {
+            Ok(line) => {
+                let msg: MessageWrapper = serde_json::from_str(&line).ok()?;
+                if msg.kind == "input" {
+                    BASE64_STANDARD.decode(msg.data).ok()
+                } else {
+                    None
+                }
+            }
+            Err(_) => None,
+        }
+    });
+
+    let mut pane_sink = GenericSink {
+        inner: uds_sink,
+        kind: "output".to_string(),
+    };
+    let mut pinned_in_rx = Box::pin(in_rx);
+
+    if let Err(e) = relay
+        .relay(agent_id, &mut pane_sink, &mut pinned_in_rx)
+        .await
+    {
+        error!("Pane relay error for agent {}: {}", agent_id, e);
+    }
+}
+
+async fn send_error(lines: &mut Framed<UnixStream, LinesCodec>, id: Uuid, error: AegisError) {
+    let response = UdsResponse {
+        id,
+        status: "error".to_string(),
+        payload: serde_json::Value::Null,
+        error: Some(error.to_string()),
+    };
+    if let Ok(json) = serde_json::to_string(&response) {
+        let _ = lines.send(json).await;
+    }
+}
+
+fn io_error_from_codec(e: tokio_util::codec::LinesCodecError) -> std::io::Error {
+    std::io::Error::new(std::io::ErrorKind::Other, e)
 }

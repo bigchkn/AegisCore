@@ -9,8 +9,15 @@ use aegis_tmux::TmuxClient;
 use uuid::Uuid;
 
 use crate::{
-    commands::ControllerCommands, dispatcher::Dispatcher, events::EventBus, prompts::PromptManager,
-    registry::FileRegistry, scheduler::Scheduler, state::StateManager, storage::ProjectStorage,
+    commands::ControllerCommands,
+    daemon::logs::{LogTailer, PaneRelay},
+    dispatcher::Dispatcher,
+    events::EventBus,
+    prompts::PromptManager,
+    registry::FileRegistry,
+    scheduler::Scheduler,
+    state::StateManager,
+    storage::ProjectStorage,
     watchdog::ControllerWatchdogSink,
 };
 
@@ -30,6 +37,8 @@ pub struct AegisRuntime {
     pub state: Arc<StateManager>,
     pub watchdog_sink: Arc<ControllerWatchdogSink>,
     pub taskflow: Option<Arc<TaskflowEngine>>,
+    pub log_tailer: Arc<LogTailer>,
+    pub pane_relay: Arc<PaneRelay>,
     pub events: EventBus,
 }
 
@@ -67,6 +76,12 @@ impl AegisRuntime {
         let prompts = Arc::new(PromptManager::new(root_path.clone()));
         let state = Arc::new(StateManager::new(storage.clone()));
         let taskflow = Arc::new(TaskflowEngine::new(storage.clone(), registry.clone()));
+        let log_tailer = Arc::new(LogTailer::new(storage.clone()));
+        let pane_relay = Arc::new(PaneRelay::new(
+            storage.clone(),
+            registry.clone(),
+            tmux.clone(),
+        ));
         let events = EventBus::default();
         let watchdog_sink = Arc::new(ControllerWatchdogSink::new(
             registry.clone(),
@@ -107,6 +122,8 @@ impl AegisRuntime {
             state,
             watchdog_sink,
             taskflow: Some(taskflow),
+            log_tailer,
+            pane_relay,
             events,
         })
     }

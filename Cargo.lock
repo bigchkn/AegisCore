@@ -53,6 +53,7 @@ dependencies = [
  "aegis-tmux",
  "async-trait",
  "axum",
+ "base64 0.22.1",
  "chrono",
  "fs2",
  "futures-util",
