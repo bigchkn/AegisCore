@@ -66,11 +66,12 @@ impl Message {
     }
 }
 
+#[async_trait::async_trait]
 pub trait Channel: Send + Sync {
     fn kind(&self) -> ChannelKind;
     fn name(&self) -> &str;
     fn is_active(&self) -> bool;
-    fn send(&self, message: &Message) -> Result<()>;
+    async fn send(&self, message: &Message) -> Result<()>;
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

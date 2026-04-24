@@ -15,7 +15,15 @@ version = "0.1.0"
 dependencies = [
  "aegis-core",
  "aegis-tmux",
+ "async-trait",
+ "chrono",
+ "fs2",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "tokio",
  "tracing",
+ "uuid",
 ]
 
 [[package]]
@@ -38,6 +46,7 @@ dependencies = [
 name = "aegis-core"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
  "chrono",
  "serde",
  "serde_json",
