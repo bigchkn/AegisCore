@@ -26,6 +26,8 @@ pub use watchdog::{DetectedEvent, WatchdogAction, WatchdogSink};
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
+#[cfg_attr(feature = "ts-export", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts-export", ts(export))]
 pub enum AegisEvent {
     AgentSpawned {
         agent_id: uuid::Uuid,
@@ -207,5 +209,24 @@ mod tests {
             terminated_at: None,
         };
         assert_eq!(agent.tmux_target(), "aegis:2.%5");
+    }
+}
+
+#[cfg(all(test, feature = "ts-export"))]
+mod ts_export {
+    use ts_rs::TS;
+    use crate::*;
+
+    #[test]
+    fn export_ts_bindings() {
+        let out = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../crates/aegis-web/frontend/src/types"
+        );
+        std::fs::create_dir_all(out).unwrap();
+        Agent::export_all_to(out).unwrap();
+        AegisEvent::export_all_to(out).unwrap();
+        Task::export_all_to(out).unwrap();
+        ChannelRecord::export_all_to(out).unwrap();
     }
 }

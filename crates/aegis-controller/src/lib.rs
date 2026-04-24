@@ -24,3 +24,21 @@ pub use scheduler::Scheduler;
 pub use state::{RecoveryResult, StateManager};
 pub use storage::ProjectStorage;
 pub use watchdog::ControllerWatchdogSink;
+
+#[cfg(all(test, feature = "ts-export"))]
+mod ts_export {
+    use ts_rs::TS;
+    use crate::commands::ProjectStatus;
+    use crate::daemon::projects::ProjectRecord;
+
+    #[test]
+    fn export_ts_bindings() {
+        let out = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../crates/aegis-web/frontend/src/types"
+        );
+        std::fs::create_dir_all(out).unwrap();
+        ProjectRecord::export_all_to(out).unwrap();
+        ProjectStatus::export_all_to(out).unwrap();
+    }
+}

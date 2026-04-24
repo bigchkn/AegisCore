@@ -6,6 +6,8 @@ use crate::error::Result;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "ts-export", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts-export", ts(export))]
 pub enum ChannelKind {
     Injection,
     Mailbox,
@@ -75,11 +77,14 @@ pub trait Channel: Send + Sync {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-export", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts-export", ts(export))]
 pub struct ChannelRecord {
     pub name: String,
     pub kind: ChannelKind,
     pub active: bool,
     pub registered_at: DateTime<Utc>,
+    #[cfg_attr(feature = "ts-export", ts(type = "unknown"))]
     pub config: serde_json::Value,
 }
 

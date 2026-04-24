@@ -11,6 +11,8 @@ use uuid::Uuid;
 use crate::{dispatcher::Dispatcher, registry::FileRegistry, scheduler::Scheduler};
 
 #[derive(Debug, Clone, Serialize)]
+#[cfg_attr(feature = "ts-export", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts-export", ts(export))]
 pub struct ProjectStatus {
     pub active_agents: usize,
     pub pending_tasks: usize,

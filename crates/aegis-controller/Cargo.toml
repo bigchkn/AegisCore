@@ -28,6 +28,8 @@ tower-http = { version = "0.5", features = ["fs", "cors", "trace"] }
 tokio-util = { version = "0.7", features = ["codec"] }
 futures-util = "0.3"
 
+ts-rs = { version = "10", optional = true, features = ["uuid-impl", "chrono-impl"] }
+
 [features]
 default = ["channels", "sandbox", "watchdog", "recorder"]
 channels = []
@@ -35,3 +37,4 @@ sandbox = []
 watchdog = []
 recorder = []
 telegram = []
+ts-export = ["dep:ts-rs", "aegis-core/ts-export"]

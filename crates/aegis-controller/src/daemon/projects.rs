@@ -6,8 +6,11 @@ use std::path::PathBuf;
 use uuid::Uuid;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-export", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts-export", ts(export))]
 pub struct ProjectRecord {
     pub id: Uuid,
+    #[cfg_attr(feature = "ts-export", ts(type = "string"))]
     pub root_path: PathBuf,
     pub auto_start: bool,
     pub last_seen: DateTime<Utc>,

@@ -7,6 +7,8 @@ use crate::error::Result;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "ts-export", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts-export", ts(export))]
 pub enum TaskStatus {
     Queued,
     Active,
@@ -16,12 +18,16 @@ pub enum TaskStatus {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "ts-export", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts-export", ts(export))]
 pub enum TaskCreator {
     Agent(Uuid),
     System,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-export", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts-export", ts(export))]
 pub struct Task {
     pub task_id: Uuid,
     pub description: String,
@@ -30,6 +36,7 @@ pub struct Task {
     pub created_by: TaskCreator,
     pub created_at: DateTime<Utc>,
     pub completed_at: Option<DateTime<Utc>>,
+    #[cfg_attr(feature = "ts-export", ts(type = "string | null"))]
     pub receipt_path: Option<PathBuf>,
 }
 

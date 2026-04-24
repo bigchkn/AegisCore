@@ -7,6 +7,8 @@ use crate::error::Result;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "ts-export", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts-export", ts(export))]
 pub enum AgentKind {
     Bastion,
     Splinter,
@@ -14,6 +16,8 @@ pub enum AgentKind {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "ts-export", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts-export", ts(export))]
 pub enum AgentStatus {
     Queued,
     Starting,
@@ -32,6 +36,8 @@ impl AgentStatus {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts-export", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts-export", ts(export))]
 pub struct Agent {
     pub agent_id: Uuid,
     pub name: String,
@@ -43,10 +49,13 @@ pub struct Agent {
     pub tmux_session: String,
     pub tmux_window: u32,
     pub tmux_pane: String,
+    #[cfg_attr(feature = "ts-export", ts(type = "string"))]
     pub worktree_path: PathBuf,
     pub cli_provider: String,
     pub fallback_cascade: Vec<String>,
+    #[cfg_attr(feature = "ts-export", ts(type = "string"))]
     pub sandbox_profile: PathBuf,
+    #[cfg_attr(feature = "ts-export", ts(type = "string"))]
     pub log_path: PathBuf,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
