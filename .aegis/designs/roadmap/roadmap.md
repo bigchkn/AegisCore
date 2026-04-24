@@ -28,7 +28,7 @@ All LLDs derived from the HLD (§15). Each must reach `done` before its mileston
 | CLI providers           | `lld/providers.md`  | M4        | `aegis-providers`        | `done`     |
 | Flight recorder         | `lld/recorder.md`   | M5        | `aegis-recorder`         | `lld-done` |
 | Channels                | `lld/channels.md`   | M6        | `aegis-channels`         | `done`     |
-| Watchdog & failover     | `lld/watchdog.md`   | M7        | `aegis-watchdog`         | `pending`  |
+| Watchdog & failover     | `lld/watchdog.md`   | M7        | `aegis-watchdog`         | `done`     |
 | Prompts                 | `lld/prompts.md`    | M8        | `aegis-controller`       | `pending`  |
 | Telegram bridge         | `lld/telegram.md`   | M9        | `aegis-telegram`         | `pending`  |
 | Controller & dispatcher | `lld/controller.md` | M10       | `aegis-controller`       | `pending`  |
@@ -196,14 +196,14 @@ All LLDs derived from the HLD (§15). Each must reach `done` before its mileston
 ## Milestone 7 — Watchdog: `aegis-watchdog`
 
 **LLD:** `lld/watchdog.md`  
-**Status:** `pending`  
+**Status:** `lld-done`  
 **Depends on:** M0, M1, M4 (providers), M5 (recorder)
 
 ### Tasks
 
 | #   | Task                                                                         | Crate            | Notes                                                                               |
 | --- | ---------------------------------------------------------------------------- | ---------------- | ----------------------------------------------------------------------------------- |
-| 7.1 | Write `lld/watchdog.md`                                                      | —                | Poll loop design; pattern matching engine; failover state machine; backoff strategy |
+| 7.1 | Write `lld/watchdog.md`                                                      | —                | `done` — Poll loop design; pattern matching engine; failover state machine; backoff strategy |
 | 7.2 | Implement async poll loop: `capture-pane` sweep every `poll_interval_ms`     | `aegis-watchdog` | tokio interval                                                                      |
 | 7.3 | Implement pattern matcher: configurable regex/string patterns per category   | `aegis-watchdog` | Rate limit, auth failure, crash, sandbox violation, task complete                   |
 | 7.4 | Implement failover state machine: detect → pause → capture → switch → inject | `aegis-watchdog` |                                                                                     |
