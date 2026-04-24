@@ -3,11 +3,13 @@ import { useEffect } from 'react';
 import { fetchProjectData, fetchProjects } from '../api/thunks';
 import { useAppDispatch, useAppSelector } from '../store/hooks';
 import { AgentsView } from '../views/AgentsView';
+import { PaneView } from '../views/PaneView';
 import { Sidebar } from './Sidebar';
 
 export function App() {
   const dispatch = useAppDispatch();
   const activeProjectId = useAppSelector((state) => state.ui.activeProjectId);
+  const activeView = useAppSelector((state) => state.ui.activeView);
   const connectionState = useAppSelector((state) => state.ui.connectionState);
   const error = useAppSelector((state) => state.ui.error);
 
@@ -33,7 +35,7 @@ export function App() {
           <span className="connection-pill">{connectionState}</span>
         </header>
         {error ? <div className="banner">{error}</div> : null}
-        <AgentsView />
+        {activeView === 'pane' ? <PaneView /> : <AgentsView />}
       </section>
     </main>
   );
