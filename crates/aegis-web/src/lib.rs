@@ -9,10 +9,16 @@ use rust_embed::RustEmbed;
 struct WebAssets;
 
 pub fn asset_for_path(path: &str) -> Option<Cow<'static, [u8]>> {
+    asset_for_path_with_mime(path).map(|(data, _)| data)
+}
+
+pub fn asset_for_path_with_mime(path: &str) -> Option<(Cow<'static, [u8]>, &'static str)> {
     let key = normalize_asset_path(path);
-    WebAssets::get(&key)
-        .map(|asset| asset.data)
-        .or_else(|| WebAssets::get("index.html").map(|asset| asset.data))
+    if let Some(asset) = WebAssets::get(&key) {
+        return Some((asset.data, mime_for_path(&key)));
+    }
+
+    WebAssets::get("index.html").map(|asset| (asset.data, mime_for_path("index.html")))
 }
 
 pub fn mime_for_path(path: &str) -> &'static str {
