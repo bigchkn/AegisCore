@@ -10,6 +10,7 @@ pub mod runtime;
 pub mod scheduler;
 pub mod state;
 pub mod storage;
+pub mod watchdog;
 
 pub use commands::{ControllerCommands, ProjectStatus};
 pub use dispatcher::Dispatcher;
@@ -22,3 +23,4 @@ pub use runtime::AegisRuntime;
 pub use scheduler::Scheduler;
 pub use state::{RecoveryResult, StateManager};
 pub use storage::ProjectStorage;
+pub use watchdog::ControllerWatchdogSink;
