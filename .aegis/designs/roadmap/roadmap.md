@@ -31,8 +31,8 @@ All LLDs derived from the HLD (§15). Each must reach `done` before its mileston
 | Watchdog & failover     | `lld/watchdog.md`   | M7        | `aegis-watchdog`         | `done`     |
 | Prompts                 | `lld/prompts.md`    | M8        | `aegis-controller`       | `done`     |
 | Telegram bridge         | `lld/telegram.md`   | M9        | `aegis-telegram`         | `done`     |
-| Controller & dispatcher | `lld/controller.md` | M10       | `aegis-controller`       | `pending`  |
-| Global daemon & IPC     | `lld/daemon.md`     | M11       | `aegis-controller`       | `pending`  |
+| Controller & dispatcher | `lld/controller.md` | M10       | `aegis-controller`       | `lld-done` |
+| Global daemon & IPC     | `lld/daemon.md`     | M11       | `aegis-controller`       | `done`     |
 | CLI binary              | `lld/cli.md`        | M12       | `src/`                   | `pending`  |
 | Taskflow engine         | `lld/taskflow.md`   | M13       | `aegis-taskflow`         | `pending`  |
 | UI (TUI + web)          | `lld/ui.md`         | M14–M15   | `aegis-tui`, `aegis-web` | `pending`  |
@@ -255,28 +255,32 @@ All LLDs derived from the HLD (§15). Each must reach `done` before its mileston
 ## Milestone 10 — Controller & Dispatcher: `aegis-controller`
 
 **LLD:** `lld/controller.md`  
-**Status:** `pending`  
+**Status:** `lld-done`  
 **Depends on:** M1–M9 (all subsystems)
 
 ### Tasks
 
-| #    | Task                                                                                                | Crate              | Notes                                                                              |
-| ---- | --------------------------------------------------------------------------------------------------- | ------------------ | ---------------------------------------------------------------------------------- |
-| 10.1 | Write `lld/controller.md`                                                                           | —                  | Builder pattern; Dispatcher spawn sequence; registry locking; tokio runtime design |
-| 10.2 | Implement `AegisRuntime` builder: accept optional subsystem impls                                   | `aegis-controller` |                                                                                    |
-| 10.3 | Implement Dispatcher: Bastion spawn sequence (worktree → sandbox profile → tmux window → pipe-pane) | `aegis-controller` |                                                                                    |
-| 10.4 | Implement Dispatcher: Splinter spawn sequence + git worktree management                             | `aegis-controller` |                                                                                    |
-| 10.5 | Implement Dispatcher: clean termination + receipt processing + worktree prune                       | `aegis-controller` |                                                                                    |
-| 10.6 | Implement Scheduler: `MAX_SPLINTERS` semaphore + task queue                                         | `aegis-controller` |                                                                                    |
-| 10.7 | Implement agent status transitions + registry updates                                               | `aegis-controller` |                                                                                    |
-| 10.8 | Integration tests: full Bastion + Splinter lifecycle with mock CLI                                  | `aegis-controller` |                                                                                    |
+| #     | Task                                                              | Crate              | Status     | Notes                                                       |
+| ----- | ----------------------------------------------------------------- | ------------------ | ---------- | ----------------------------------------------------------- |
+| 10.1  | Write `lld/controller.md`                                         | —                  | `done`     | Runtime builder; Dispatcher; Scheduler; command/event APIs |
+| 10.2  | Add `ProjectStorage`, `EventBus`, and controller error helpers    | `aegis-controller` | `pending`  | Low-risk foundation                                         |
+| 10.3  | Add `AegisRuntime::build()` and subsystem construction            | `aegis-controller` | `pending`  | No background tasks yet                                     |
+| 10.4  | Add `AgentSpec`, `SpawnPlan`, and spawn-plan unit tests           | `aegis-controller` | `pending`  | Deterministic pre-launch validation                         |
+| 10.5  | Implement Dispatcher Bastion spawn flow                           | `aegis-controller` | `pending`  | tmux + provider + sandbox + recorder                        |
+| 10.6  | Implement Git worktree helper and Splinter spawn flow             | `aegis-controller` | `pending`  | Includes task assignment                                    |
+| 10.7  | Implement Scheduler queue dispatch and concurrency limit          | `aegis-controller` | `pending`  | `dispatch_once()` + background loop                         |
+| 10.8  | Implement pause, resume, kill, and receipt processing             | `aegis-controller` | `pending`  | Lifecycle state transitions                                 |
+| 10.9  | Implement Controller `WatchdogSink` and failover executor         | `aegis-controller` | `pending`  | Provider cascade and recorder context                       |
+| 10.10 | Implement `ControllerCommands` API                                | `aegis-controller` | `pending`  | Shared by CLI, Telegram, daemon IPC                         |
+| 10.11 | Wire optional Watchdog and Telegram background tasks in `start()` | `aegis-controller` | `pending`  | Feature-gated                                               |
+| 10.12 | Add lifecycle integration tests                                   | `aegis-controller` | `pending`  | Mock subsystems and real tmux when available                |
 
 ---
 
 ## Milestone 11 — Global Daemon & IPC: `aegisd`
 
 **LLD:** `lld/daemon.md`  
-**Status:** `pending`  
+**Status:** `lld-done`  
 **Depends on:** M10
 
 ### Tasks
