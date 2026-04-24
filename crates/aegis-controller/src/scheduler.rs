@@ -6,6 +6,8 @@ use uuid::Uuid;
 
 use crate::{dispatcher::Dispatcher, registry::FileRegistry};
 
+const DRAIN_POLL_MS: u64 = 500;
+
 pub struct Scheduler {
     registry: Arc<FileRegistry>,
     dispatcher: Arc<Dispatcher>,
@@ -53,6 +55,30 @@ impl Scheduler {
         // until the task is spawned, then release it for deterministic tests.
         drop(permit);
         Ok(Some(agent_id))
+    }
+
+    /// Runs forever, draining queued tasks as semaphore permits become available.
+    /// Spawn this as a background task from `AegisRuntime::start`.
+    pub async fn run_drain_loop(self: Arc<Self>, role: &str) {
+        loop {
+            match self.dispatch_once(role).await {
+                Ok(Some(agent_id)) => {
+                    tracing::info!(%agent_id, "drain loop dispatched queued task");
+                    // immediately try the next one — there may be more queued tasks
+                    // and a permit available
+                    continue;
+                }
+                Ok(None) => {
+                    // Either no queued tasks or semaphore is full. Sleep briefly
+                    // before checking again so we pick up newly enqueued tasks.
+                    tokio::time::sleep(tokio::time::Duration::from_millis(DRAIN_POLL_MS)).await;
+                }
+                Err(e) => {
+                    tracing::error!(error = %e, "drain loop dispatch error");
+                    tokio::time::sleep(tokio::time::Duration::from_millis(DRAIN_POLL_MS)).await;
+                }
+            }
+        }
     }
 }
 

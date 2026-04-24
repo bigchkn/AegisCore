@@ -67,9 +67,12 @@ impl ControllerCommands {
         let task_id = self.scheduler.enqueue_splinter_task(task, TaskCreator::System)?;
         // Attempt immediate dispatch; if max_splinters is saturated the task
         // stays queued until a slot opens (no-op on None return).
-        let _ = self.scheduler.dispatch_once("splinter").await;
+        if let Err(e) = self.scheduler.dispatch_once("splinter").await {
+            tracing::error!(task_id = %task_id, error = %e, "dispatch failed after enqueue — task remains queued");
+        }
         Ok(task_id)
     }
+
 
     pub async fn pause(&self, agent_id: Uuid) -> Result<()> {
         self.dispatcher.pause_agent(agent_id).await

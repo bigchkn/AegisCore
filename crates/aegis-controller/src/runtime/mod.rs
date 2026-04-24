@@ -144,6 +144,10 @@ impl AegisRuntime {
                 self.dispatcher.spawn_bastion(name).await?;
             }
         }
+
+        let scheduler = Arc::clone(&self.scheduler);
+        tokio::spawn(async move { scheduler.run_drain_loop("splinter").await });
+
         Ok(())
     }
 
