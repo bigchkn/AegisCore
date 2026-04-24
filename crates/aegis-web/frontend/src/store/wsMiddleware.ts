@@ -46,8 +46,12 @@ export const wsMiddleware: Middleware = (store) => {
       case 'system_notification':
         store.dispatch(setError(event.message));
         break;
-      case 'agent_spawned':
       case 'failover_initiated':
+        store.dispatch(
+          setError(`Failover started for ${event.agent_id}: ${event.from_provider} -> ${event.to_provider}`),
+        );
+        break;
+      case 'agent_spawned':
         break;
     }
   };
@@ -85,7 +89,7 @@ export const wsMiddleware: Middleware = (store) => {
     };
   };
 
-  connect();
+  window.setTimeout(connect, 0);
 
   return (next) => (action) => {
     if (reconnectTimer && isAction(action) && action.type === 'ui/setActiveProject') {

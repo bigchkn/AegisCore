@@ -6,6 +6,7 @@ export default defineConfig({
   server: {
     host: '127.0.0.1',
     port: 7438,
+    hmr: false,
     proxy: {
       '/projects': 'http://127.0.0.1:7437',
       '/ws': {
