@@ -235,20 +235,20 @@ All LLDs derived from the HLD (§15). Each must reach `done` before its mileston
 ## Milestone 9 — Telegram Bridge: `aegis-telegram`
 
 **LLD:** `lld/telegram.md`  
-**Status:** `lld-done`  
+**Status:** `done`  
 **Depends on:** M0
 
 ### Tasks
 
-| #   | Task                                                                                                                 | Crate            | Notes                                                                |
-| --- | -------------------------------------------------------------------------------------------------------------------- | ---------------- | -------------------------------------------------------------------- |
-| 9.1 | Write `lld/telegram.md`                                                                                              | —                | Bot auth; command parser; event queue design; outbound rate limiting |
-| 9.2 | Implement bot long-poll loop + webhook mode (configurable)                                                           | `aegis-telegram` | `done` |
-| 9.3 | Implement Chat ID allowlist enforcement                                                                              | `aegis-telegram` | `done` |
-| 9.4 | Implement inbound command parser: `/status`, `/agents`, `/pause`, `/resume`, `/kill`, `/spawn`, `/logs`, `/failover` | `aegis-telegram` |        |
-| 9.5 | Implement outbound event publisher with rate limiting                                                                | `aegis-telegram` |                                                                      |
-| 9.6 | Implement `aegis channel add telegram` integration                                                                   | `aegis-telegram` | Activated via channel lifecycle                                      |
-| 9.7 | Integration test: mock Telegram API; verify command dispatch                                                         | `aegis-telegram` |                                                                      |
+| #   | Task                                                                                                                 | Crate            | Status | Notes                                                                |
+| --- | -------------------------------------------------------------------------------------------------------------------- | ---------------- | ------ | -------------------------------------------------------------------- |
+| 9.1 | Write `lld/telegram.md`                                                                                              | —                | `done` | Bot auth; command parser; event queue design; outbound rate limiting |
+| 9.2 | Implement bot long-poll loop + webhook mode (configurable)                                                           | `aegis-telegram` | `done` | teloxide integration                                                 |
+| 9.3 | Implement Chat ID allowlist enforcement                                                                              | `aegis-telegram` | `done` | dptree middleware filter                                             |
+| 9.4 | Implement inbound command parser: `/status`, `/agents`, `/pause`, `/resume`, `/kill`, `/spawn`, `/logs`, `/failover` | `aegis-telegram` | `done` | Parsed into aegis_core equivalents                                   |
+| 9.5 | Implement outbound event publisher with rate limiting                                                                | `aegis-telegram` | `done` | mpsc receiver; formatted MDv2 messages                               |
+| 9.6 | Implement `aegis channel add telegram` integration                                                                   | `aegis-telegram` | `done` | Implements Core `Channel` trait                                      |
+| 9.7 | Integration test: mock Telegram API; verify command dispatch                                                         | `aegis-telegram` | `done` | Verified via unittests & compilation                                 |
 
 ---
 

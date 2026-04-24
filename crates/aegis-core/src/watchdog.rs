@@ -1,6 +1,8 @@
 use uuid::Uuid;
+use serde::{Serialize, Deserialize};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "category", rename_all = "snake_case")]
 pub enum DetectedEvent {
     RateLimit {
         agent_id: Uuid,
@@ -36,7 +38,8 @@ impl DetectedEvent {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum WatchdogAction {
     InitiateFailover,
     PauseAndNotify,

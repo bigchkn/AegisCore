@@ -22,6 +22,16 @@ pub use storage::StorageBackend;
 pub use task::{Task, TaskCreator, TaskQueue, TaskRegistry, TaskStatus};
 pub use watchdog::{DetectedEvent, WatchdogAction, WatchdogSink};
 
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum AegisEvent {
+    AgentSpawned { agent_id: uuid::Uuid, role: String },
+    AgentStatusChanged { agent_id: uuid::Uuid, old_status: AgentStatus, new_status: AgentStatus },
+    TaskComplete { task_id: uuid::Uuid, receipt_path: String },
+    WatchdogAlert { event: DetectedEvent, action: WatchdogAction },
+    SystemNotification { message: String },
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
