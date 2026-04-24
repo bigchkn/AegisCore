@@ -52,8 +52,13 @@ impl DaemonSupervisor {
         }
 
         // 2. Start UDS Server
-        let uds_server =
-            UdsServer::bind(self.uds_path.clone(), Arc::clone(&self.event_bus)).await?;
+        let uds_server = UdsServer::bind(
+            self.uds_path.clone(),
+            Arc::clone(&self.event_bus),
+            Arc::clone(&self.project_registry),
+            Arc::clone(&self.active_runtimes),
+        )
+        .await?;
         let uds_handle = tokio::spawn(uds_server.run());
 
         // 3. Start HTTP Server

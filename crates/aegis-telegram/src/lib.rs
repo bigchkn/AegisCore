@@ -1,8 +1,10 @@
+use aegis_core::{
+    AegisError, AegisEvent, Channel, ChannelKind, DetectedEvent, Message as CoreMessage, Result,
+};
+use std::sync::Arc;
 use teloxide::prelude::*;
 use teloxide::utils::command::BotCommands;
-use std::sync::Arc;
 use tokio::sync::mpsc;
-use aegis_core::{Result, AegisEvent, DetectedEvent, Channel, ChannelKind, Message as CoreMessage, AegisError};
 
 #[derive(BotCommands, Clone)]
 #[command(rename_rule = "lowercase", description = "AegisCore commands:")]
@@ -21,7 +23,10 @@ pub enum Command {
     Resume(String),
     #[command(description = "kill an agent: /kill <uuid>")]
     Kill(String),
-    #[command(description = "spawn a splinter: /spawn <role> <task>", parse_with = "split")]
+    #[command(
+        description = "spawn a splinter: /spawn <role> <task>",
+        parse_with = "split"
+    )]
     Spawn { role: String, task: String },
     #[command(description = "show logs: /logs <uuid> [n]", parse_with = "split")]
     Logs { agent_id: String, lines: String },
@@ -74,15 +79,14 @@ impl TelegramBridge {
         });
 
         // 2. Start Command Dispatcher
-        let handler = dptree::entry()
-            .branch(
-                Update::filter_message()
-                    .filter(move |msg: Message, cfg: Arc<TelegramConfig>| {
-                        cfg.allowed_chat_ids.contains(&msg.chat.id.0)
-                    })
-                    .filter_command::<Command>()
-                    .endpoint(handle_command),
-            );
+        let handler = dptree::entry().branch(
+            Update::filter_message()
+                .filter(move |msg: Message, cfg: Arc<TelegramConfig>| {
+                    cfg.allowed_chat_ids.contains(&msg.chat.id.0)
+                })
+                .filter_command::<Command>()
+                .endpoint(handle_command),
+        );
 
         Dispatcher::builder(bot, handler)
             .dependencies(dptree::deps![config])
@@ -121,11 +125,12 @@ impl Channel for TelegramChannel {
             message.from, message.kind, message.payload
         );
         for chat_id in &self.config.allowed_chat_ids {
-            self.bot.send_message(ChatId(*chat_id), &text)
+            self.bot
+                .send_message(ChatId(*chat_id), &text)
                 .await
-                .map_err(|e| AegisError::Config { 
-                    field: "telegram".into(), 
-                    reason: e.to_string() 
+                .map_err(|e| AegisError::Config {
+                    field: "telegram".into(),
+                    reason: e.to_string(),
                 })?;
         }
         Ok(())
@@ -135,7 +140,8 @@ impl Channel for TelegramChannel {
 async fn handle_command(bot: Bot, msg: Message, cmd: Command) -> ResponseResult<()> {
     match cmd {
         Command::Help => {
-            bot.send_message(msg.chat.id, Command::descriptions().to_string()).await?;
+            bot.send_message(msg.chat.id, Command::descriptions().to_string())
+                .await?;
         }
         Command::Start => {
             bot.send_message(
@@ -145,29 +151,46 @@ async fn handle_command(bot: Bot, msg: Message, cmd: Command) -> ResponseResult<
             .await?;
         }
         Command::Status => {
-            bot.send_message(msg.chat.id, "System status: Operational (Mocked)").await?;
+            bot.send_message(msg.chat.id, "System status: Operational (Mocked)")
+                .await?;
         }
         Command::Agents => {
-            bot.send_message(msg.chat.id, "No active agents (Mocked)").await?;
+            bot.send_message(msg.chat.id, "No active agents (Mocked)")
+                .await?;
         }
         Command::Pause(id) => {
-            bot.send_message(msg.chat.id, format!("Pausing agent {} (Mocked)", id)).await?;
+            bot.send_message(msg.chat.id, format!("Pausing agent {} (Mocked)", id))
+                .await?;
         }
         Command::Resume(id) => {
-            bot.send_message(msg.chat.id, format!("Resuming agent {} (Mocked)", id)).await?;
+            bot.send_message(msg.chat.id, format!("Resuming agent {} (Mocked)", id))
+                .await?;
         }
         Command::Kill(id) => {
-            bot.send_message(msg.chat.id, format!("Killing agent {} (Mocked)", id)).await?;
+            bot.send_message(msg.chat.id, format!("Killing agent {} (Mocked)", id))
+                .await?;
         }
         Command::Spawn { role, task } => {
-            bot.send_message(msg.chat.id, format!("Spawning {} for: {} (Mocked)", role, task)).await?;
+            bot.send_message(
+                msg.chat.id,
+                format!("Spawning {} for: {} (Mocked)", role, task),
+            )
+            .await?;
         }
         Command::Logs { agent_id, lines } => {
             let n = lines.parse::<usize>().unwrap_or(20);
-            bot.send_message(msg.chat.id, format!("Fetching last {} logs for {} (Mocked)", n, agent_id)).await?;
+            bot.send_message(
+                msg.chat.id,
+                format!("Fetching last {} logs for {} (Mocked)", n, agent_id),
+            )
+            .await?;
         }
         Command::Failover(id) => {
-            bot.send_message(msg.chat.id, format!("Triggering failover for {} (Mocked)", id)).await?;
+            bot.send_message(
+                msg.chat.id,
+                format!("Triggering failover for {} (Mocked)", id),
+            )
+            .await?;
         }
     }
     Ok(())
@@ -178,28 +201,68 @@ fn format_event(event: &AegisEvent) -> String {
         AegisEvent::AgentSpawned { agent_id, role } => {
             format!("🚀 *Agent Spawned*\nID: `{}`\nRole: `{}`", agent_id, role)
         }
-        AegisEvent::AgentStatusChanged { agent_id, old_status, new_status } => {
-            format!("🔄 *Status Changed*\nAgent: `{}`\n`{:?}` ➔ `{:?}`", agent_id, old_status, new_status)
+        AegisEvent::AgentStatusChanged {
+            agent_id,
+            old_status,
+            new_status,
+        } => {
+            format!(
+                "🔄 *Status Changed*\nAgent: `{}`\n`{:?}` ➔ `{:?}`",
+                agent_id, old_status, new_status
+            )
         }
-        AegisEvent::TaskComplete { task_id, receipt_path } => {
-            format!("✅ *Task Complete*\nID: `{}`\nReceipt: `{}`", task_id, receipt_path)
+        AegisEvent::TaskComplete {
+            task_id,
+            receipt_path,
+        } => {
+            format!(
+                "✅ *Task Complete*\nID: `{}`\nReceipt: `{}`",
+                task_id, receipt_path
+            )
         }
         AegisEvent::WatchdogAlert { event, action } => {
             let detail = match event {
-                DetectedEvent::RateLimit { agent_id, matched_pattern } => {
-                    format!("Rate limit on `{}` (matched: `{}`)", agent_id, matched_pattern)
+                DetectedEvent::RateLimit {
+                    agent_id,
+                    matched_pattern,
+                } => {
+                    format!(
+                        "Rate limit on `{}` (matched: `{}`)",
+                        agent_id, matched_pattern
+                    )
                 }
-                DetectedEvent::AuthFailure { agent_id, matched_pattern } => {
-                    format!("Auth failure on `{}` (matched: `{}`)", agent_id, matched_pattern)
+                DetectedEvent::AuthFailure {
+                    agent_id,
+                    matched_pattern,
+                } => {
+                    format!(
+                        "Auth failure on `{}` (matched: `{}`)",
+                        agent_id, matched_pattern
+                    )
                 }
-                DetectedEvent::CliCrash { agent_id, exit_code } => {
+                DetectedEvent::CliCrash {
+                    agent_id,
+                    exit_code,
+                } => {
                     format!("CLI crash on `{}` (code: {:?})", agent_id, exit_code)
                 }
-                DetectedEvent::SandboxViolation { agent_id, matched_pattern } => {
-                    format!("Sandbox violation on `{}` (matched: `{}`)", agent_id, matched_pattern)
+                DetectedEvent::SandboxViolation {
+                    agent_id,
+                    matched_pattern,
+                } => {
+                    format!(
+                        "Sandbox violation on `{}` (matched: `{}`)",
+                        agent_id, matched_pattern
+                    )
                 }
-                DetectedEvent::TaskComplete { agent_id, matched_pattern } => {
-                    format!("Watchdog detected completion on `{}` (matched: `{}`)", agent_id, matched_pattern)
+                DetectedEvent::TaskComplete {
+                    agent_id,
+                    matched_pattern,
+                } => {
+                    format!(
+                        "Watchdog detected completion on `{}` (matched: `{}`)",
+                        agent_id, matched_pattern
+                    )
                 }
             };
             format!("⚠️ *Watchdog Alert*\n{}\nAction: `{:?}`", detail, action)
@@ -229,13 +292,19 @@ mod tests {
     fn test_render_message() {
         let template = "🚀 Agent {{id}} spawned in {{role}}";
         let vars = [("id", "123"), ("role", "architect")];
-        assert_eq!(render_message(template, &vars), "🚀 Agent 123 spawned in architect");
+        assert_eq!(
+            render_message(template, &vars),
+            "🚀 Agent 123 spawned in architect"
+        );
     }
 
     #[test]
     fn test_format_event() {
         let id = Uuid::nil();
-        let event = AegisEvent::AgentSpawned { agent_id: id, role: "architect".into() };
+        let event = AegisEvent::AgentSpawned {
+            agent_id: id,
+            role: "architect".into(),
+        };
         let msg = format_event(&event);
         assert!(msg.contains("Agent Spawned"));
         assert!(msg.contains("architect"));

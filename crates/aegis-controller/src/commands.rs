@@ -1,6 +1,8 @@
 use std::sync::Arc;
 
-use aegis_core::{Agent, AgentRegistry, LogQuery, Recorder, Result, TaskCreator, TaskQueue};
+use aegis_core::{
+    AegisError, Agent, AgentRegistry, LogQuery, Recorder, Result, TaskCreator, TaskQueue,
+};
 use aegis_taskflow::model::{Milestone, ProjectIndex};
 use aegis_taskflow::TaskflowEngine;
 use serde::Serialize;
@@ -81,42 +83,34 @@ impl ControllerCommands {
     }
 
     pub fn taskflow_status(&self) -> Result<ProjectIndex> {
-        let tf = self
-            .taskflow
-            .as_ref()
-            .ok_or_else(|| aegis_core::AegisError::IpcProtocol {
-                reason: "taskflow not enabled".into(),
-            })?;
+        let tf = self.taskflow.as_ref().ok_or_else(|| AegisError::Config {
+            field: "taskflow".to_string(),
+            reason: "Taskflow engine is not initialized".to_string(),
+        })?;
         tf.get_status()
     }
 
     pub fn taskflow_show(&self, milestone_id: &str) -> Result<Milestone> {
-        let tf = self
-            .taskflow
-            .as_ref()
-            .ok_or_else(|| aegis_core::AegisError::IpcProtocol {
-                reason: "taskflow not enabled".into(),
-            })?;
+        let tf = self.taskflow.as_ref().ok_or_else(|| AegisError::Config {
+            field: "taskflow".to_string(),
+            reason: "Taskflow engine is not initialized".to_string(),
+        })?;
         tf.get_milestone(milestone_id)
     }
 
     pub fn taskflow_assign(&self, roadmap_id: &str, task_id: Uuid) -> Result<()> {
-        let tf = self
-            .taskflow
-            .as_ref()
-            .ok_or_else(|| aegis_core::AegisError::IpcProtocol {
-                reason: "taskflow not enabled".into(),
-            })?;
+        let tf = self.taskflow.as_ref().ok_or_else(|| AegisError::Config {
+            field: "taskflow".to_string(),
+            reason: "Taskflow engine is not initialized".to_string(),
+        })?;
         tf.links().assign(roadmap_id.to_string(), task_id)
     }
 
     pub fn taskflow_sync(&self) -> Result<aegis_taskflow::SyncReport> {
-        let tf = self
-            .taskflow
-            .as_ref()
-            .ok_or_else(|| aegis_core::AegisError::IpcProtocol {
-                reason: "taskflow not enabled".into(),
-            })?;
+        let tf = self.taskflow.as_ref().ok_or_else(|| AegisError::Config {
+            field: "taskflow".to_string(),
+            reason: "Taskflow engine is not initialized".to_string(),
+        })?;
         tf.sync()
     }
 }

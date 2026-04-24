@@ -55,7 +55,10 @@ pub struct Agent {
 
 impl Agent {
     pub fn tmux_target(&self) -> String {
-        format!("{}:{}.{}", self.tmux_session, self.tmux_window, self.tmux_pane)
+        format!(
+            "{}:{}.{}",
+            self.tmux_session, self.tmux_window, self.tmux_pane
+        )
     }
 }
 

@@ -91,6 +91,8 @@ mod tests {
         let dispatcher = Arc::new(Dispatcher::new(
             registry.clone(),
             None,
+            None,
+            None,
             providers,
             prompts,
             storage,

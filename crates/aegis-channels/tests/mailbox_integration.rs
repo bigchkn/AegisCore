@@ -1,6 +1,5 @@
-use std::sync::Arc;
-use aegis_core::{Channel, Message, MessageSource, MessageType, Result};
 use aegis_channels::mailbox::MailboxChannel;
+use aegis_core::{Channel, Message, MessageSource, MessageType, Result};
 use tempfile::tempdir;
 use uuid::Uuid;
 

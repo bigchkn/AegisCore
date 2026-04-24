@@ -22,6 +22,13 @@ pub enum AegisError {
         source: toml::de::Error,
     },
 
+    #[error("config serialization error at {path}: {source}")]
+    ConfigSerializationError {
+        path: PathBuf,
+        #[source]
+        source: toml::ser::Error,
+    },
+
     #[error("config validation error — field `{field}`: {reason}")]
     ConfigValidation { field: String, reason: String },
 
@@ -44,6 +51,12 @@ pub enum AegisError {
 
     #[error("task not found: {task_id}")]
     TaskNotFound { task_id: Uuid },
+
+    #[error("receipt not found for task {task_id} at {path}")]
+    ReceiptNotFound { task_id: Uuid, path: PathBuf },
+
+    #[error("invalid receipt at {path}: {reason}")]
+    ReceiptInvalid { path: PathBuf, reason: String },
 
     // ── Tmux ─────────────────────────────────────────────────────────
     #[error("tmux command `{command}` failed: {stderr}")]

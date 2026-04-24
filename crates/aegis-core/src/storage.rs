@@ -49,6 +49,9 @@ pub trait StorageBackend: Send + Sync {
     fn channels_state_path(&self) -> PathBuf {
         self.state_dir().join("channels.json")
     }
+    fn taskflow_path(&self) -> PathBuf {
+        self.state_dir().join("taskflow.json")
+    }
     fn agent_log_path(&self, agent_id: Uuid) -> PathBuf {
         self.logs_dir().join(format!("{}.log", agent_id))
     }
@@ -59,8 +62,6 @@ pub trait StorageBackend: Send + Sync {
         self.worktrees_dir().join(agent_id.to_string())
     }
     fn agent_inbox_path(&self, agent_id: Uuid) -> PathBuf {
-        self.channels_dir()
-            .join(agent_id.to_string())
-            .join("inbox")
+        self.channels_dir().join(agent_id.to_string()).join("inbox")
     }
 }

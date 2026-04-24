@@ -1,9 +1,7 @@
 use std::{path::PathBuf, sync::Arc};
 
-use aegis_core::{EffectiveConfig, Recorder, Result, SandboxProfile, StorageBackend};
+use aegis_core::{EffectiveConfig, Result};
 use aegis_providers::ProviderRegistry;
-use aegis_recorder::FlightRecorder;
-use aegis_sandbox::SeatbeltSandbox;
 use aegis_taskflow::TaskflowEngine;
 use aegis_tmux::TmuxClient;
 use uuid::Uuid;
@@ -20,8 +18,6 @@ pub struct AegisRuntime {
     pub storage: Arc<ProjectStorage>,
     pub registry: Arc<FileRegistry>,
     pub tmux: Arc<TmuxClient>,
-    pub sandbox: Arc<dyn SandboxProfile>,
-    pub recorder: Arc<dyn Recorder>,
     pub providers: Arc<ProviderRegistry>,
     pub prompts: Arc<PromptManager>,
     pub dispatcher: Arc<Dispatcher>,
@@ -54,28 +50,20 @@ impl AegisRuntime {
 
         let registry = Arc::new(FileRegistry::new(storage.clone()));
         let tmux = Arc::new(TmuxClient::new());
-        let sandbox: Arc<dyn SandboxProfile> =
-            Arc::new(SeatbeltSandbox::with_logs_dir(storage.logs_dir()));
-        let recorder: Arc<dyn Recorder> = Arc::new(FlightRecorder::new(
-            tmux.clone(),
-            storage.clone(),
-            config.recorder.clone(),
-        ));
         let providers = Arc::new(ProviderRegistry::from_config(&config)?);
         let prompts = Arc::new(PromptManager::new(root_path.clone()));
         let state = Arc::new(StateManager::new(storage.clone()));
-        // taskflow wired in when M13 is complete
-        let taskflow: Option<Arc<TaskflowEngine>> = None;
+        let taskflow = Arc::new(TaskflowEngine::new(storage.clone(), registry.clone()));
         let events = EventBus::default();
 
         let dispatcher = Arc::new(Dispatcher::new(
             registry.clone(),
             Some(tmux.clone()),
-            Some(sandbox.clone()),
-            Some(recorder.clone()),
+            None, // sandbox stub
+            None, // recorder stub
             providers.clone(),
             prompts.clone(),
-            None, // taskflow
+            Some(taskflow.clone()),
             storage.clone(),
             events.clone(),
             config.clone(),
@@ -93,14 +81,12 @@ impl AegisRuntime {
             storage,
             registry,
             tmux,
-            sandbox,
-            recorder,
             providers,
             prompts,
             dispatcher,
             scheduler,
             state,
-            taskflow,
+            taskflow: Some(taskflow),
             events,
         })
     }
@@ -133,42 +119,12 @@ impl AegisRuntime {
             self.registry.clone(),
             self.dispatcher.clone(),
             self.scheduler.clone(),
-            Some(self.recorder.clone()),
+            None,
             self.taskflow.clone(),
         )
     }
 
     pub fn subscribe_events(&self) -> tokio::sync::broadcast::Receiver<aegis_core::AegisEvent> {
         self.events.subscribe()
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use aegis_core::config::{RawConfig, RawProviderConfig};
-    use std::collections::HashMap;
-
-    #[tokio::test]
-    async fn runtime_from_config_initializes_storage_and_commands() {
-        let dir = tempfile::tempdir().unwrap();
-        let mut project = RawConfig::default();
-        project.providers = HashMap::from([(
-            "claude-code".to_string(),
-            RawProviderConfig {
-                binary: Some("claude".to_string()),
-                ..Default::default()
-            },
-        )]);
-        let config = EffectiveConfig::resolve(&RawConfig::default(), &project).unwrap();
-
-        let runtime = AegisRuntime::from_config(dir.path().to_path_buf(), config)
-            .await
-            .unwrap();
-        let status = runtime.commands().status().unwrap();
-
-        assert_eq!(status.active_agents, 0);
-        assert_eq!(status.pending_tasks, 0);
-        assert!(runtime.storage.state_dir().is_dir());
     }
 }

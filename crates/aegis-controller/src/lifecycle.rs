@@ -30,6 +30,7 @@ pub struct SpawnPlan {
     pub provider_command: Command,
     pub launch_command: Vec<String>,
     pub initial_prompt: String,
+    pub sandbox_policy: SandboxPolicy,
 }
 
 #[derive(Debug, Clone)]

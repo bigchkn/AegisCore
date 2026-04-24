@@ -1,13 +1,14 @@
-use std::sync::Arc;
+use std::{path::PathBuf, sync::Arc};
 
 use aegis_core::{
     config::AgentEntry, AegisError, AegisEvent, Agent, AgentKind, AgentRegistry, AgentStatus,
-    Recorder, Result, SandboxProfile, StorageBackend, Task, TaskRegistry,
+    Recorder, Result, SandboxProfile, StorageBackend, Task, TaskRegistry, TaskStatus,
 };
 use aegis_providers::ProviderRegistry;
 use aegis_taskflow::TaskflowEngine;
 use aegis_tmux::{TmuxClient, TmuxTarget};
 use chrono::Utc;
+use serde::Deserialize;
 use uuid::Uuid;
 
 use crate::{
@@ -164,15 +165,17 @@ impl Dispatcher {
             spec.system_prompt.as_deref(),
         )?;
 
-        // Taskflow awareness injection (Task 13.7)
-        let taskflow_snippet = r#"
+        // Taskflow awareness injection (Task 13.7) - only if taskflow is active
+        if self.taskflow.is_some() {
+            let taskflow_snippet = r#"
 ### Project Context & Navigation
 You are operating within an AegisCore autonomous environment. To understand your place in the broader project roadmap, use the following tools:
 - Run `aegis taskflow status` to see the overall project health.
 - Run `aegis taskflow show <M-ID>` (e.g., M13) to see the specific tasks and design goals for your current milestone.
 - Read design documents directly at `.aegis/designs/` for deep technical context (Read-Only).
 "#;
-        initial_prompt.push_str(taskflow_snippet);
+            initial_prompt.push_str(taskflow_snippet);
+        }
 
         Ok(SpawnPlan {
             agent,
@@ -365,6 +368,120 @@ You are operating within an AegisCore autonomous environment. To understand your
         AgentRegistry::archive(self.registry.as_ref(), agent_id)
     }
 
+    pub async fn process_receipt(&self, agent_id: Uuid) -> Result<()> {
+        let agent = self.require_agent(agent_id)?;
+        self.ensure_transition(&agent.status, &AgentStatus::Reporting)?;
+        let Some(task_id) = agent.task_id else {
+            return Err(AegisError::Config {
+                field: "agent.task_id".to_string(),
+                reason: "receipt processing requires an assigned task".to_string(),
+            });
+        };
+
+        AgentRegistry::update_status(self.registry.as_ref(), agent_id, AgentStatus::Reporting)?;
+        self.events.publish(AegisEvent::AgentStatusChanged {
+            agent_id,
+            old_status: agent.status.clone(),
+            new_status: AgentStatus::Reporting,
+        });
+
+        let receipt_path = self.receipt_path(task_id);
+        let receipt_result = self.validate_receipt(task_id, &receipt_path);
+        match receipt_result {
+            Ok(()) => {
+                TaskRegistry::complete(
+                    self.registry.as_ref(),
+                    task_id,
+                    Some(receipt_path.clone()),
+                )?;
+                self.detach_and_archive(agent_id)?;
+                if let Some(tmux) = &self.tmux {
+                    let target = TmuxTarget::parse(&agent.tmux_target())?;
+                    let _ = tmux.kill_window(&target).await;
+                }
+                if agent.kind == AgentKind::Splinter && self.config.splinter_defaults.auto_cleanup {
+                    let git = GitWorktree::new(
+                        self.storage.project_root().to_path_buf(),
+                        self.storage.worktrees_dir(),
+                    );
+                    let _ = git.prune_for_agent(agent_id).await;
+                }
+                AgentRegistry::update_status(
+                    self.registry.as_ref(),
+                    agent_id,
+                    AgentStatus::Terminated,
+                )?;
+                AgentRegistry::archive(self.registry.as_ref(), agent_id)?;
+                self.events.publish(AegisEvent::AgentStatusChanged {
+                    agent_id,
+                    old_status: AgentStatus::Reporting,
+                    new_status: AgentStatus::Terminated,
+                });
+                self.events.publish(AegisEvent::TaskComplete {
+                    task_id,
+                    receipt_path: receipt_path.to_string_lossy().into_owned(),
+                });
+                Ok(())
+            }
+            Err(error) => {
+                let _ = TaskRegistry::update_status(
+                    self.registry.as_ref(),
+                    task_id,
+                    TaskStatus::Failed,
+                );
+                let _ = AgentRegistry::update_status(
+                    self.registry.as_ref(),
+                    agent_id,
+                    AgentStatus::Failed,
+                );
+                self.events.publish(AegisEvent::AgentStatusChanged {
+                    agent_id,
+                    old_status: AgentStatus::Reporting,
+                    new_status: AgentStatus::Failed,
+                });
+                Err(error)
+            }
+        }
+    }
+
+    fn receipt_path(&self, task_id: Uuid) -> PathBuf {
+        self.storage
+            .handoff_dir()
+            .join(task_id.to_string())
+            .join("receipt.json")
+    }
+
+    fn validate_receipt(&self, task_id: Uuid, path: &std::path::Path) -> Result<()> {
+        if !path.exists() {
+            return Err(AegisError::ReceiptNotFound {
+                task_id,
+                path: path.to_path_buf(),
+            });
+        }
+
+        let bytes = std::fs::read(path).map_err(|source| AegisError::StorageIo {
+            path: path.to_path_buf(),
+            source,
+        })?;
+        let receipt: CompletionReceipt =
+            serde_json::from_slice(&bytes).map_err(|source| AegisError::ReceiptInvalid {
+                path: path.to_path_buf(),
+                reason: source.to_string(),
+            })?;
+
+        if receipt.task_id != task_id {
+            return Err(AegisError::ReceiptInvalid {
+                path: path.to_path_buf(),
+                reason: format!(
+                    "receipt task_id {} does not match expected task_id {task_id}",
+                    receipt.task_id
+                ),
+            });
+        }
+
+        Ok(())
+    }
+
     fn require_agent(&self, agent_id: Uuid) -> Result<Agent> {
         AgentRegistry::get(self.registry.as_ref(), agent_id)?
             .ok_or(AegisError::AgentNotFound { agent_id })
@@ -392,6 +509,11 @@ You are operating within an AegisCore autonomous environment. To understand your
             Err(error) => Err(error),
         }
     }
+}
+
+#[derive(Debug, Deserialize)]
+struct CompletionReceipt {
+    task_id: Uuid,
 }
 
 fn spec_from_agent_entry(
@@ -457,7 +579,9 @@ fn short_id(id: Uuid) -> String {
 mod tests {
     use super::*;
     use aegis_core::{
-        config::{RawAgentConfig, RawConfig, RawGlobalConfig, RawProviderConfig},
+        config::{
+            RawAgentConfig, RawConfig, RawGlobalConfig, RawProviderConfig, RawSplinterDefaults,
+        },
         TaskCreator, TaskStatus,
     };
     use std::{collections::HashMap, sync::Arc};
@@ -480,6 +604,11 @@ mod tests {
                 ..Default::default()
             },
         )]);
+        project.splinter_defaults = Some(RawSplinterDefaults {
+            cli_provider: Some("claude-code".to_string()),
+            auto_cleanup: Some(false),
+            ..Default::default()
+        });
         project.agent = HashMap::from([(
             "architect".to_string(),
             RawAgentConfig {
@@ -494,6 +623,7 @@ mod tests {
         let registry = Arc::new(FileRegistry::new(storage.clone()));
         let providers = Arc::new(ProviderRegistry::from_config(&config).unwrap());
         let prompts = Arc::new(PromptManager::new(dir.path().to_path_buf()));
+        let taskflow = Arc::new(TaskflowEngine::new(storage.clone(), registry.clone()));
         let dispatcher = Dispatcher::new(
             registry,
             None,
@@ -501,7 +631,7 @@ mod tests {
             None,
             providers,
             prompts,
-            None, // taskflow
+            Some(taskflow),
             storage,
             EventBus::default(),
             config,
@@ -558,5 +688,83 @@ mod tests {
             .unwrap();
         assert_eq!(stored.assigned_agent_id, Some(agent_id));
         assert_eq!(stored.status, TaskStatus::Active);
+    }
+
+    #[tokio::test]
+    async fn process_receipt_completes_task_and_archives_agent() {
+        let (dispatcher, _dir) = dispatcher();
+        let task = Task {
+            task_id: Uuid::new_v4(),
+            description: "write tests".to_string(),
+            status: TaskStatus::Queued,
+            assigned_agent_id: None,
+            created_by: TaskCreator::System,
+            created_at: Utc::now(),
+            completed_at: None,
+            receipt_path: None,
+        };
+        TaskRegistry::insert(dispatcher.registry.as_ref(), &task).unwrap();
+
+        let agent_id = Uuid::new_v4();
+        dispatcher
+            .spawn_splinter_with_id(agent_id, "worker", &task, None)
+            .await
+            .unwrap();
+
+        let receipt_path = dispatcher.receipt_path(task.task_id);
+        std::fs::create_dir_all(receipt_path.parent().unwrap()).unwrap();
+        std::fs::write(
+            &receipt_path,
+            serde_json::json!({ "task_id": task.task_id }).to_string(),
+        )
+        .unwrap();
+
+        dispatcher.process_receipt(agent_id).await.unwrap();
+
+        let stored_task = TaskRegistry::get(dispatcher.registry.as_ref(), task.task_id)
+            .unwrap()
+            .unwrap();
+        assert_eq!(stored_task.status, TaskStatus::Complete);
+        assert_eq!(stored_task.receipt_path, Some(receipt_path.clone()));
+        let stored_agent = AgentRegistry::get(dispatcher.registry.as_ref(), agent_id)
+            .unwrap()
+            .unwrap();
+        assert_eq!(stored_agent.status, AgentStatus::Terminated);
+        assert!(stored_agent.terminated_at.is_some());
+    }
+
+    #[tokio::test]
+    async fn process_receipt_missing_receipt_marks_task_and_agent_failed() {
+        let (dispatcher, _dir) = dispatcher();
+        let task = Task {
+            task_id: Uuid::new_v4(),
+            description: "write tests".to_string(),
+            status: TaskStatus::Queued,
+            assigned_agent_id: None,
+            created_by: TaskCreator::System,
+            created_at: Utc::now(),
+            completed_at: None,
+            receipt_path: None,
+        };
+        TaskRegistry::insert(dispatcher.registry.as_ref(), &task).unwrap();
+
+        let agent_id = Uuid::new_v4();
+        let agent = dispatcher
+            .spawn_splinter_with_id(agent_id, "worker", &task, None)
+            .await
+            .unwrap();
+
+        let error = dispatcher.process_receipt(agent_id).await.unwrap_err();
+
+        assert!(matches!(error, AegisError::ReceiptNotFound { .. }));
+        let stored_task = TaskRegistry::get(dispatcher.registry.as_ref(), task.task_id)
+            .unwrap()
+            .unwrap();
+        assert_eq!(stored_task.status, TaskStatus::Failed);
+        let stored_agent = AgentRegistry::get(dispatcher.registry.as_ref(), agent_id)
+            .unwrap()
+            .unwrap();
+        assert_eq!(stored_agent.status, AgentStatus::Failed);
+        assert!(agent.worktree_path.exists());
     }
 }

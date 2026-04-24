@@ -2,6 +2,7 @@ pub mod agent;
 pub mod channel;
 pub mod config;
 pub mod error;
+pub mod lock;
 pub mod provider;
 pub mod recorder;
 pub mod sandbox;
@@ -15,6 +16,7 @@ pub use channel::{
 };
 pub use config::{ConfigError, EffectiveConfig, RawConfig};
 pub use error::{AegisError, Result};
+pub use lock::LockedFile;
 pub use provider::{FailoverContext, Provider, ProviderConfig, SessionRef};
 pub use recorder::{LogQuery, Recorder};
 pub use sandbox::{SandboxNetworkPolicy, SandboxPolicy, SandboxProfile};
@@ -25,11 +27,26 @@ pub use watchdog::{DetectedEvent, WatchdogAction, WatchdogSink};
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum AegisEvent {
-    AgentSpawned { agent_id: uuid::Uuid, role: String },
-    AgentStatusChanged { agent_id: uuid::Uuid, old_status: AgentStatus, new_status: AgentStatus },
-    TaskComplete { task_id: uuid::Uuid, receipt_path: String },
-    WatchdogAlert { event: DetectedEvent, action: WatchdogAction },
-    SystemNotification { message: String },
+    AgentSpawned {
+        agent_id: uuid::Uuid,
+        role: String,
+    },
+    AgentStatusChanged {
+        agent_id: uuid::Uuid,
+        old_status: AgentStatus,
+        new_status: AgentStatus,
+    },
+    TaskComplete {
+        task_id: uuid::Uuid,
+        receipt_path: String,
+    },
+    WatchdogAlert {
+        event: DetectedEvent,
+        action: WatchdogAction,
+    },
+    SystemNotification {
+        message: String,
+    },
 }
 
 #[cfg(test)]
@@ -41,17 +58,17 @@ mod tests {
     // if any trait is not object-safe, this module will not compile.
     #[allow(dead_code)]
     fn _assert_object_safe(
-        _agent_registry:   &dyn AgentRegistry,
-        _task_registry:    &dyn TaskRegistry,
-        _task_queue:       &dyn TaskQueue,
-        _channel:          &dyn Channel,
+        _agent_registry: &dyn AgentRegistry,
+        _task_registry: &dyn TaskRegistry,
+        _task_queue: &dyn TaskQueue,
+        _channel: &dyn Channel,
         _channel_registry: &dyn ChannelRegistry,
-        _provider:         &dyn Provider,
-        _sandbox_profile:  &dyn SandboxProfile,
-        _recorder:         &dyn Recorder,
-        _watchdog_sink:    &dyn WatchdogSink,
-        _storage_backend:  &dyn StorageBackend,
-        _agent_handle:     &dyn AgentHandle,
+        _provider: &dyn Provider,
+        _sandbox_profile: &dyn SandboxProfile,
+        _recorder: &dyn Recorder,
+        _watchdog_sink: &dyn WatchdogSink,
+        _storage_backend: &dyn StorageBackend,
+        _agent_handle: &dyn AgentHandle,
     ) {
     }
 
@@ -97,7 +114,10 @@ mod tests {
         };
         assert_eq!(e.agent_id(), id);
 
-        let e2 = DetectedEvent::CliCrash { agent_id: id, exit_code: Some(1) };
+        let e2 = DetectedEvent::CliCrash {
+            agent_id: id,
+            exit_code: Some(1),
+        };
         assert_eq!(e2.agent_id(), id);
     }
 
@@ -118,11 +138,20 @@ mod tests {
             }
         }
         let s = TestStorage;
-        assert_eq!(s.aegis_dir(),      Path::new("/tmp/test-project/.aegis"));
-        assert_eq!(s.state_dir(),      Path::new("/tmp/test-project/.aegis/state"));
-        assert_eq!(s.logs_dir(),       Path::new("/tmp/test-project/.aegis/logs/sessions"));
-        assert_eq!(s.registry_path(),  Path::new("/tmp/test-project/.aegis/state/registry.json"));
-        assert_eq!(s.tasks_path(),     Path::new("/tmp/test-project/.aegis/state/tasks.json"));
+        assert_eq!(s.aegis_dir(), Path::new("/tmp/test-project/.aegis"));
+        assert_eq!(s.state_dir(), Path::new("/tmp/test-project/.aegis/state"));
+        assert_eq!(
+            s.logs_dir(),
+            Path::new("/tmp/test-project/.aegis/logs/sessions")
+        );
+        assert_eq!(
+            s.registry_path(),
+            Path::new("/tmp/test-project/.aegis/state/registry.json")
+        );
+        assert_eq!(
+            s.tasks_path(),
+            Path::new("/tmp/test-project/.aegis/state/tasks.json")
+        );
 
         use uuid::Uuid;
         let id = Uuid::nil();
@@ -133,29 +162,29 @@ mod tests {
 
     #[test]
     fn agent_tmux_target_format() {
-        use uuid::Uuid;
         use chrono::Utc;
         use std::path::PathBuf;
+        use uuid::Uuid;
 
         let agent = Agent {
-            agent_id:        Uuid::new_v4(),
-            name:            "test".into(),
-            kind:            AgentKind::Bastion,
-            status:          AgentStatus::Active,
-            role:            "architect".into(),
-            parent_id:       None,
-            task_id:         None,
-            tmux_session:    "aegis".into(),
-            tmux_window:     2,
-            tmux_pane:       "%5".into(),
-            worktree_path:   PathBuf::from("/tmp/wt"),
-            cli_provider:    "claude-code".into(),
+            agent_id: Uuid::new_v4(),
+            name: "test".into(),
+            kind: AgentKind::Bastion,
+            status: AgentStatus::Active,
+            role: "architect".into(),
+            parent_id: None,
+            task_id: None,
+            tmux_session: "aegis".into(),
+            tmux_window: 2,
+            tmux_pane: "%5".into(),
+            worktree_path: PathBuf::from("/tmp/wt"),
+            cli_provider: "claude-code".into(),
             fallback_cascade: vec![],
             sandbox_profile: PathBuf::from("/tmp/p.sb"),
-            log_path:        PathBuf::from("/tmp/a.log"),
-            created_at:      Utc::now(),
-            updated_at:      Utc::now(),
-            terminated_at:   None,
+            log_path: PathBuf::from("/tmp/a.log"),
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+            terminated_at: None,
         };
         assert_eq!(agent.tmux_target(), "aegis:2.%5");
     }

@@ -1,7 +1,7 @@
-use std::sync::Arc;
-use async_trait::async_trait;
 use aegis_core::{Channel, ChannelKind, Message, Result};
 use aegis_tmux::{TmuxClient, TmuxTarget};
+use async_trait::async_trait;
+use std::sync::Arc;
 
 pub struct InjectionChannel {
     name: String,
@@ -35,9 +35,11 @@ impl Channel for InjectionChannel {
             other => other.to_string(),
         };
 
-        self.tmux.send_text(&self.target, &text).await
+        self.tmux
+            .send_text(&self.target, &text)
+            .await
             .map_err(|e| aegis_core::error::AegisError::from(e))?;
-        
+
         Ok(())
     }
 }

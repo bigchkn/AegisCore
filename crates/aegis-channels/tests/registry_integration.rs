@@ -1,5 +1,5 @@
-use aegis_core::{ChannelKind, ChannelRegistry, Result};
 use aegis_channels::registry::FileChannelRegistry;
+use aegis_core::{ChannelKind, ChannelRegistry, Result};
 use tempfile::tempdir;
 
 #[test]
