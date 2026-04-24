@@ -30,7 +30,7 @@ All LLDs derived from the HLD (§15). Each must reach `done` before its mileston
 | Channels                | `lld/channels.md`   | M6        | `aegis-channels`         | `done`     |
 | Watchdog & failover     | `lld/watchdog.md`   | M7        | `aegis-watchdog`         | `done`     |
 | Prompts                 | `lld/prompts.md`    | M8        | `aegis-controller`       | `done`     |
-| Telegram bridge         | `lld/telegram.md`   | M9        | `aegis-telegram`         | `pending`  |
+| Telegram bridge         | `lld/telegram.md`   | M9        | `aegis-telegram`         | `done`     |
 | Controller & dispatcher | `lld/controller.md` | M10       | `aegis-controller`       | `pending`  |
 | Global daemon & IPC     | `lld/daemon.md`     | M11       | `aegis-controller`       | `pending`  |
 | CLI binary              | `lld/cli.md`        | M12       | `src/`                   | `pending`  |
@@ -235,7 +235,7 @@ All LLDs derived from the HLD (§15). Each must reach `done` before its mileston
 ## Milestone 9 — Telegram Bridge: `aegis-telegram`
 
 **LLD:** `lld/telegram.md`  
-**Status:** `pending`  
+**Status:** `lld-done`  
 **Depends on:** M0
 
 ### Tasks
