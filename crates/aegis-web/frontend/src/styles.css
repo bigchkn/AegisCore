@@ -313,6 +313,75 @@ tbody tr:hover {
   height: 100%;
 }
 
+.log-view {
+  display: grid;
+  grid-template-rows: auto minmax(320px, calc(100vh - 176px));
+  border: 1px solid #303842;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #11151a;
+}
+
+.log-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 14px;
+  border-bottom: 1px solid #303842;
+  background: #171b20;
+}
+
+.log-toolbar h2 {
+  margin: 0 0 4px;
+  font-size: 0.98rem;
+}
+
+.log-toolbar p {
+  margin: 0;
+  color: #9ea7b3;
+  font-size: 0.82rem;
+}
+
+.log-controls {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.log-controls input[type="text"],
+.log-controls input:not([type]) {
+  min-height: 32px;
+  width: 220px;
+  padding: 0 10px;
+  border: 1px solid #3b4652;
+  border-radius: 6px;
+  background: #101316;
+  color: #e8eaed;
+}
+
+.log-controls label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #cbd3dd;
+}
+
+.log-lines {
+  overflow: auto;
+  padding: 12px 14px;
+  font-family: Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-size: 0.82rem;
+  line-height: 1.5;
+}
+
+.log-line {
+  min-height: 20px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 @media (max-width: 760px) {
   .app-shell {
     grid-template-columns: 1fr;

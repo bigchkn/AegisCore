@@ -3,6 +3,7 @@ import { useEffect } from 'react';
 import { fetchProjectData, fetchProjects } from '../api/thunks';
 import { useAppDispatch, useAppSelector } from '../store/hooks';
 import { AgentsView } from '../views/AgentsView';
+import { LogView } from '../views/LogView';
 import { PaneView } from '../views/PaneView';
 import { Sidebar } from './Sidebar';
 
@@ -35,7 +36,14 @@ export function App() {
           <span className="connection-pill">{connectionState}</span>
         </header>
         {error ? <div className="banner">{error}</div> : null}
-        {activeView === 'pane' ? <PaneView /> : <AgentsView />}
+        {activeView === 'pane' ? <PaneView /> : null}
+        {activeView === 'logs' ? <LogView /> : null}
+        {activeView === 'agents' ||
+        activeView === 'tasks' ||
+        activeView === 'channels' ||
+        activeView === 'taskflow' ? (
+          <AgentsView />
+        ) : null}
       </section>
     </main>
   );
