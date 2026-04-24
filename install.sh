@@ -2,9 +2,9 @@
 set -e
 
 # AegisCore Installation Script
-# Detects OS/Arch, downloads the latest binary, and installs the daemon.
+# Detects OS/Arch, builds if necessary, and installs the daemon.
 
-GITHUB_REPO="Mattew/aegis"
+GITHUB_REPO="bigchkn/AegisCore"
 INSTALL_DIR="/usr/local/bin"
 AEGIS_DIR="$HOME/.aegis"
 
@@ -28,14 +28,15 @@ fi
 
 echo "Detected: $OS-$BINARY_ARCH"
 
-# 2. Download Binary (Placeholder for GitHub Releases)
-# VERSION=$(curl -s https://api.github.com/repos/$GITHUB_REPO/releases/latest | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
-# BINARY_URL="https://github.com/$GITHUB_REPO/releases/download/$VERSION/aegis-$OS-$BINARY_ARCH.tar.gz"
-
-# For now, we assume the user has built it locally or we provide a build command.
-if [ ! -f "./target/release/aegis" ]; then
-    echo "Binary not found in target/release/aegis. Please run 'cargo build --release' first."
-    exit 1
+# 2. Build or Download Binary
+if [ ! -f "./target/release/aegis" ] || [ ! -f "./target/release/aegisd" ]; then
+    echo "Binaries not found in target/release/. Attempting to build..."
+    if ! command -v cargo &> /dev/null; then
+        echo "Error: 'cargo' is not installed and binaries are missing."
+        echo "Please install Rust/Cargo from https://rustup.rs/ or provide pre-built binaries."
+        exit 1
+    fi
+    cargo build --release
 fi
 
 # 3. Install Binary
@@ -51,7 +52,7 @@ chmod 700 "$AEGIS_DIR"
 
 # 5. Install Launchd Plist
 echo "Installing daemon..."
-"$INSTALL_DIR/aegis" daemon install
+./target/release/aegis daemon install
 
 echo "─────────────────────────────────────────────────"
 echo "AegisCore installed successfully!"

@@ -60,7 +60,7 @@ pub async fn status(printer: &Printer, client: &DaemonClient) -> Result<(), Aegi
 }
 
 pub async fn install() -> Result<(), AegisCliError> {
-    let status = std::process::Command::new("aegisd").arg("install").status()?;
+    let status = std::process::Command::new("/usr/local/bin/aegisd").arg("install").status()?;
     if !status.success() {
         return Err(AegisCliError::InvalidArg("aegisd install failed.".into()));
     }
@@ -68,7 +68,7 @@ pub async fn install() -> Result<(), AegisCliError> {
 }
 
 pub async fn uninstall() -> Result<(), AegisCliError> {
-    let status = std::process::Command::new("aegisd").arg("uninstall").status()?;
+    let status = std::process::Command::new("/usr/local/bin/aegisd").arg("uninstall").status()?;
     if !status.success() {
         return Err(AegisCliError::InvalidArg("aegisd uninstall failed.".into()));
     }
