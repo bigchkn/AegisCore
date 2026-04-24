@@ -70,7 +70,7 @@ All LLDs derived from the HLD (§15). Each must reach `done` before its mileston
 ## Milestone 1 — tmux Abstraction: `aegis-tmux`
 
 **LLD:** `lld/tmux.md`  
-**Status:** `lld-done`  
+**Status:** `in-progress`  
 **Depends on:** M0 (aegis-core types)
 
 ### Tasks
@@ -78,11 +78,11 @@ All LLDs derived from the HLD (§15). Each must reach `done` before its mileston
 | # | Task | Crate | Status | Notes |
 |---|---|---|---|---|
 | 1.1 | Write `lld/tmux.md` | — | `done` | TmuxClient API, escaping strategy, pipe-pane lifecycle, test plan |
-| 1.2 | Implement `TmuxClient`: session/window/pane lifecycle | `aegis-tmux` | `pending` | |
-| 1.3 | Implement `TmuxClient`: `send-keys` + `-l` literal flag + escape | `aegis-tmux` | `pending` | |
-| 1.4 | Implement `TmuxClient`: `capture-pane` (raw + plain) | `aegis-tmux` | `pending` | |
-| 1.5 | Implement `TmuxClient`: `pipe-pane` attach/detach | `aegis-tmux` | `pending` | |
-| 1.6 | Implement `TmuxClient`: pane liveness (`pane_is_alive`, `pane_exit_status`) | `aegis-tmux` | `pending` | |
+| 1.2 | Implement `TmuxClient`: session/window/pane lifecycle | `aegis-tmux` | `in-progress` | |
+| 1.3 | Implement `TmuxClient`: `send-keys` + `-l` literal flag + escape | `aegis-tmux` | `in-progress` | |
+| 1.4 | Implement `TmuxClient`: `capture-pane` (raw + plain) | `aegis-tmux` | `in-progress` | |
+| 1.5 | Implement `TmuxClient`: `pipe-pane` attach/detach | `aegis-tmux` | `in-progress` | |
+| 1.6 | Implement `TmuxClient`: pane liveness (`pane_is_alive`, `pane_exit_status`) | `aegis-tmux` | `in-progress` | |
 | 1.7 | Integration tests against real tmux process | `aegis-tmux` | `pending` | CI must have tmux installed |
 
 ---

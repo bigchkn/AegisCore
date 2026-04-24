@@ -9,9 +9,9 @@
 
 ## 1. Purpose
 
-`aegis-providers` implements the `Provider` trait from `aegis-core` for each supported CLI tool. It also provides `ProviderRegistry`, which loads provider instances from config and builds failover cascades at startup.
+`aegis-providers` implements the `Provider` trait from `aegis-core` for each supported CLI tool. Instead of hardcoding execution logic, it uses an **internal, application-owned manifest** (embedded via `include_str!`) that defines the CLI calling conventions, flags for auto-approval/non-interactive modes, and error patterns. 
 
-Each provider knows how to: spawn its CLI in a worktree, resume a previous session, detect its own error conditions, and generate a handoff prompt for the receiving CLI during failover.
+This ensures that the "shape" of how to call external CLIs is owned by AegisCore and can be thoroughly validated via tests, while the user-facing config in `aegis.toml` only handles provider selection and basic binary paths.
 
 ---
 
@@ -22,7 +22,9 @@ crates/aegis-providers/
 ├── Cargo.toml
 └── src/
     ├── lib.rs              ← re-exports ProviderRegistry + all providers behind feature flags
-    ├── registry.rs         ← ProviderRegistry: load from config, resolve cascades
+    ├── manifest.rs         ← ProviderManifest: internal YAML/TOML parser for builtin definitions
+    ├── builtin_providers.yaml ← EMBEDDED: The authoritative definitions for all CLI tools
+    ├── registry.rs         ← ProviderRegistry: load from manifest + user config
     ├── claude.rs           ← ClaudeProvider   (feature = "claude")
     ├── gemini.rs           ← GeminiProvider   (feature = "gemini")
     ├── codex.rs            ← CodexProvider    (feature = "codex")
@@ -51,18 +53,46 @@ No network dependencies — providers only construct `std::process::Command`. Ne
 
 ---
 
+## 3. Provider Manifest Schema
+
+The `builtin_providers.yaml` defines the execution template for each CLI.
+
+```yaml
+providers:
+  claude-code:
+    binary: "claude"
+    auto_approve_flags: ["--yolo"]
+    non_interactive_flags: ["--non-interactive"]
+    resume_flag: "--resume"
+    error_patterns:
+      rate_limit: ["rate limit", "429", "usage limit reached"]
+      auth: ["401", "authentication failed"]
+
+  gemini-cli:
+    binary: "gemini"
+    auto_approve_flags: ["--yes"]
+    non_interactive_flags: []
+    resume_command: "/resume {session_id}" # Injected via send-keys
+    error_patterns:
+      rate_limit: ["quota exceeded", "429"]
+      auth: ["401", "permission denied"]
+```
+
+---
+
 ## 4. `Provider` Trait Implementation Pattern
 
-Each provider is a zero-sized struct with a `ProviderConfig` captured at construction time.
+Each provider is a zero-sized struct that references its corresponding entry from the internal manifest.
 
 ```rust
 pub struct ClaudeProvider {
-    config: ProviderConfig,
+    manifest: ProviderDefinition,
+    user_config: ProviderConfig, // Contains binary override from aegis.toml
 }
 
 impl ClaudeProvider {
-    pub fn from_config(config: ProviderConfig) -> Self {
-        Self { config }
+    pub fn new(manifest: ProviderDefinition, user_config: ProviderConfig) -> Self {
+        Self { manifest, user_config }
     }
 }
 ```
@@ -73,24 +103,24 @@ impl ClaudeProvider {
 
 ### 5.1 `ClaudeProvider` — `claude-code`
 
-| Property | Value |
-|---|---|
-| Default binary | `claude` |
-| Session resume flag | `--resume <session_id>` |
-| Context export command | `/export` (injected as send-keys text) |
-| Rate limit patterns | `"rate limit"`, `"429"`, `"credit balance exhausted"`, `"usage limit reached"` |
-| Auth error patterns | `"401"`, `"authentication failed"`, `"invalid api key"` |
-| Task complete patterns | User-defined via `watchdog.patterns.task_complete` |
+The `ClaudeProvider` uses the manifest to build the command. Splinters always append `auto_approve_flags`.
 
 ```rust
 impl Provider for ClaudeProvider {
     fn name(&self) -> &str { "claude-code" }
 
     fn spawn_command(&self, worktree: &Path, session: Option<&SessionRef>) -> Command {
-        let mut cmd = Command::new(&self.config.binary);
+        // Use user-provided binary if set, else manifest default
+        let bin = self.user_config.binary.as_ref().unwrap_or(&self.manifest.binary);
+        let mut cmd = Command::new(bin);
         cmd.current_dir(worktree);
+
+        // Splinters run unattended
+        cmd.args(&self.manifest.auto_approve_flags);
+        cmd.args(&self.manifest.non_interactive_flags);
+
         if let Some(s) = session {
-            if let Some(flag) = &self.config.resume_flag {
+            if let Some(flag) = &self.manifest.resume_flag {
                 cmd.arg(flag).arg(&s.session_id);
             }
         }
@@ -98,10 +128,12 @@ impl Provider for ClaudeProvider {
     }
 
     fn resume_args(&self, session: &SessionRef) -> Vec<String> {
-        vec![
-            self.config.resume_flag.clone().unwrap_or_else(|| "--resume".into()),
-            session.session_id.clone(),
-        ]
+        let mut args = Vec::new();
+        if let Some(flag) = &self.manifest.resume_flag {
+            args.push(flag.clone());
+            args.push(session.session_id.clone());
+        }
+        args
     }
 
     fn export_context_command(&self) -> Option<&str> {
@@ -110,15 +142,12 @@ impl Provider for ClaudeProvider {
 
     fn is_rate_limit_error(&self, line: &str) -> bool {
         let l = line.to_lowercase();
-        l.contains("rate limit") || l.contains("429")
-            || l.contains("credit balance exhausted")
-            || l.contains("usage limit reached")
+        self.manifest.error_patterns.rate_limit.iter().any(|p| l.contains(p))
     }
 
     fn is_auth_error(&self, line: &str) -> bool {
         let l = line.to_lowercase();
-        l.contains("401") || l.contains("authentication failed")
-            || l.contains("invalid api key")
+        self.manifest.error_patterns.auth.iter().any(|p| l.contains(p))
     }
 
     fn is_task_complete(&self, line: &str) -> bool {
@@ -133,33 +162,39 @@ impl Provider for ClaudeProvider {
 
 ### 5.2 `GeminiProvider` — `gemini-cli`
 
-| Property | Value |
-|---|---|
-| Default binary | `gemini` |
-| Session resume | `/resume <session_id>` injected via send-keys (not a CLI flag) |
-| Context export command | `/checkpoint save aegis-handoff` |
-| Rate limit patterns | `"quota exceeded"`, `"429"`, `"resource exhausted"`, `"too many requests"` |
-| Auth error patterns | `"401"`, `"api key"`, `"permission denied"` |
-
 ```rust
 impl Provider for GeminiProvider {
+    fn name(&self) -> &str { "gemini-cli" }
+
+    fn spawn_command(&self, worktree: &Path, _session: Option<&SessionRef>) -> Command {
+        let bin = self.user_config.binary.as_ref().unwrap_or(&self.manifest.binary);
+        let mut cmd = Command::new(bin);
+        cmd.current_dir(worktree);
+        
+        // Unattended flags from manifest
+        cmd.args(&self.manifest.auto_approve_flags);
+        cmd.args(&self.manifest.non_interactive_flags);
+
+        cmd
+    }
+
     fn resume_args(&self, _session: &SessionRef) -> Vec<String> {
-        // Gemini resume is done via injected command, not CLI args.
-        // The controller calls export_context_command() + send_text() instead.
-        vec![]
+        vec![] // Gemini resume via post-spawn injection
     }
 
     fn export_context_command(&self) -> Option<&str> {
         Some("/checkpoint save aegis-handoff")
     }
 
-    fn spawn_command(&self, worktree: &Path, _session: Option<&SessionRef>) -> Command {
-        let mut cmd = Command::new(&self.config.binary);
-        cmd.current_dir(worktree);
-        // Session resume for Gemini is injected post-spawn via send-keys, not as CLI arg.
-        cmd
+    fn is_rate_limit_error(&self, line: &str) -> bool {
+        let l = line.to_lowercase();
+        self.manifest.error_patterns.rate_limit.iter().any(|p| l.contains(p))
     }
-    // ... is_rate_limit_error, is_auth_error, failover_handoff_prompt as above
+
+    fn is_auth_error(&self, line: &str) -> bool {
+        let l = line.to_lowercase();
+        self.manifest.error_patterns.auth.iter().any(|p| l.contains(p))
+    }
 }
 ```
 
@@ -170,37 +205,43 @@ impl Provider for GeminiProvider {
 
 ### 5.3 `CodexProvider` — `codex`
 
-| Property | Value |
-|---|---|
-| Default binary | `codex` |
-| Session resume | Project-indexed (stateless per run; context passed via initial prompt) |
-| Context export command | `None` |
-| Rate limit patterns | `"rate limit"`, `"429"`, `"insufficient_quota"`, `"exceeded your current quota"` |
-| Auth error patterns | `"401"`, `"incorrect api key"`, `"api key"` |
-
-### 5.4 `OllamaProvider` — local fallback
-
-| Property | Value |
-|---|---|
-| Default binary | `ollama` |
-| Default model | `gemma3` (from config `providers.ollama.model`) |
-| Session resume | Stateless — context injected in initial prompt only |
-| Context export command | `None` |
-| Rate limit patterns | `[]` — local; no rate limits |
-| Auth error patterns | `[]` — no auth |
-
 ```rust
-impl Provider for OllamaProvider {
+impl Provider for CodexProvider {
+    fn name(&self) -> &str { "codex" }
+
     fn spawn_command(&self, worktree: &Path, _session: Option<&SessionRef>) -> Command {
-        let mut cmd = Command::new(&self.config.binary);
-        cmd.args(["run", self.config.model.as_deref().unwrap_or("gemma3")]);
+        let bin = self.user_config.binary.as_ref().unwrap_or(&self.manifest.binary);
+        let mut cmd = Command::new(bin);
         cmd.current_dir(worktree);
+        // Codex is typically stateless; context is passed in the initial prompt
         cmd
     }
 
-    fn is_rate_limit_error(&self, _line: &str) -> bool { false }
-    fn is_auth_error(&self, _line: &str) -> bool { false }
-    fn export_context_command(&self) -> Option<&str> { None }
+    fn is_rate_limit_error(&self, line: &str) -> bool {
+        let l = line.to_lowercase();
+        self.manifest.error_patterns.rate_limit.iter().any(|p| l.contains(p))
+    }
+}
+```
+
+### 5.4 `OllamaProvider` — local fallback
+
+```rust
+impl Provider for OllamaProvider {
+    fn name(&self) -> &str { "ollama" }
+
+    fn spawn_command(&self, worktree: &Path, _session: Option<&SessionRef>) -> Command {
+        let bin = self.user_config.binary.as_ref().unwrap_or(&self.manifest.binary);
+        let mut cmd = Command::new(bin);
+        cmd.current_dir(worktree);
+        
+        // Ollama specific: 'run <model>'
+        let model = self.user_config.model.as_deref().unwrap_or("gemma3");
+        cmd.args(["run", model]);
+        cmd
+    }
+
+    fn is_rate_limit_error(&self, _line: &str) -> bool { false } // Local
 }
 ```
 
@@ -244,62 +285,39 @@ pub fn render_handoff_prompt(ctx: &FailoverContext) -> String {
 
 ## 7. `ProviderRegistry`
 
-Loads all configured providers from `EffectiveConfig` and provides failover cascade resolution.
+Loads the internal manifest and user overrides, providing failover cascade resolution.
 
 ```rust
 pub struct ProviderRegistry {
+    manifest: BuiltinManifest,
     providers: HashMap<String, Box<dyn Provider>>,
 }
 
 impl ProviderRegistry {
-    /// Build from resolved config. Only registers providers that are
-    /// compiled in (feature-gated) and present in config.
-    pub fn from_config(cfg: &EffectiveConfig) -> Result<Self>;
-
-    /// Get a provider by name.
-    pub fn get(&self, name: &str) -> Result<&dyn Provider>;
-
-    /// Build the ordered failover sequence for an agent:
-    /// [primary_provider, ...fallback_cascade providers]
-    /// Validates all names exist in the registry.
-    pub fn cascade_for_agent(&self, agent: &AgentEntry) -> Result<Vec<&dyn Provider>>;
-
-    /// Step to the next provider in the cascade.
-    /// Returns None if already at the last provider.
-    pub fn next_in_cascade<'a>(
-        &'a self,
-        cascade: &[&'a dyn Provider],
-        current: &str,
-    ) -> Option<&'a dyn Provider>;
+    /// Load the internal manifest and merge with user binary overrides.
+    pub fn from_config(cfg: &EffectiveConfig) -> Result<Self> {
+        let manifest_raw = include_str!("builtin_providers.yaml");
+        let manifest: BuiltinManifest = serde_yaml::from_str(manifest_raw)?;
+        // ... build providers mapping
+    }
 }
 ```
 
 ### 7.1 Registration Logic
 
-`from_config()` iterates `cfg.providers` and constructs the appropriate provider type based on the key name and compiled features:
+`from_config()` iterates the **internal manifest**, creating providers while applying any user binary overrides from `cfg.providers`.
 
 ```rust
-for (name, entry) in &cfg.providers {
-    let config = ProviderConfig {
-        name: name.clone(),
-        binary: entry.binary.clone(),
-        resume_flag: entry.resume_flag.clone(),
-        model: entry.model.clone(),
-        extra_args: entry.extra_args.clone(),
-    };
+for (name, definition) in &self.manifest.providers {
+    // Get user-provided config (e.g. custom binary path)
+    let user_config = cfg.providers.get(name).cloned().unwrap_or_default();
+
     let provider: Box<dyn Provider> = match name.as_str() {
         #[cfg(feature = "claude")]
-        "claude-code" => Box::new(ClaudeProvider::from_config(config)),
+        "claude-code" => Box::new(ClaudeProvider::new(definition.clone(), user_config)),
         #[cfg(feature = "gemini")]
-        "gemini-cli"  => Box::new(GeminiProvider::from_config(config)),
-        #[cfg(feature = "codex")]
-        "codex"       => Box::new(CodexProvider::from_config(config)),
-        #[cfg(feature = "ollama")]
-        "ollama"      => Box::new(OllamaProvider::from_config(config)),
-        other => {
-            tracing::warn!("provider `{other}` is configured but not compiled in; skipping");
-            continue;
-        }
+        "gemini-cli"  => Box::new(GeminiProvider::new(definition.clone(), user_config)),
+        // ...
     };
     providers.insert(name.clone(), provider);
 }
@@ -309,7 +327,7 @@ for (name, entry) in &cfg.providers {
 
 ## 8. Error Pattern Matching Note
 
-`is_rate_limit_error()` and `is_auth_error()` are called by the Watchdog on each captured pane line. The patterns in §5 are hardcoded defaults. The Watchdog *also* checks `watchdog.patterns.rate_limit` from config (user-defined) — both are OR'd together. Provider methods handle provider-specific known strings; config handles user-added patterns.
+`is_rate_limit_error()` and `is_auth_error()` are called by the Watchdog on each captured pane line. These methods now iterate patterns defined in the **internal manifest** (`self.manifest.error_patterns`). The Watchdog *also* checks `watchdog.patterns` from `aegis.toml` (user-defined) — both are OR'd together.
 
 ---
 
@@ -317,13 +335,12 @@ for (name, entry) in &cfg.providers {
 
 | Test | Asserts |
 |---|---|
-| `test_claude_spawn_command_no_resume` | Command has correct binary and working dir |
-| `test_claude_spawn_command_with_resume` | `--resume <id>` present when SessionRef provided |
-| `test_claude_rate_limit_patterns` | All known rate-limit strings match |
-| `test_claude_auth_patterns` | All known auth-error strings match |
-| `test_ollama_no_rate_limit` | `is_rate_limit_error` always false |
-| `test_gemini_export_command` | Returns `/checkpoint save aegis-handoff` |
-| `test_handoff_prompt_contains_context` | Rendered prompt includes terminal context and task |
+| `test_manifest_parsing` | `builtin_providers.yaml` parses correctly into `BuiltinManifest` |
+| `test_claude_spawn_unattended` | Command includes `--yolo` and `--non-interactive` |
+| `test_claude_spawn_with_resume` | `--resume <id>` present when SessionRef provided |
+| `test_gemini_spawn_unattended` | Command includes `--yes` |
+| `test_rate_limit_detection_from_manifest` | Matches all strings defined in the manifest for a provider |
+| `test_auth_error_detection_from_manifest` | Matches all strings defined in the manifest for a provider |
+| `test_registry_binary_override` | User-provided `binary` in `aegis.toml` takes precedence over manifest |
 | `test_registry_cascade_ordering` | `cascade_for_agent` returns `[primary, ...cascade]` in order |
-| `test_registry_next_in_cascade` | Steps through cascade correctly; returns None at end |
-| `test_registry_unknown_provider_skipped` | Unrecognized provider name logged and skipped |
+| `test_handoff_prompt_contains_context` | Rendered prompt includes terminal context and task |
