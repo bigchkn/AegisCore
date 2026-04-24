@@ -47,6 +47,26 @@ pub enum AegisEvent {
     SystemNotification {
         message: String,
     },
+    AgentTerminated {
+        agent_id: uuid::Uuid,
+        reason: String,
+    },
+    FailoverInitiated {
+        agent_id: uuid::Uuid,
+        from_provider: String,
+        to_provider: String,
+    },
+    TaskAssigned {
+        task_id: uuid::Uuid,
+        agent_id: uuid::Uuid,
+    },
+    ChannelAdded {
+        channel_name: String,
+        channel_type: ChannelKind,
+    },
+    ChannelRemoved {
+        channel_name: String,
+    },
 }
 
 #[cfg(test)]
