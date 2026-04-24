@@ -77,6 +77,7 @@ All providers are configured in `aegis.toml`. Failover cascades are user-defined
 ## Documentation
 
 - **[Getting Started](GETTING_STARTED.md)**: Installation and your first agent.
+- **[TUI Guide](TUI.md)**: Full reference for the interactive terminal dashboard — layout, modes, key bindings, and common workflows.
 - **[Taskflow System](TASKFLOW.md)**: How AegisCore manages project roadmaps and agent alignment.
 - **[Architecture (HLD)](.aegis/designs/hld/aegis.md)**: Deep dive into the system design.
 
