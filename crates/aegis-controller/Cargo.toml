@@ -7,12 +7,28 @@ license = "MIT"
 
 [dependencies]
 aegis-core = { workspace = true }
+aegis-tmux = { workspace = true }
+aegis-providers = { workspace = true }
 tracing    = { workspace = true }
 serde      = { workspace = true }
 serde_json = { workspace = true }
 fs2        = "0.4"
 uuid       = { version = "1", features = ["v4", "serde"] }
 chrono     = { version = "0.4", features = ["serde"] }
-tokio      = { version = "1", features = ["fs", "time", "rt", "rt-multi-thread"] }
+tokio      = { version = "1", features = ["fs", "time", "rt", "rt-multi-thread", "net", "macros", "sync"] }
 async-trait = "0.1"
 tempfile = "3" # for atomic writes
+
+# M11 Daemon & IPC dependencies
+axum = { version = "0.7", features = ["ws"] }
+tower-http = { version = "0.5", features = ["fs", "cors", "trace"] }
+tokio-util = { version = "0.7", features = ["codec"] }
+futures-util = "0.3"
+
+[features]
+default = ["channels", "sandbox", "watchdog", "recorder"]
+channels = []
+sandbox = []
+watchdog = []
+recorder = []
+telegram = []

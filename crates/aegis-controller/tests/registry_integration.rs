@@ -1,13 +1,13 @@
-use std::sync::Arc;
-use std::path::{Path, PathBuf};
-use uuid::Uuid;
-use chrono::Utc;
-use aegis_core::storage::StorageBackend;
-use aegis_core::agent::{Agent, AgentKind, AgentStatus, AgentRegistry};
-use aegis_core::task::{TaskQueue, TaskRegistry, TaskCreator, TaskStatus};
 use aegis_controller::registry::FileRegistry;
 use aegis_controller::state::StateManager;
+use aegis_core::agent::{Agent, AgentKind, AgentRegistry, AgentStatus};
+use aegis_core::storage::StorageBackend;
+use aegis_core::task::{TaskCreator, TaskQueue};
+use chrono::Utc;
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use tempfile::tempdir;
+use uuid::Uuid;
 
 struct MockStorage {
     root: PathBuf,
@@ -21,10 +21,12 @@ impl StorageBackend for MockStorage {
 
 fn setup_registry() -> (FileRegistry, Arc<MockStorage>, tempfile::TempDir) {
     let dir = tempdir().unwrap();
-    let storage = Arc::new(MockStorage { root: dir.path().to_path_buf() });
-    
+    let storage = Arc::new(MockStorage {
+        root: dir.path().to_path_buf(),
+    });
+
     FileRegistry::init(storage.as_ref()).unwrap();
-    
+
     let registry = FileRegistry::new(storage.clone());
     (registry, storage, dir)
 }
@@ -55,7 +57,9 @@ fn test_agent_roundtrip() {
     };
 
     AgentRegistry::insert(&registry, &agent).unwrap();
-    let fetched = AgentRegistry::get(&registry, agent_id).unwrap().expect("Agent not found");
+    let fetched = AgentRegistry::get(&registry, agent_id)
+        .unwrap()
+        .expect("Agent not found");
     assert_eq!(fetched.name, "test-agent");
     assert_eq!(fetched.status, AgentStatus::Starting);
 
@@ -68,19 +72,23 @@ fn test_agent_roundtrip() {
 fn test_task_claiming() {
     let (registry, _, _dir) = setup_registry();
     let agent_id = Uuid::new_v4();
-    
+
     let t1 = TaskQueue::enqueue(&registry, "Task 1", TaskCreator::System).unwrap();
     let t2 = TaskQueue::enqueue(&registry, "Task 2", TaskCreator::System).unwrap();
-    
+
     assert_eq!(TaskQueue::pending_count(&registry).unwrap(), 2);
-    
-    let claimed = TaskQueue::claim_next(&registry, agent_id).unwrap().expect("Should claim t1");
+
+    let claimed = TaskQueue::claim_next(&registry, agent_id)
+        .unwrap()
+        .expect("Should claim t1");
     assert_eq!(claimed.task_id, t1);
     assert_eq!(claimed.description, "Task 1");
-    
+
     assert_eq!(TaskQueue::pending_count(&registry).unwrap(), 1);
-    
-    let claimed2 = TaskQueue::claim_next(&registry, agent_id).unwrap().expect("Should claim t2");
+
+    let claimed2 = TaskQueue::claim_next(&registry, agent_id)
+        .unwrap()
+        .expect("Should claim t2");
     assert_eq!(claimed2.task_id, t2);
 }
 
@@ -88,7 +96,7 @@ fn test_task_claiming() {
 fn test_snapshot_and_recovery() {
     let (registry, storage, _dir) = setup_registry();
     let state_manager = StateManager::new(storage.clone());
-    
+
     // 1. Add some state
     let agent_id = Uuid::new_v4();
     let agent = Agent {
@@ -115,15 +123,15 @@ fn test_snapshot_and_recovery() {
 
     // 2. Snapshot
     state_manager.snapshot_now().unwrap();
-    
+
     // 3. Corrupt registry
     std::fs::write(storage.registry_path(), "CORRUPT JSON").unwrap();
-    
+
     // 4. Recover
     let result = state_manager.recover().unwrap();
     assert!(result.registry_restored);
     assert_eq!(result.agents_marked_failed, 1);
-    
+
     // 5. Verify agent status changed to Failed
     let recovered = AgentRegistry::get(&registry, agent_id).unwrap().unwrap();
     assert_eq!(recovered.status, AgentStatus::Failed);

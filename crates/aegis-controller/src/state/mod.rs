@@ -1,12 +1,12 @@
+use crate::registry::agents::AgentStore;
+use aegis_core::agent::AgentStatus;
+use aegis_core::error::{AegisError, Result};
+use aegis_core::storage::StorageBackend;
+use chrono::Utc;
+use std::fs;
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::fs;
-use chrono::Utc;
-use tracing::{info, warn, debug};
-use aegis_core::storage::StorageBackend;
-use aegis_core::error::{Result, AegisError};
-use aegis_core::agent::AgentStatus;
-use crate::registry::agents::AgentStore;
+use tracing::{debug, info, warn};
 
 pub struct StateManager {
     pub storage: Arc<dyn StorageBackend>,
@@ -29,7 +29,10 @@ impl StateManager {
         if !registry_path.exists() {
             return Err(AegisError::StorageIo {
                 path: registry_path,
-                source: std::io::Error::new(std::io::ErrorKind::NotFound, "registry.json not found"),
+                source: std::io::Error::new(
+                    std::io::ErrorKind::NotFound,
+                    "registry.json not found",
+                ),
             });
         }
 
@@ -91,10 +94,11 @@ impl StateManager {
             warn!("registry.json missing, attempting recovery from snapshot");
         } else {
             // Try to parse it
-            let content = fs::read_to_string(&registry_path).map_err(|e| AegisError::StorageIo {
-                path: registry_path.clone(),
-                source: e,
-            })?;
+            let content =
+                fs::read_to_string(&registry_path).map_err(|e| AegisError::StorageIo {
+                    path: registry_path.clone(),
+                    source: e,
+                })?;
             if serde_json::from_str::<AgentStore>(&content).is_err() {
                 needs_restore = true;
                 warn!("registry.json corrupted, attempting recovery from snapshot");
@@ -112,7 +116,8 @@ impl StateManager {
                 .collect::<Vec<_>>();
 
             // Sort by modification time (newest first)
-            snapshots.sort_by_key(|e| std::cmp::Reverse(e.metadata().and_then(|m| m.modified()).ok()));
+            snapshots
+                .sort_by_key(|e| std::cmp::Reverse(e.metadata().and_then(|m| m.modified()).ok()));
 
             if let Some(latest) = snapshots.first() {
                 fs::copy(latest.path(), &registry_path).map_err(|e| AegisError::StorageIo {
@@ -133,14 +138,18 @@ impl StateManager {
             path: registry_path.clone(),
             source: e,
         })?;
-        let mut store: AgentStore = serde_json::from_str(&content).map_err(|e| AegisError::RegistryCorrupted {
-            path: registry_path.clone(),
-            source: e,
-        })?;
+        let mut store: AgentStore =
+            serde_json::from_str(&content).map_err(|e| AegisError::RegistryCorrupted {
+                path: registry_path.clone(),
+                source: e,
+            })?;
 
         for agent in &mut store.agents {
             match agent.status {
-                AgentStatus::Starting | AgentStatus::Active | AgentStatus::Cooling | AgentStatus::Reporting => {
+                AgentStatus::Starting
+                | AgentStatus::Active
+                | AgentStatus::Cooling
+                | AgentStatus::Reporting => {
                     agent.status = AgentStatus::Failed;
                     agent.updated_at = Utc::now();
                     result.agents_marked_failed += 1;
@@ -155,10 +164,11 @@ impl StateManager {
         }
 
         // Write back cleaned up store
-        let json = serde_json::to_string_pretty(&store).map_err(|e| AegisError::RegistryCorrupted {
-            path: registry_path.clone(),
-            source: e,
-        })?;
+        let json =
+            serde_json::to_string_pretty(&store).map_err(|e| AegisError::RegistryCorrupted {
+                path: registry_path.clone(),
+                source: e,
+            })?;
         fs::write(&registry_path, json).map_err(|e| AegisError::StorageIo {
             path: registry_path.clone(),
             source: e,

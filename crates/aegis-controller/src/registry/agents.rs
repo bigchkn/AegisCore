@@ -1,11 +1,11 @@
-use std::sync::Arc;
-use uuid::Uuid;
+use crate::registry::LockedFile;
+use aegis_core::agent::{Agent, AgentRegistry, AgentStatus};
+use aegis_core::error::{AegisError, Result};
+use aegis_core::storage::StorageBackend;
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
-use aegis_core::agent::{Agent, AgentRegistry, AgentStatus};
-use aegis_core::storage::StorageBackend;
-use aegis_core::error::{Result, AegisError};
-use crate::registry::LockedFile;
+use std::sync::Arc;
+use uuid::Uuid;
 
 #[derive(Debug, Default, Serialize, Deserialize)]
 pub struct AgentStore {
@@ -33,19 +33,38 @@ impl FileRegistry {
             source: e,
         })?;
 
-        Self::write_if_absent(&storage.registry_path(), &AgentStore { version: 1, ..Default::default() })?;
-        Self::write_if_absent(&storage.tasks_path(), &crate::registry::tasks::TaskStore { version: 1, ..Default::default() })?;
-        Self::write_if_absent(&storage.channels_state_path(), &crate::registry::channels::ChannelStore { version: 1, ..Default::default() })?;
-        
+        Self::write_if_absent(
+            &storage.registry_path(),
+            &AgentStore {
+                version: 1,
+                ..Default::default()
+            },
+        )?;
+        Self::write_if_absent(
+            &storage.tasks_path(),
+            &crate::registry::tasks::TaskStore {
+                version: 1,
+                ..Default::default()
+            },
+        )?;
+        Self::write_if_absent(
+            &storage.channels_state_path(),
+            &crate::registry::channels::ChannelStore {
+                version: 1,
+                ..Default::default()
+            },
+        )?;
+
         Ok(())
     }
 
     fn write_if_absent<T: Serialize>(path: &std::path::Path, value: &T) -> Result<()> {
         if !path.exists() {
-            let json = serde_json::to_string_pretty(value).map_err(|e| AegisError::RegistryCorrupted {
-                path: path.to_path_buf(),
-                source: e,
-            })?;
+            let json =
+                serde_json::to_string_pretty(value).map_err(|e| AegisError::RegistryCorrupted {
+                    path: path.to_path_buf(),
+                    source: e,
+                })?;
             std::fs::write(path, json).map_err(|e| AegisError::StorageIo {
                 path: path.to_path_buf(),
                 source: e,
@@ -66,31 +85,39 @@ impl AgentRegistry for FileRegistry {
     fn get(&self, agent_id: Uuid) -> Result<Option<Agent>> {
         let mut file = LockedFile::open_shared(&self.storage.registry_path())?;
         let store: AgentStore = file.read_json()?;
-        
-        let found = store.agents.iter()
+
+        let found = store
+            .agents
+            .iter()
             .chain(store.archived.iter())
             .find(|a| a.agent_id == agent_id)
             .cloned();
-            
+
         Ok(found)
     }
 
     fn update(&self, agent: &Agent) -> Result<()> {
         let mut file = LockedFile::open_exclusive(&self.storage.registry_path())?;
         let mut store: AgentStore = file.read_json()?;
-        
-        if let Some(idx) = store.agents.iter().position(|a| a.agent_id == agent.agent_id) {
+
+        if let Some(idx) = store
+            .agents
+            .iter()
+            .position(|a| a.agent_id == agent.agent_id)
+        {
             store.agents[idx] = agent.clone();
             file.write_json_atomic(&store)
         } else {
-            Err(AegisError::AgentNotFound { agent_id: agent.agent_id })
+            Err(AegisError::AgentNotFound {
+                agent_id: agent.agent_id,
+            })
         }
     }
 
     fn update_status(&self, agent_id: Uuid, status: AgentStatus) -> Result<()> {
         let mut file = LockedFile::open_exclusive(&self.storage.registry_path())?;
         let mut store: AgentStore = file.read_json()?;
-        
+
         if let Some(agent) = store.agents.iter_mut().find(|a| a.agent_id == agent_id) {
             agent.status = status;
             agent.updated_at = Utc::now();
@@ -103,7 +130,7 @@ impl AgentRegistry for FileRegistry {
     fn update_provider(&self, agent_id: Uuid, provider: &str) -> Result<()> {
         let mut file = LockedFile::open_exclusive(&self.storage.registry_path())?;
         let mut store: AgentStore = file.read_json()?;
-        
+
         if let Some(agent) = store.agents.iter_mut().find(|a| a.agent_id == agent_id) {
             agent.cli_provider = provider.to_string();
             agent.updated_at = Utc::now();
@@ -116,13 +143,20 @@ impl AgentRegistry for FileRegistry {
     fn list_active(&self) -> Result<Vec<Agent>> {
         let mut file = LockedFile::open_shared(&self.storage.registry_path())?;
         let store: AgentStore = file.read_json()?;
-        Ok(store.agents.iter().filter(|a| !a.status.is_terminal()).cloned().collect())
+        Ok(store
+            .agents
+            .iter()
+            .filter(|a| !a.status.is_terminal())
+            .cloned()
+            .collect())
     }
 
     fn list_by_role(&self, role: &str) -> Result<Vec<Agent>> {
         let mut file = LockedFile::open_shared(&self.storage.registry_path())?;
         let store: AgentStore = file.read_json()?;
-        Ok(store.agents.iter()
+        Ok(store
+            .agents
+            .iter()
             .filter(|a| !a.status.is_terminal() && a.role == role)
             .cloned()
             .collect())
@@ -139,7 +173,7 @@ impl AgentRegistry for FileRegistry {
     fn archive(&self, agent_id: Uuid) -> Result<()> {
         let mut file = LockedFile::open_exclusive(&self.storage.registry_path())?;
         let mut store: AgentStore = file.read_json()?;
-        
+
         if let Some(pos) = store.agents.iter().position(|a| a.agent_id == agent_id) {
             let mut agent = store.agents.remove(pos);
             agent.terminated_at = Some(Utc::now());

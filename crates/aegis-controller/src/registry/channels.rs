@@ -1,8 +1,8 @@
+use crate::registry::{FileRegistry, LockedFile};
+use aegis_core::channel::{ChannelKind, ChannelRecord, ChannelRegistry};
+use aegis_core::error::{AegisError, Result};
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
-use aegis_core::channel::{ChannelRegistry, ChannelRecord, ChannelKind};
-use aegis_core::error::{Result, AegisError};
-use crate::registry::{FileRegistry, LockedFile};
 
 #[derive(Debug, Default, Serialize, Deserialize)]
 pub struct ChannelStore {
@@ -14,12 +14,12 @@ impl ChannelRegistry for FileRegistry {
     fn register(&self, name: &str, kind: ChannelKind) -> Result<()> {
         let mut file = LockedFile::open_exclusive(&self.storage.channels_state_path())?;
         let mut store: ChannelStore = file.read_json()?;
-        
+
         if store.channels.iter().any(|c| c.name == name) {
             // Already registered
             return Ok(());
         }
-        
+
         let record = ChannelRecord {
             name: name.to_string(),
             kind,
@@ -27,7 +27,7 @@ impl ChannelRegistry for FileRegistry {
             registered_at: Utc::now(),
             config: serde_json::Value::Null,
         };
-        
+
         store.channels.push(record);
         file.write_json_atomic(&store)
     }
@@ -35,12 +35,14 @@ impl ChannelRegistry for FileRegistry {
     fn deregister(&self, name: &str) -> Result<()> {
         let mut file = LockedFile::open_exclusive(&self.storage.channels_state_path())?;
         let mut store: ChannelStore = file.read_json()?;
-        
+
         if let Some(pos) = store.channels.iter().position(|c| c.name == name) {
             store.channels.remove(pos);
             file.write_json_atomic(&store)
         } else {
-            Err(AegisError::ChannelNotFound { name: name.to_string() })
+            Err(AegisError::ChannelNotFound {
+                name: name.to_string(),
+            })
         }
     }
 

@@ -1,7 +1,22 @@
-pub mod registry;
-pub mod state;
+pub mod commands;
+pub mod daemon;
+pub mod dispatcher;
+pub mod events;
+pub mod lifecycle;
 pub mod prompts;
+pub mod registry;
+pub mod runtime;
+pub mod scheduler;
+pub mod state;
+pub mod storage;
 
+pub use commands::{ControllerCommands, ProjectStatus};
+pub use dispatcher::Dispatcher;
+pub use events::EventBus;
+pub use lifecycle::{AgentSpec, RunningAgent, SpawnPlan};
+pub use prompts::{PromptContext, PromptManager, PromptType};
 pub use registry::FileRegistry;
-pub use state::{StateManager, RecoveryResult};
-pub use prompts::{PromptManager, PromptContext, PromptType};
+pub use runtime::AegisRuntime;
+pub use scheduler::Scheduler;
+pub use state::{RecoveryResult, StateManager};
+pub use storage::ProjectStorage;

@@ -56,4 +56,13 @@ name = "aegisd"
 path = "src/daemon.rs"
 
 [dependencies]
+aegis-core = { workspace = true }
 aegis-controller = { workspace = true }
+clap = { version = "4", features = ["derive"] }
+tracing = { workspace = true }
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tokio = { workspace = true }
+tokio-util = { version = "0.7", features = ["codec"] }
+futures-util = "0.3"
+uuid = { workspace = true }
+serde_json = { workspace = true }
