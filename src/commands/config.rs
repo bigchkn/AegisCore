@@ -1,5 +1,7 @@
+use crate::{
+    anchoring::ProjectAnchor, client::DaemonClient, error::AegisCliError, output::Printer,
+};
 use std::path::Path;
-use crate::{anchoring::ProjectAnchor, client::DaemonClient, error::AegisCliError, output::Printer};
 
 pub fn validate(anchor: &ProjectAnchor, printer: &Printer) -> Result<(), AegisCliError> {
     use aegis_core::config::EffectiveConfig;
@@ -18,7 +20,10 @@ pub fn validate(anchor: &ProjectAnchor, printer: &Printer) -> Result<(), AegisCl
         for e in &errors {
             eprintln!("error: field `{}`: {}", e.field, e.reason);
         }
-        Err(AegisCliError::Config(format!("{} validation error(s)", errors.len())))
+        Err(AegisCliError::Config(format!(
+            "{} validation error(s)",
+            errors.len()
+        )))
     }
 }
 
@@ -29,7 +34,11 @@ pub async fn show(
 ) -> Result<(), AegisCliError> {
     // Prefer daemon's merged view; fall back to local resolution if daemon is down.
     match client
-        .request(Some(&anchor.project_root), "config.show", serde_json::json!({}))
+        .request(
+            Some(&anchor.project_root),
+            "config.show",
+            serde_json::json!({}),
+        )
         .await
     {
         Ok(payload) => {
@@ -49,8 +58,8 @@ fn show_local(project_root: &Path, printer: &Printer) -> Result<(), AegisCliErro
     let project = EffectiveConfig::load_project(project_root).unwrap_or_default();
     let effective = EffectiveConfig::resolve(&global, &project)
         .map_err(|e| AegisCliError::Config(e.to_string()))?;
-    let value = serde_json::to_value(&effective)
-        .map_err(|e| AegisCliError::Config(e.to_string()))?;
+    let value =
+        serde_json::to_value(&effective).map_err(|e| AegisCliError::Config(e.to_string()))?;
     printer.json(&value);
     Ok(())
 }

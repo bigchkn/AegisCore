@@ -90,7 +90,8 @@ impl Watchdog {
     }
 
     pub async fn run(&self, mut shutdown: watch::Receiver<bool>) -> Result<()> {
-        let mut interval = tokio::time::interval(Duration::from_millis(self.config.poll_interval_ms));
+        let mut interval =
+            tokio::time::interval(Duration::from_millis(self.config.poll_interval_ms));
 
         loop {
             tokio::select! {
@@ -198,8 +199,9 @@ impl Watchdog {
 
     fn should_emit(&self, event: &DetectedEvent) -> bool {
         let now = Instant::now();
-        let suppression_window = Duration::from_millis(self.config.poll_interval_ms.saturating_mul(2))
-            .max(Duration::from_secs(5));
+        let suppression_window =
+            Duration::from_millis(self.config.poll_interval_ms.saturating_mul(2))
+                .max(Duration::from_secs(5));
         let key = suppression_key(event);
 
         let mut recent = self
@@ -256,7 +258,9 @@ fn suppression_key(event: &DetectedEvent) -> (Uuid, &'static str, String) {
 
 fn event_reason(event: &DetectedEvent) -> String {
     match event {
-        DetectedEvent::RateLimit { matched_pattern, .. } => {
+        DetectedEvent::RateLimit {
+            matched_pattern, ..
+        } => {
             format!("rate limit detected: {matched_pattern}")
         }
         DetectedEvent::AuthFailure {
@@ -298,16 +302,17 @@ impl PaneObserver for TmuxPaneObserver {
     }
 
     async fn capture_pane_plain(&self, target: &TmuxTarget, lines: usize) -> Result<String> {
-        self.tmux.capture_pane_plain(target, lines).await.map_err(Into::into)
+        self.tmux
+            .capture_pane_plain(target, lines)
+            .await
+            .map_err(Into::into)
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use aegis_core::{
-        config::WatchdogPatterns, AegisError, AgentKind, LogQuery, Task, TaskStatus,
-    };
+    use aegis_core::{config::WatchdogPatterns, AegisError, AgentKind, LogQuery, Task, TaskStatus};
     use chrono::Utc;
     use std::path::PathBuf;
 
@@ -327,7 +332,10 @@ mod tests {
             patterns: WatchdogPatterns {
                 rate_limit: Vec::new(),
                 auth_failure: Vec::new(),
-                task_complete: task_complete.iter().map(|value| value.to_string()).collect(),
+                task_complete: task_complete
+                    .iter()
+                    .map(|value| value.to_string())
+                    .collect(),
                 sandbox_violation: Vec::new(),
             },
         }
@@ -376,7 +384,11 @@ mod tests {
         }
 
         fn get(&self, agent_id: Uuid) -> Result<Option<Agent>> {
-            Ok(self.agents.iter().find(|agent| agent.agent_id == agent_id).cloned())
+            Ok(self
+                .agents
+                .iter()
+                .find(|agent| agent.agent_id == agent_id)
+                .cloned())
         }
 
         fn update(&self, _agent: &Agent) -> Result<()> {
@@ -815,7 +827,10 @@ mod tests {
             .await
             .unwrap();
 
-        assert_eq!(executor.paused.lock().unwrap().as_slice(), &[agent.agent_id]);
+        assert_eq!(
+            executor.paused.lock().unwrap().as_slice(),
+            &[agent.agent_id]
+        );
     }
 
     #[tokio::test]
@@ -881,6 +896,9 @@ mod tests {
             .await
             .unwrap();
 
-        assert_eq!(executor.receipts.lock().unwrap().as_slice(), &[agent.agent_id]);
+        assert_eq!(
+            executor.receipts.lock().unwrap().as_slice(),
+            &[agent.agent_id]
+        );
     }
 }

@@ -84,7 +84,9 @@ impl AegisClient {
                 if response.status == "success" {
                     return Ok(response.payload);
                 } else {
-                    return Err(anyhow!(response.error.unwrap_or_else(|| "Unknown error".to_string())));
+                    return Err(anyhow!(response
+                        .error
+                        .unwrap_or_else(|| "Unknown error".to_string())));
                 }
             }
         }

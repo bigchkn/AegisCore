@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use aegis_core::{Result, TaskCreator, TaskQueue};
+use aegis_core::{Result, TaskCreator, TaskQueue, TaskRegistry, TaskStatus};
 use tokio::sync::Semaphore;
 use uuid::Uuid;
 
@@ -47,12 +47,33 @@ impl Scheduler {
             return Ok(None);
         };
 
-        self.dispatcher
+        if let Err(e) = self
+            .dispatcher
             .spawn_splinter_with_id(agent_id, role, &task, None)
-            .await?;
+            .await
+        {
+            tracing::error!(
+                task_id = %task.task_id,
+                agent_id = %agent_id,
+                role = %role,
+                error = %e,
+                "splinter spawn failed — releasing task back to queued"
+            );
+            if let Err(re) = TaskRegistry::update_status(
+                self.registry.as_ref(),
+                task.task_id,
+                TaskStatus::Queued,
+            ) {
+                tracing::error!(
+                    task_id = %task.task_id,
+                    rollback_error = %re,
+                    "failed to roll back task claim — task stuck in active"
+                );
+            }
+            drop(permit);
+            return Err(e);
+        }
 
-        // Current lifecycle is synchronous and registry-backed. Keep the permit
-        // until the task is spawned, then release it for deterministic tests.
         drop(permit);
         Ok(Some(agent_id))
     }

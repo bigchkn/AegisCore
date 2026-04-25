@@ -1,5 +1,7 @@
+use crate::{
+    anchoring::ProjectAnchor, client::DaemonClient, error::AegisCliError, output::Printer,
+};
 use uuid::Uuid;
-use crate::{anchoring::ProjectAnchor, client::DaemonClient, error::AegisCliError, output::Printer};
 
 pub async fn list(
     printer: &Printer,
@@ -7,7 +9,11 @@ pub async fn list(
     anchor: &ProjectAnchor,
 ) -> Result<(), AegisCliError> {
     let payload = client
-        .request(Some(&anchor.project_root), "agents.list", serde_json::json!({}))
+        .request(
+            Some(&anchor.project_root),
+            "agents.list",
+            serde_json::json!({}),
+        )
         .await?;
 
     if printer.format == crate::output::OutputFormat::Json {
@@ -29,16 +35,31 @@ pub async fn list(
             let short_id = &id[..id.len().min(8)];
             vec![
                 short_id.to_string(),
-                a.get("kind").and_then(|v| v.as_str()).unwrap_or("?").to_string(),
-                a.get("role").and_then(|v| v.as_str()).unwrap_or("—").to_string(),
-                a.get("status").and_then(|v| v.as_str()).unwrap_or("?").to_string(),
-                a.get("cli_provider").and_then(|v| v.as_str()).unwrap_or("?").to_string(),
+                a.get("kind")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("?")
+                    .to_string(),
+                a.get("role")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("—")
+                    .to_string(),
+                a.get("status")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("?")
+                    .to_string(),
+                a.get("cli_provider")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("?")
+                    .to_string(),
                 task_label(a),
             ]
         })
         .collect();
 
-    printer.table(&["ID (short)", "TYPE", "ROLE", "STATUS", "PROVIDER", "TASK"], rows);
+    printer.table(
+        &["ID (short)", "TYPE", "ROLE", "STATUS", "PROVIDER", "TASK"],
+        rows,
+    );
     Ok(())
 }
 

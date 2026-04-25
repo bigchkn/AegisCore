@@ -15,7 +15,11 @@ impl Printer {
     pub fn new(json: bool, no_color: bool) -> Self {
         let color = !no_color && atty::is(atty::Stream::Stdout);
         Self {
-            format: if json { OutputFormat::Json } else { OutputFormat::Text },
+            format: if json {
+                OutputFormat::Json
+            } else {
+                OutputFormat::Text
+            },
             color,
         }
     }
@@ -25,7 +29,10 @@ impl Printer {
     }
 
     pub fn json(&self, value: &Value) {
-        println!("{}", serde_json::to_string_pretty(value).unwrap_or_default());
+        println!(
+            "{}",
+            serde_json::to_string_pretty(value).unwrap_or_default()
+        );
     }
 
     pub fn warn(&self, msg: &str) {

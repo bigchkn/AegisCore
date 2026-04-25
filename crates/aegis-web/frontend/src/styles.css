@@ -154,6 +154,72 @@ select {
   background: #171b20;
 }
 
+.agents-view {
+  display: grid;
+  gap: 14px;
+}
+
+.agent-composer {
+  border: 1px solid #303842;
+  border-radius: 8px;
+  background: #171b20;
+}
+
+.agent-composer-form {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+}
+
+.agent-composer-copy h2 {
+  margin: 0 0 4px;
+  font-size: 0.98rem;
+}
+
+.agent-composer-copy p {
+  margin: 0;
+  color: #9ea7b3;
+  font-size: 0.82rem;
+}
+
+.agent-composer-form textarea {
+  width: 100%;
+  min-height: 84px;
+  resize: vertical;
+  padding: 10px 12px;
+  border: 1px solid #3b4652;
+  border-radius: 6px;
+  background: #101316;
+  color: #e8eaed;
+}
+
+.agent-composer-footer {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.agent-composer-footer button {
+  min-height: 32px;
+  padding: 0 12px;
+  border: 1px solid #3b4652;
+  border-radius: 6px;
+  background: #20262d;
+  color: #d7dde4;
+  cursor: pointer;
+}
+
+.agent-composer-footer button:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+
+.agent-composer-error {
+  color: #f1a3ad;
+  font-size: 0.82rem;
+}
+
 .empty-state {
   width: min(460px, 100%);
   padding: 24px;

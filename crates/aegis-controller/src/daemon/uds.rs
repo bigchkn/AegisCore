@@ -245,7 +245,32 @@ async fn dispatch_command(
     let commands = runtime.commands();
 
     match request.command.as_str() {
-        "status" => Ok(serde_json::to_value(commands.status()?).unwrap()),
+        "status" | "project.status" => {
+            use aegis_core::{AgentStatus, TaskStatus};
+            let agents = commands.list_agents()?;
+            let tasks = commands.list_tasks()?;
+            let active_agents = agents.iter().filter(|a| a.status == AgentStatus::Active).count() as u64;
+            let queued_agents = agents.iter().filter(|a| a.status == AgentStatus::Queued).count() as u64;
+            let providers: Vec<String> = runtime.config.providers.keys().cloned().collect();
+            Ok(serde_json::json!({
+                "project_root": runtime.root_path.display().to_string(),
+                "session_name": runtime.config.global.tmux_session_name,
+                "agents": {
+                    "active": active_agents,
+                    "queued": queued_agents,
+                    "total": agents.len() as u64,
+                },
+                "tasks": {
+                    "active": tasks.iter().filter(|t| t.status == TaskStatus::Active).count() as u64,
+                    "complete": tasks.iter().filter(|t| t.status == TaskStatus::Complete).count() as u64,
+                    "failed": tasks.iter().filter(|t| t.status == TaskStatus::Failed).count() as u64,
+                },
+                "watchdog": {
+                    "interval_ms": runtime.config.watchdog.poll_interval_ms,
+                },
+                "providers": providers,
+            }))
+        }
         "agents.list" => Ok(serde_json::to_value(commands.list_agents()?).unwrap()),
         "tasks.list" => Ok(serde_json::to_value(commands.list_tasks()?).unwrap()),
         "channels.list" => Ok(serde_json::to_value(commands.list_channels()?).unwrap()),

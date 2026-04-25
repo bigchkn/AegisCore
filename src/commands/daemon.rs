@@ -1,5 +1,5 @@
-use std::path::PathBuf;
 use crate::{client::DaemonClient, error::AegisCliError, output::Printer};
+use std::path::PathBuf;
 
 fn launchd_plist_path() -> PathBuf {
     let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".into());
@@ -38,21 +38,38 @@ pub async fn stop(printer: &Printer) -> Result<(), AegisCliError> {
 }
 
 pub async fn status(printer: &Printer, client: &DaemonClient) -> Result<(), AegisCliError> {
-    let payload = client.request(None, "daemon.status", serde_json::json!({})).await?;
+    let payload = client
+        .request(None, "daemon.status", serde_json::json!({}))
+        .await?;
 
     if printer.format == crate::output::OutputFormat::Json {
         printer.json(&payload);
         return Ok(());
     }
 
-    let ver = payload.get("version").and_then(|v| v.as_str()).unwrap_or("?");
-    let uptime = payload.get("uptime_s").and_then(|v| v.as_u64()).unwrap_or(0);
-    let projects = payload.get("projects").and_then(|v| v.as_u64()).unwrap_or(0);
-    let socket = payload.get("socket_path").and_then(|v| v.as_str()).unwrap_or("?");
+    let ver = payload
+        .get("version")
+        .and_then(|v| v.as_str())
+        .unwrap_or("?");
+    let uptime = payload
+        .get("uptime_s")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(0);
+    let projects = payload
+        .get("projects")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(0);
+    let socket = payload
+        .get("socket_path")
+        .and_then(|v| v.as_str())
+        .unwrap_or("?");
 
     let uptime_str = format_uptime(uptime);
     printer.kv(&[
-        ("aegisd", &format!("v{ver} — running (uptime: {uptime_str})")),
+        (
+            "aegisd",
+            &format!("v{ver} — running (uptime: {uptime_str})"),
+        ),
         ("Projects:", &format!("{projects} registered")),
         ("Socket:", socket),
     ]);
@@ -60,7 +77,9 @@ pub async fn status(printer: &Printer, client: &DaemonClient) -> Result<(), Aegi
 }
 
 pub async fn install() -> Result<(), AegisCliError> {
-    let status = std::process::Command::new("/usr/local/bin/aegisd").arg("install").status()?;
+    let status = std::process::Command::new("/usr/local/bin/aegisd")
+        .arg("install")
+        .status()?;
     if !status.success() {
         return Err(AegisCliError::InvalidArg("aegisd install failed.".into()));
     }
@@ -68,7 +87,9 @@ pub async fn install() -> Result<(), AegisCliError> {
 }
 
 pub async fn uninstall() -> Result<(), AegisCliError> {
-    let status = std::process::Command::new("/usr/local/bin/aegisd").arg("uninstall").status()?;
+    let status = std::process::Command::new("/usr/local/bin/aegisd")
+        .arg("uninstall")
+        .status()?;
     if !status.success() {
         return Err(AegisCliError::InvalidArg("aegisd uninstall failed.".into()));
     }
@@ -76,7 +97,9 @@ pub async fn uninstall() -> Result<(), AegisCliError> {
 }
 
 pub async fn projects(printer: &Printer, client: &DaemonClient) -> Result<(), AegisCliError> {
-    let payload = client.request(None, "projects.list", serde_json::json!({})).await?;
+    let payload = client
+        .request(None, "projects.list", serde_json::json!({}))
+        .await?;
 
     if printer.format == crate::output::OutputFormat::Json {
         printer.json(&payload);

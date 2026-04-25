@@ -214,8 +214,8 @@ mod tests {
 
 #[cfg(all(test, feature = "ts-export"))]
 mod ts_export {
-    use ts_rs::TS;
     use crate::*;
+    use ts_rs::TS;
 
     #[test]
     fn export_ts_bindings() {

@@ -4,20 +4,25 @@ mod commands;
 mod error;
 mod output;
 
-use std::path::PathBuf;
+use anchoring::ProjectAnchor;
 use clap::{Parser, Subcommand};
 use clap_complete::Shell;
-use uuid::Uuid;
-use anchoring::ProjectAnchor;
 use client::DaemonClient;
 use error::AegisCliError;
 use output::Printer;
+use std::path::PathBuf;
+use uuid::Uuid;
 
 #[derive(Parser)]
 #[command(name = "aegis", about = "AegisCore CLI", version)]
 struct Cli {
     /// Unix domain socket path
-    #[arg(long, default_value = "/tmp/aegis.sock", global = true, env = "AEGIS_SOCKET")]
+    #[arg(
+        long,
+        default_value = "/tmp/aegis.sock",
+        global = true,
+        env = "AEGIS_SOCKET"
+    )]
     socket: PathBuf,
 
     /// Emit raw JSON output
@@ -72,9 +77,7 @@ enum Commands {
     },
 
     /// Attach to the project tmux session (or a specific agent pane)
-    Attach {
-        agent_id: Option<Uuid>,
-    },
+    Attach { agent_id: Option<Uuid> },
 
     /// List all agents
     Agents,
@@ -139,9 +142,7 @@ enum Commands {
     },
 
     /// Generate shell completions
-    Completions {
-        shell: Shell,
-    },
+    Completions { shell: Shell },
 }
 
 #[derive(Subcommand)]
@@ -212,10 +213,7 @@ enum TaskflowCommands {
     /// Sync roadmap with agent registry
     Sync,
     /// Manually link a roadmap task to a registry task
-    Assign {
-        roadmap_id: String,
-        task_id: String,
-    },
+    Assign { roadmap_id: String, task_id: String },
     /// Create a new milestone
     CreateMilestone {
         id: String,
@@ -231,6 +229,12 @@ enum TaskflowCommands {
         id: String,
         /// Task description
         task: String,
+    },
+    /// Update the status of a roadmap task
+    SetTaskStatus {
+        milestone_id: String,
+        task_id: String,
+        status: String,
     },
 }
 
@@ -249,9 +253,7 @@ async fn main() {
 
 async fn dispatch(cli: Cli, printer: &Printer, client: &DaemonClient) -> Result<(), AegisCliError> {
     match cli.command {
-        Commands::Init { force } => {
-            commands::init::run(force, printer, client).await
-        }
+        Commands::Init { force } => commands::init::run(force, printer, client).await,
 
         Commands::Doctor => {
             let code = commands::doctor::run(printer, client).await;
@@ -320,7 +322,11 @@ async fn dispatch(cli: Cli, printer: &Printer, client: &DaemonClient) -> Result<
             let anchor = require_anchor()?;
             match subcommand {
                 ChannelCommands::Add { kind } => match kind {
-                    ChannelAddKind::Telegram { token, chat_ids, yes } => {
+                    ChannelAddKind::Telegram {
+                        token,
+                        chat_ids,
+                        yes,
+                    } => {
                         commands::channels::add_telegram(
                             token.as_deref(),
                             &chat_ids,
@@ -335,9 +341,7 @@ async fn dispatch(cli: Cli, printer: &Printer, client: &DaemonClient) -> Result<
                         commands::channels::add_mailbox(&name, printer, client, &anchor).await
                     }
                 },
-                ChannelCommands::List => {
-                    commands::channels::list(printer, client, &anchor).await
-                }
+                ChannelCommands::List => commands::channels::list(printer, client, &anchor).await,
                 ChannelCommands::Status { name } => {
                     commands::channels::channel_status(&name, printer, client, &anchor).await
                 }
@@ -357,7 +361,11 @@ async fn dispatch(cli: Cli, printer: &Printer, client: &DaemonClient) -> Result<
             commands::ui::run(printer, client, &anchor).await
         }
 
-        Commands::Logs { agent_id, lines, follow } => {
+        Commands::Logs {
+            agent_id,
+            lines,
+            follow,
+        } => {
             let anchor = require_anchor()?;
             commands::observe::logs(&agent_id, Some(lines), follow, printer, client, &anchor).await
         }
@@ -379,30 +387,63 @@ async fn dispatch(cli: Cli, printer: &Printer, client: &DaemonClient) -> Result<
                 TaskflowCommands::Status => {
                     commands::taskflow::status(printer, client, &anchor).await
                 }
-                TaskflowCommands::List => {
-                    commands::taskflow::list(printer, client, &anchor).await
-                }
+                TaskflowCommands::List => commands::taskflow::list(printer, client, &anchor).await,
                 TaskflowCommands::Show { milestone_id } => {
                     commands::taskflow::show(&milestone_id, printer, client, &anchor).await
                 }
-                TaskflowCommands::Sync => {
-                    commands::taskflow::sync(printer, client, &anchor).await
-                }
-                TaskflowCommands::Assign { roadmap_id, task_id } => {
-                    commands::taskflow::assign(&roadmap_id, &task_id, printer, client, &anchor).await
+                TaskflowCommands::Sync => commands::taskflow::sync(printer, client, &anchor).await,
+                TaskflowCommands::Assign {
+                    roadmap_id,
+                    task_id,
+                } => {
+                    commands::taskflow::assign(&roadmap_id, &task_id, printer, client, &anchor)
+                        .await
                 }
                 TaskflowCommands::CreateMilestone { id, name, lld } => {
-                    commands::taskflow::create_milestone(&id, &name, lld.as_deref(), printer, client, &anchor).await
+                    commands::taskflow::create_milestone(
+                        &id,
+                        &name,
+                        lld.as_deref(),
+                        printer,
+                        client,
+                        &anchor,
+                    )
+                    .await
                 }
-                TaskflowCommands::AddTask { milestone_id, id, task } => {
-                    commands::taskflow::add_task(&milestone_id, &id, &task, printer, client, &anchor).await
+                TaskflowCommands::AddTask {
+                    milestone_id,
+                    id,
+                    task,
+                } => {
+                    commands::taskflow::add_task(
+                        &milestone_id,
+                        &id,
+                        &task,
+                        printer,
+                        client,
+                        &anchor,
+                    )
+                    .await
+                }
+                TaskflowCommands::SetTaskStatus {
+                    milestone_id,
+                    task_id,
+                    status,
+                } => {
+                    commands::taskflow::set_task_status(
+                        &milestone_id,
+                        &task_id,
+                        &status,
+                        printer,
+                        client,
+                        &anchor,
+                    )
+                    .await
                 }
             }
         }
 
-        Commands::Completions { shell } => {
-            commands::completions::run::<Cli>(shell)
-        }
+        Commands::Completions { shell } => commands::completions::run::<Cli>(shell),
     }
 }
 

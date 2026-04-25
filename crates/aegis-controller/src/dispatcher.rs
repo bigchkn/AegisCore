@@ -206,11 +206,20 @@ You are operating within an AegisCore autonomous environment. To understand your
         task: &Task,
         parent_id: Option<Uuid>,
     ) -> Result<Agent> {
+        tracing::info!(%agent_id, task_id = %task.task_id, %role, "spawning splinter");
         let spec = self.build_splinter_spec(role, task, parent_id);
+
+        tracing::debug!(%agent_id, "preparing worktree");
         self.prepare_splinter_worktree(agent_id, role).await?;
+
         let window_name = format!("splinter-{role}-{}", short_id(agent_id));
+        tracing::debug!(%agent_id, %window_name, "preparing tmux window");
         let (window, pane) = self.prepare_tmux_window(agent_id, &window_name).await?;
+
+        tracing::debug!(%agent_id, window, %pane, "building spawn plan");
         let plan = self.build_spawn_plan(spec, agent_id, window, pane)?;
+
+        tracing::debug!(%agent_id, launch_cmd = ?plan.launch_command, "launching");
         TaskRegistry::assign(self.registry.as_ref(), task.task_id, agent_id)?;
         self.launch_or_insert_plan(plan).await
     }
@@ -230,13 +239,17 @@ You are operating within an AegisCore autonomous environment. To understand your
         }
 
         let window = tmux.new_window(session, Some(window_name)).await?;
-        let target = TmuxTarget::new(session, window, "%0");
+        // Target the window (no pane) so list_panes returns panes for this window.
+        // The initial pane of a new window is never %0 except in the very first window.
+        let window_target = TmuxTarget::parse(&format!("{session}:{window}"))?;
         let pane = tmux
-            .list_panes(&target)
+            .list_panes(&window_target)
             .await?
             .into_iter()
             .next()
-            .unwrap_or_else(|| "%0".to_string());
+            .ok_or_else(|| AegisError::TmuxPaneNotFound {
+                target: format!("{session}:{window}"),
+            })?;
 
         tracing::debug!(%agent_id, session, window, pane, "prepared tmux window");
         Ok((window, pane))

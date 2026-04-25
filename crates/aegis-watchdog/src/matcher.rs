@@ -1,6 +1,4 @@
-use aegis_core::{
-    config::WatchdogPatterns, AegisError, DetectedEvent, Provider, Result,
-};
+use aegis_core::{config::WatchdogPatterns, AegisError, DetectedEvent, Provider, Result};
 use regex::{Regex, RegexBuilder};
 use uuid::Uuid;
 
@@ -36,36 +34,38 @@ impl PatternMatcher {
     ) -> Option<DetectedEvent> {
         let lines: Vec<&str> = capture.lines().collect();
 
-        detect_category(&lines, &self.auth_failure, |line| provider.is_auth_error(line)).map(
-            |matched_pattern| DetectedEvent::AuthFailure {
-                agent_id,
-                matched_pattern,
-            },
-        )
+        detect_category(&lines, &self.auth_failure, |line| {
+            provider.is_auth_error(line)
+        })
+        .map(|matched_pattern| DetectedEvent::AuthFailure {
+            agent_id,
+            matched_pattern,
+        })
         .or_else(|| {
-            detect_category(
-                &lines,
-                &self.sandbox_violation,
-                |_| false,
-            )
-            .map(|matched_pattern| DetectedEvent::SandboxViolation {
+            detect_category(&lines, &self.sandbox_violation, |_| false).map(|matched_pattern| {
+                DetectedEvent::SandboxViolation {
+                    agent_id,
+                    matched_pattern,
+                }
+            })
+        })
+        .or_else(|| {
+            detect_category(&lines, &self.rate_limit, |line| {
+                provider.is_rate_limit_error(line)
+            })
+            .map(|matched_pattern| DetectedEvent::RateLimit {
                 agent_id,
                 matched_pattern,
             })
         })
         .or_else(|| {
-            detect_category(&lines, &self.rate_limit, |line| provider.is_rate_limit_error(line))
-                .map(|matched_pattern| DetectedEvent::RateLimit {
-                    agent_id,
-                    matched_pattern,
-                })
-        })
-        .or_else(|| {
-            detect_category(&lines, &self.task_complete, |line| provider.is_task_complete(line))
-                .map(|matched_pattern| DetectedEvent::TaskComplete {
-                    agent_id,
-                    matched_pattern,
-                })
+            detect_category(&lines, &self.task_complete, |line| {
+                provider.is_task_complete(line)
+            })
+            .map(|matched_pattern| DetectedEvent::TaskComplete {
+                agent_id,
+                matched_pattern,
+            })
         })
     }
 }
@@ -152,7 +152,10 @@ mod tests {
                 .iter()
                 .map(|value| value.to_string())
                 .collect(),
-            task_complete: task_complete.iter().map(|value| value.to_string()).collect(),
+            task_complete: task_complete
+                .iter()
+                .map(|value| value.to_string())
+                .collect(),
         }
     }
 
@@ -163,18 +166,17 @@ mod tests {
 
     #[test]
     fn literal_pattern_case_insensitive() {
-        let matcher = PatternMatcher::new(&patterns(
-            &["too many requests"],
-            &[],
-            &[],
-            &[],
-        ))
-        .unwrap();
+        let matcher =
+            PatternMatcher::new(&patterns(&["too many requests"], &[], &[], &[])).unwrap();
         let registry = default_registry();
         let provider = registry.get("codex").unwrap();
 
         let event = matcher
-            .detect(Uuid::new_v4(), provider, "Server says TOO MANY REQUESTS right now")
+            .detect(
+                Uuid::new_v4(),
+                provider,
+                "Server says TOO MANY REQUESTS right now",
+            )
             .unwrap();
 
         assert!(matches!(event, DetectedEvent::RateLimit { .. }));
@@ -182,8 +184,8 @@ mod tests {
 
     #[test]
     fn regex_pattern_prefix() {
-        let matcher = PatternMatcher::new(&patterns(&["re:429\\s+too\\s+many"], &[], &[], &[]))
-            .unwrap();
+        let matcher =
+            PatternMatcher::new(&patterns(&["re:429\\s+too\\s+many"], &[], &[], &[])).unwrap();
         let registry = default_registry();
         let provider = registry.get("codex").unwrap();
 
@@ -208,13 +210,9 @@ mod tests {
 
     #[test]
     fn match_priority_auth_over_rate_limit() {
-        let matcher = PatternMatcher::new(&patterns(
-            &["rate limit"],
-            &["invalid api key"],
-            &[],
-            &[],
-        ))
-        .unwrap();
+        let matcher =
+            PatternMatcher::new(&patterns(&["rate limit"], &["invalid api key"], &[], &[]))
+                .unwrap();
         let registry = default_registry();
         let provider = registry.get("codex").unwrap();
 
@@ -264,13 +262,8 @@ mod tests {
 
     #[test]
     fn watchdog_config_patterns_extend_provider_patterns() {
-        let matcher = PatternMatcher::new(&patterns(
-            &["re:temporarily unavailable"],
-            &[],
-            &[],
-            &[],
-        ))
-        .unwrap();
+        let matcher =
+            PatternMatcher::new(&patterns(&["re:temporarily unavailable"], &[], &[], &[])).unwrap();
         let registry = default_registry();
         let provider = registry.get("codex").unwrap();
         let agent_id = Uuid::new_v4();
@@ -279,7 +272,10 @@ mod tests {
         assert!(matches!(configured, Some(DetectedEvent::RateLimit { .. })));
 
         let provider_owned = matcher.detect(agent_id, provider, "429 too many requests");
-        assert!(matches!(provider_owned, Some(DetectedEvent::RateLimit { .. })));
+        assert!(matches!(
+            provider_owned,
+            Some(DetectedEvent::RateLimit { .. })
+        ));
     }
 
     #[test]

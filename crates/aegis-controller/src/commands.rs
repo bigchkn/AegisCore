@@ -64,7 +64,9 @@ impl ControllerCommands {
     }
 
     pub async fn spawn(&self, task: &str) -> Result<Uuid> {
-        let task_id = self.scheduler.enqueue_splinter_task(task, TaskCreator::System)?;
+        let task_id = self
+            .scheduler
+            .enqueue_splinter_task(task, TaskCreator::System)?;
         // Attempt immediate dispatch; if max_splinters is saturated the task
         // stays queued until a slot opens (no-op on None return).
         if let Err(e) = self.scheduler.dispatch_once("splinter").await {
@@ -72,7 +74,6 @@ impl ControllerCommands {
         }
         Ok(task_id)
     }
-
 
     pub async fn pause(&self, agent_id: Uuid) -> Result<()> {
         self.dispatcher.pause_agent(agent_id).await
@@ -115,7 +116,7 @@ impl ControllerCommands {
             field: "taskflow".to_string(),
             reason: "Taskflow engine is not initialized".to_string(),
         })?;
-        
+
         let full_id = if milestone_id.starts_with('M') {
             milestone_id.to_string()
         } else {
@@ -154,5 +155,18 @@ impl ControllerCommands {
             reason: "Taskflow engine is not initialized".to_string(),
         })?;
         tf.add_task(milestone_id, task_id, task)
+    }
+
+    pub fn taskflow_set_task_status(
+        &self,
+        milestone_id: &str,
+        task_id: &str,
+        status: &str,
+    ) -> Result<()> {
+        let tf = self.taskflow.as_ref().ok_or_else(|| AegisError::Config {
+            field: "taskflow".to_string(),
+            reason: "Taskflow engine is not initialized".to_string(),
+        })?;
+        tf.set_task_status(milestone_id, task_id, status)
     }
 }

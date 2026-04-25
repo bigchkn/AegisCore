@@ -27,7 +27,11 @@ impl Tui {
         execute!(stdout, EnterAlternateScreen)?;
         let backend = CrosstermBackend::new(stdout);
         let terminal = Terminal::new(backend)?;
-        Ok(Self { terminal, app, client })
+        Ok(Self {
+            terminal,
+            app,
+            client,
+        })
     }
 
     pub async fn run(&mut self) -> Result<()> {
@@ -99,26 +103,46 @@ impl Tui {
     }
 
     async fn refresh_data(&mut self) -> Result<()> {
-        if let Ok(agents) = self.client.send_command("agents.list", serde_json::Value::Null).await {
+        if let Ok(agents) = self
+            .client
+            .send_command("agents.list", serde_json::Value::Null)
+            .await
+        {
             if let Ok(agents_vec) = serde_json::from_value::<Vec<aegis_core::Agent>>(agents) {
                 self.app.agents = agents_vec.into_iter().map(|a| (a.agent_id, a)).collect();
             }
         }
 
-        if let Ok(tasks) = self.client.send_command("tasks.list", serde_json::Value::Null).await {
+        if let Ok(tasks) = self
+            .client
+            .send_command("tasks.list", serde_json::Value::Null)
+            .await
+        {
             if let Ok(tasks_vec) = serde_json::from_value::<Vec<aegis_core::Task>>(tasks) {
                 self.app.tasks = tasks_vec;
             }
         }
 
-        if let Ok(channels) = self.client.send_command("channels.list", serde_json::Value::Null).await {
-            if let Ok(channels_vec) = serde_json::from_value::<Vec<aegis_core::ChannelRecord>>(channels) {
+        if let Ok(channels) = self
+            .client
+            .send_command("channels.list", serde_json::Value::Null)
+            .await
+        {
+            if let Ok(channels_vec) =
+                serde_json::from_value::<Vec<aegis_core::ChannelRecord>>(channels)
+            {
                 self.app.channels = channels_vec;
             }
         }
 
-        if let Ok(projects) = self.client.send_command("projects.list", serde_json::Value::Null).await {
-            if let Ok(projects_vec) = serde_json::from_value::<Vec<crate::client::ProjectRecord>>(projects) {
+        if let Ok(projects) = self
+            .client
+            .send_command("projects.list", serde_json::Value::Null)
+            .await
+        {
+            if let Ok(projects_vec) =
+                serde_json::from_value::<Vec<crate::client::ProjectRecord>>(projects)
+            {
                 self.app.projects = projects_vec;
             }
         }

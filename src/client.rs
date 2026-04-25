@@ -1,12 +1,12 @@
-use std::path::{Path, PathBuf};
+use crate::error::AegisCliError;
 use aegis_controller::daemon::uds::{UdsRequest, UdsResponse};
+use futures_util::SinkExt;
 use futures_util::StreamExt;
 use serde_json::Value;
+use std::path::{Path, PathBuf};
 use tokio::net::UnixStream;
 use tokio_util::codec::{Framed, LinesCodec};
 use uuid::Uuid;
-use futures_util::SinkExt;
-use crate::error::AegisCliError;
 
 pub struct DaemonClient {
     uds_path: PathBuf,
@@ -50,18 +50,25 @@ impl DaemonClient {
             command: command.to_string(),
             params,
         };
-        let json = serde_json::to_string(&req)
-            .map_err(|e| AegisCliError::Core(aegis_core::AegisError::IpcProtocol { reason: e.to_string() }))?;
+        let json = serde_json::to_string(&req).map_err(|e| {
+            AegisCliError::Core(aegis_core::AegisError::IpcProtocol {
+                reason: e.to_string(),
+            })
+        })?;
 
-        framed
-            .send(json)
-            .await
-            .map_err(|e| AegisCliError::Core(aegis_core::AegisError::IpcProtocol { reason: e.to_string() }))?;
+        framed.send(json).await.map_err(|e| {
+            AegisCliError::Core(aegis_core::AegisError::IpcProtocol {
+                reason: e.to_string(),
+            })
+        })?;
 
         match framed.next().await {
             Some(Ok(line)) => {
-                let resp: UdsResponse = serde_json::from_str(&line)
-                    .map_err(|e| AegisCliError::Core(aegis_core::AegisError::IpcProtocol { reason: e.to_string() }))?;
+                let resp: UdsResponse = serde_json::from_str(&line).map_err(|e| {
+                    AegisCliError::Core(aegis_core::AegisError::IpcProtocol {
+                        reason: e.to_string(),
+                    })
+                })?;
                 if resp.status == "success" {
                     Ok(resp.payload)
                 } else {
@@ -70,12 +77,12 @@ impl DaemonClient {
                     ))
                 }
             }
-            Some(Err(e)) => Err(AegisCliError::Core(
-                aegis_core::AegisError::IpcProtocol { reason: e.to_string() },
-            )),
-            None => Err(AegisCliError::Core(
-                aegis_core::AegisError::IpcProtocol { reason: "No response from daemon".into() },
-            )),
+            Some(Err(e)) => Err(AegisCliError::Core(aegis_core::AegisError::IpcProtocol {
+                reason: e.to_string(),
+            })),
+            None => Err(AegisCliError::Core(aegis_core::AegisError::IpcProtocol {
+                reason: "No response from daemon".into(),
+            })),
         }
     }
 
@@ -92,12 +99,16 @@ impl DaemonClient {
             command: "subscribe".to_string(),
             params: serde_json::json!({}),
         };
-        let json = serde_json::to_string(&req)
-            .map_err(|e| AegisCliError::Core(aegis_core::AegisError::IpcProtocol { reason: e.to_string() }))?;
-        framed
-            .send(json)
-            .await
-            .map_err(|e| AegisCliError::Core(aegis_core::AegisError::IpcProtocol { reason: e.to_string() }))?;
+        let json = serde_json::to_string(&req).map_err(|e| {
+            AegisCliError::Core(aegis_core::AegisError::IpcProtocol {
+                reason: e.to_string(),
+            })
+        })?;
+        framed.send(json).await.map_err(|e| {
+            AegisCliError::Core(aegis_core::AegisError::IpcProtocol {
+                reason: e.to_string(),
+            })
+        })?;
 
         while let Some(result) = framed.next().await {
             match result {

@@ -27,9 +27,9 @@ pub use watchdog::ControllerWatchdogSink;
 
 #[cfg(all(test, feature = "ts-export"))]
 mod ts_export {
-    use ts_rs::TS;
     use crate::commands::ProjectStatus;
     use crate::daemon::projects::ProjectRecord;
+    use ts_rs::TS;
 
     #[test]
     fn export_ts_bindings() {

@@ -32,8 +32,42 @@ enum Commands {
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    let log_dir = std::env::var("HOME")
+        .map(|h| std::path::PathBuf::from(h).join(".aegis"))
+        .unwrap_or_else(|_| std::path::PathBuf::from("/tmp"));
+    let _ = std::fs::create_dir_all(&log_dir);
+
+    // Write to both stderr and the daemon log file so errors are always captured
+    // regardless of whether running via launchd or manually in the background.
+    let log_file = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(log_dir.join("daemon.log"))
+        .ok()
+        .map(|f| std::sync::Mutex::new(f));
+
+    let file_layer = log_file.map(|f| {
+        let writer = std::sync::Arc::new(f);
+        fmt::layer()
+            .with_ansi(false)
+            .with_writer(move || {
+                use std::io::Write;
+                struct MutexWriter(std::sync::Arc<std::sync::Mutex<std::fs::File>>);
+                impl Write for MutexWriter {
+                    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+                        self.0.lock().unwrap().write(buf)
+                    }
+                    fn flush(&mut self) -> std::io::Result<()> {
+                        self.0.lock().unwrap().flush()
+                    }
+                }
+                MutexWriter(std::sync::Arc::clone(&writer))
+            })
+    });
+
     tracing_subscriber::registry()
         .with(fmt::layer())
+        .with(file_layer)
         .with(EnvFilter::from_default_env().add_directive(tracing::Level::INFO.into()))
         .init();
 

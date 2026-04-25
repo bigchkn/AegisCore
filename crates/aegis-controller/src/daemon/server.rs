@@ -8,7 +8,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::Mutex;
-use tracing::{error, info, warn};
+use tracing::{error, info};
 use uuid::Uuid;
 
 pub struct DaemonSupervisor {
@@ -62,14 +62,19 @@ impl DaemonSupervisor {
         .await?;
         let uds_handle = tokio::spawn(uds_server.run());
 
-        // 3. Start HTTP Server
+        // 3. Start HTTP Server (optional — failure does not bring down the daemon)
         let http_state = HttpState {
             event_bus: Arc::clone(&self.event_bus),
             projects: Arc::clone(&self.project_registry),
             active_runtimes: Arc::clone(&self.active_runtimes),
         };
         let http_server = HttpServer::new(http_state);
-        let http_handle = tokio::spawn(http_server.run(self.http_port));
+        let port = self.http_port;
+        tokio::spawn(async move {
+            if let Err(e) = http_server.run(port).await {
+                error!("HTTP server error (non-fatal): {}", e);
+            }
+        });
 
         info!("Daemon servers initialized");
 
@@ -80,12 +85,6 @@ impl DaemonSupervisor {
             }
             _ = uds_handle => {
                 error!("UDS server exited unexpectedly");
-            }
-            res = http_handle => {
-                match res {
-                    Ok(Err(e)) => error!("HTTP server error: {}", e),
-                    _ => warn!("HTTP server exited"),
-                }
             }
         }
 

@@ -434,7 +434,10 @@ mod tests {
             agent: &Agent,
             provider_name: &str,
         ) -> Result<Agent> {
-            self.calls.lock().unwrap().push(format!("relaunch:{provider_name}"));
+            self.calls
+                .lock()
+                .unwrap()
+                .push(format!("relaunch:{provider_name}"));
             *self.relaunched_provider.lock().unwrap() = Some(provider_name.to_string());
             let mut updated = agent.clone();
             updated.cli_provider = provider_name.to_string();
@@ -626,7 +629,9 @@ mod tests {
         };
         let executor = Arc::new(RecordingExecutor::default());
         let coordinator = FailoverCoordinator::with_backoff(
-            Arc::new(FakeAgentRegistry { agent: agent.clone() }),
+            Arc::new(FakeAgentRegistry {
+                agent: agent.clone(),
+            }),
             Arc::new(FakeTaskRegistry { task }),
             Arc::new(FakeRecorder {
                 lines: Vec::new(),

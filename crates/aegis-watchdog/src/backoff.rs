@@ -49,10 +49,22 @@ mod tests {
             ..BackoffPolicy::default()
         };
 
-        assert_eq!(policy.delay_for_attempt_with_sample(0, 0.0), Duration::from_secs(5));
-        assert_eq!(policy.delay_for_attempt_with_sample(1, 0.0), Duration::from_secs(10));
-        assert_eq!(policy.delay_for_attempt_with_sample(2, 0.0), Duration::from_secs(20));
-        assert_eq!(policy.delay_for_attempt_with_sample(6, 0.0), Duration::from_secs(300));
+        assert_eq!(
+            policy.delay_for_attempt_with_sample(0, 0.0),
+            Duration::from_secs(5)
+        );
+        assert_eq!(
+            policy.delay_for_attempt_with_sample(1, 0.0),
+            Duration::from_secs(10)
+        );
+        assert_eq!(
+            policy.delay_for_attempt_with_sample(2, 0.0),
+            Duration::from_secs(20)
+        );
+        assert_eq!(
+            policy.delay_for_attempt_with_sample(6, 0.0),
+            Duration::from_secs(300)
+        );
         assert_eq!(
             policy.delay_for_attempt_with_sample(12, 0.0),
             Duration::from_secs(300)

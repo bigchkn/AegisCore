@@ -1,7 +1,7 @@
-use crate::app::{AppState, PaneMode, Overlay};
+use crate::app::{AppState, Overlay, PaneMode};
+use crate::client::ProjectRecord;
 use crossterm::event::{KeyCode, KeyEvent};
 use uuid::Uuid;
-use crate::client::ProjectRecord;
 
 #[derive(Debug, PartialEq)]
 pub enum AppAction {
@@ -27,10 +27,11 @@ pub fn handle_key_events(key_event: KeyEvent, app: &mut AppState) -> AppAction {
 fn handle_overlay(key_event: KeyEvent, app: &mut AppState) -> AppAction {
     let mut overlay = std::mem::replace(&mut app.overlay, Overlay::None);
     let action = match &mut overlay {
-        Overlay::Help => {
-            AppAction::None
-        }
-        Overlay::ProjectSwitcher { projects, selected_idx } => handle_project_switcher(key_event, projects, selected_idx),
+        Overlay::Help => AppAction::None,
+        Overlay::ProjectSwitcher {
+            projects,
+            selected_idx,
+        } => handle_project_switcher(key_event, projects, selected_idx),
         Overlay::SpawnPrompt { input } => handle_spawn_prompt(key_event, input),
         Overlay::ConfirmKill { agent_id } => handle_confirm_kill(key_event, *agent_id),
         Overlay::None => AppAction::None,
@@ -43,7 +44,11 @@ fn handle_overlay(key_event: KeyEvent, app: &mut AppState) -> AppAction {
     action
 }
 
-fn handle_project_switcher(key_event: KeyEvent, projects: &Vec<ProjectRecord>, selected_idx: &mut usize) -> AppAction {
+fn handle_project_switcher(
+    key_event: KeyEvent,
+    projects: &Vec<ProjectRecord>,
+    selected_idx: &mut usize,
+) -> AppAction {
     match key_event.code {
         KeyCode::Up | KeyCode::Char('k') => {
             if !projects.is_empty() {
@@ -71,12 +76,8 @@ fn handle_project_switcher(key_event: KeyEvent, projects: &Vec<ProjectRecord>, s
 
 fn handle_spawn_prompt(key_event: KeyEvent, input: &mut String) -> AppAction {
     match key_event.code {
-        KeyCode::Enter => {
-            AppAction::SpawnAgent(input.clone())
-        }
-        KeyCode::Esc => {
-            AppAction::None
-        }
+        KeyCode::Enter => AppAction::SpawnAgent(input.clone()),
+        KeyCode::Esc => AppAction::None,
         KeyCode::Char(c) => {
             input.push(c);
             AppAction::None
@@ -91,12 +92,8 @@ fn handle_spawn_prompt(key_event: KeyEvent, input: &mut String) -> AppAction {
 
 fn handle_confirm_kill(key_event: KeyEvent, agent_id: Uuid) -> AppAction {
     match key_event.code {
-        KeyCode::Char('y') | KeyCode::Char('Y') | KeyCode::Enter => {
-            AppAction::KillAgent(agent_id)
-        }
-        _ => {
-            AppAction::None
-        }
+        KeyCode::Char('y') | KeyCode::Char('Y') | KeyCode::Enter => AppAction::KillAgent(agent_id),
+        _ => AppAction::None,
     }
 }
 
@@ -108,14 +105,16 @@ fn handle_normal_mode(key_event: KeyEvent, app: &mut AppState) -> AppAction {
             AppAction::None
         }
         KeyCode::Char('p') => {
-            app.overlay = Overlay::ProjectSwitcher { 
-                projects: app.projects.clone(), 
-                selected_idx: 0 
+            app.overlay = Overlay::ProjectSwitcher {
+                projects: app.projects.clone(),
+                selected_idx: 0,
             };
             AppAction::None
         }
         KeyCode::Char('s') => {
-            app.overlay = Overlay::SpawnPrompt { input: String::new() };
+            app.overlay = Overlay::SpawnPrompt {
+                input: String::new(),
+            };
             AppAction::None
         }
         KeyCode::Char('x') => {
@@ -146,13 +145,16 @@ fn handle_normal_mode(key_event: KeyEvent, app: &mut AppState) -> AppAction {
 
 fn navigate_agents(app: &mut AppState, delta: i32) {
     let mut ids: Vec<Uuid> = app.agents.keys().cloned().collect();
-    if ids.is_empty() { return; }
+    if ids.is_empty() {
+        return;
+    }
     ids.sort();
 
-    let current_idx = app.selected_agent_id
+    let current_idx = app
+        .selected_agent_id
         .and_then(|id| ids.iter().position(|&x| x == id))
         .unwrap_or(0) as i32;
-    
+
     let next_idx = (current_idx + delta).rem_euclid(ids.len() as i32) as usize;
     app.selected_agent_id = Some(ids[next_idx]);
 }
@@ -190,41 +192,47 @@ mod tests {
     fn test_normal_mode_navigation() {
         let mut app = AppState::new(std::path::PathBuf::from("/tmp"));
         let agent_id = Uuid::new_v4();
-        app.agents.insert(agent_id, aegis_core::Agent {
+        app.agents.insert(
             agent_id,
-            name: "test-agent".to_string(),
-            kind: aegis_core::AgentKind::Bastion,
-            status: aegis_core::AgentStatus::Active,
-            role: "worker".to_string(),
-            parent_id: None,
-            task_id: None,
-            tmux_session: "aegis".to_string(),
-            tmux_window: 0,
-            tmux_pane: "%0".to_string(),
-            worktree_path: std::path::PathBuf::from("/tmp"),
-            cli_provider: "claude-code".to_string(),
-            fallback_cascade: vec![],
-            sandbox_profile: std::path::PathBuf::from("/tmp/sandbox"),
-            log_path: std::path::PathBuf::from("/tmp/log"),
-            created_at: chrono::Utc::now(),
-            updated_at: chrono::Utc::now(),
-            terminated_at: None,
-        });
+            aegis_core::Agent {
+                agent_id,
+                name: "test-agent".to_string(),
+                kind: aegis_core::AgentKind::Bastion,
+                status: aegis_core::AgentStatus::Active,
+                role: "worker".to_string(),
+                parent_id: None,
+                task_id: None,
+                tmux_session: "aegis".to_string(),
+                tmux_window: 0,
+                tmux_pane: "%0".to_string(),
+                worktree_path: std::path::PathBuf::from("/tmp"),
+                cli_provider: "claude-code".to_string(),
+                fallback_cascade: vec![],
+                sandbox_profile: std::path::PathBuf::from("/tmp/sandbox"),
+                log_path: std::path::PathBuf::from("/tmp/log"),
+                created_at: chrono::Utc::now(),
+                updated_at: chrono::Utc::now(),
+                terminated_at: None,
+            },
+        );
 
-        assert_eq!(handle_key_events(key(KeyCode::Char('j')), &mut app), AppAction::None);
+        assert_eq!(
+            handle_key_events(key(KeyCode::Char('j')), &mut app),
+            AppAction::None
+        );
         assert!(app.selected_agent_id.is_some());
     }
 
     #[test]
     fn test_mode_switching() {
         let mut app = AppState::new(std::path::PathBuf::from("/tmp"));
-        
+
         handle_key_events(key(KeyCode::Char('i')), &mut app);
         assert_eq!(app.mode, PaneMode::Input);
-        
+
         handle_key_events(key(KeyCode::Esc), &mut app);
         assert_eq!(app.mode, PaneMode::Normal);
-        
+
         handle_key_events(key(KeyCode::Char(':')), &mut app);
         assert_eq!(app.mode, PaneMode::Command);
     }
@@ -233,8 +241,11 @@ mod tests {
     fn test_overlay_navigation() {
         let mut app = AppState::new(std::path::PathBuf::from("/tmp"));
         app.overlay = Overlay::Help;
-        
-        assert_eq!(handle_key_events(key(KeyCode::Esc), &mut app), AppAction::None);
+
+        assert_eq!(
+            handle_key_events(key(KeyCode::Esc), &mut app),
+            AppAction::None
+        );
         assert_eq!(app.overlay, Overlay::None);
     }
 }

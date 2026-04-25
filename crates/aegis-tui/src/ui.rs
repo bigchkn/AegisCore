@@ -1,11 +1,11 @@
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
-    widgets::{Block, Borders, List, ListItem, Paragraph, Wrap, Clear},
+    widgets::{Block, Borders, Clear, List, ListItem, Paragraph, Wrap},
     Frame,
 };
 
-use crate::app::{AppState, ConnectionStatus, PaneMode, Overlay};
+use crate::app::{AppState, ConnectionStatus, Overlay, PaneMode};
 use crate::client::ProjectRecord;
 
 pub fn render(app: &mut AppState, frame: &mut Frame) {
@@ -35,9 +35,20 @@ fn render_header(app: &AppState, frame: &mut Frame, area: Rect) {
         ConnectionStatus::Error(_) => Color::Magenta,
     };
 
-    let title = Paragraph::new(format!(" AegisCore | Project: {} ", app.project_path.display()))
-        .block(Block::default().borders(Borders::ALL).border_style(Style::default().fg(status_color)))
-        .style(Style::default().fg(Color::White).add_modifier(Modifier::BOLD));
+    let title = Paragraph::new(format!(
+        " AegisCore | Project: {} ",
+        app.project_path.display()
+    ))
+    .block(
+        Block::default()
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(status_color)),
+    )
+    .style(
+        Style::default()
+            .fg(Color::White)
+            .add_modifier(Modifier::BOLD),
+    );
     frame.render_widget(title, area);
 }
 
@@ -73,37 +84,46 @@ fn render_left_sidebar(app: &AppState, frame: &mut Frame, area: Rect) {
         .iter()
         .map(|a| {
             let style = if Some(a.agent_id) == app.selected_agent_id {
-                Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)
+                Style::default()
+                    .fg(Color::Yellow)
+                    .add_modifier(Modifier::BOLD)
             } else {
                 Style::default().fg(Color::White)
             };
             ListItem::new(format!("[{:?}] {}", a.status, a.name)).style(style)
         })
         .collect();
-    
-    let agents_list = List::new(agents)
-        .block(Block::default().borders(Borders::ALL).title(" Agents "));
+
+    let agents_list =
+        List::new(agents).block(Block::default().borders(Borders::ALL).title(" Agents "));
     frame.render_widget(agents_list, chunks[0]);
 
     // Channels
-    let channels: Vec<ListItem> = app.channels.iter()
+    let channels: Vec<ListItem> = app
+        .channels
+        .iter()
         .map(|c| ListItem::new(format!("({:?}) {}", c.kind, c.name)))
         .collect();
-    
-    let channels_list = List::new(channels)
-        .block(Block::default().borders(Borders::ALL).title(" Channels "));
+
+    let channels_list =
+        List::new(channels).block(Block::default().borders(Borders::ALL).title(" Channels "));
     frame.render_widget(channels_list, chunks[1]);
 }
 
 fn render_center_panel(app: &mut AppState, frame: &mut Frame, area: Rect) {
     match app.mode {
         PaneMode::Input => {
-            let terminal = Block::default().borders(Borders::ALL).title(" Terminal (INTERACTIVE) ");
+            let terminal = Block::default()
+                .borders(Borders::ALL)
+                .title(" Terminal (INTERACTIVE) ");
             frame.render_widget(terminal, area);
         }
         _ => {
             let agent_logs = if let Some(id) = app.selected_agent_id {
-                app.logs.get(&id).map(|l| l.join("\n")).unwrap_or_else(|| "No logs found for selected agent.".to_string())
+                app.logs
+                    .get(&id)
+                    .map(|l| l.join("\n"))
+                    .unwrap_or_else(|| "No logs found for selected agent.".to_string())
             } else {
                 "Select an agent to see logs.".to_string()
             };
@@ -117,12 +137,14 @@ fn render_center_panel(app: &mut AppState, frame: &mut Frame, area: Rect) {
 }
 
 fn render_right_sidebar(app: &AppState, frame: &mut Frame, area: Rect) {
-    let tasks: Vec<ListItem> = app.tasks.iter()
+    let tasks: Vec<ListItem> = app
+        .tasks
+        .iter()
         .map(|t| ListItem::new(format!("[{:?}] {}", t.status, t.description)))
         .collect();
-    
-    let tasks_list = List::new(tasks)
-        .block(Block::default().borders(Borders::ALL).title(" Tasks "));
+
+    let tasks_list =
+        List::new(tasks).block(Block::default().borders(Borders::ALL).title(" Tasks "));
     frame.render_widget(tasks_list, area);
 }
 
@@ -151,18 +173,30 @@ fn render_overlay(app: &AppState, frame: &mut Frame) {
 
     match &app.overlay {
         Overlay::Help => render_help_overlay(frame, area),
-        Overlay::ProjectSwitcher { projects, selected_idx } => render_project_switcher_overlay(frame, area, projects, *selected_idx),
+        Overlay::ProjectSwitcher {
+            projects,
+            selected_idx,
+        } => render_project_switcher_overlay(frame, area, projects, *selected_idx),
         Overlay::SpawnPrompt { input } => render_spawn_overlay(frame, area, input),
         Overlay::ConfirmKill { agent_id } => render_kill_overlay(frame, area, *agent_id, app),
         Overlay::None => {}
     }
 }
 
-fn render_project_switcher_overlay(frame: &mut Frame, area: Rect, projects: &Vec<ProjectRecord>, selected_idx: usize) {
-    let items: Vec<ListItem> = projects.iter().enumerate()
+fn render_project_switcher_overlay(
+    frame: &mut Frame,
+    area: Rect,
+    projects: &Vec<ProjectRecord>,
+    selected_idx: usize,
+) {
+    let items: Vec<ListItem> = projects
+        .iter()
+        .enumerate()
         .map(|(i, p)| {
             let style = if i == selected_idx {
-                Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)
+                Style::default()
+                    .fg(Color::Yellow)
+                    .add_modifier(Modifier::BOLD)
             } else {
                 Style::default().fg(Color::White)
             };
@@ -170,8 +204,11 @@ fn render_project_switcher_overlay(frame: &mut Frame, area: Rect, projects: &Vec
         })
         .collect();
 
-    let list = List::new(items)
-        .block(Block::default().borders(Borders::ALL).title(" Switch Project "));
+    let list = List::new(items).block(
+        Block::default()
+            .borders(Borders::ALL)
+            .title(" Switch Project "),
+    );
     frame.render_widget(list, area);
 }
 
@@ -200,19 +237,24 @@ fn render_help_overlay(frame: &mut Frame, area: Rect) {
 fn render_spawn_overlay(frame: &mut Frame, area: Rect, input: &str) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Length(3),
-            Constraint::Min(0),
-        ])
+        .constraints([Constraint::Length(3), Constraint::Min(0)])
         .split(area);
 
     let title = Paragraph::new(" Task Description for New Agent: ")
-        .style(Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD))
+        .style(
+            Style::default()
+                .fg(Color::Yellow)
+                .add_modifier(Modifier::BOLD),
+        )
         .wrap(Wrap { trim: false });
     frame.render_widget(title, chunks[0]);
 
     let input_field = Paragraph::new(input)
-        .block(Block::default().borders(Borders::ALL).border_style(Style::default().fg(Color::Cyan)))
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(Color::Cyan)),
+        )
         .wrap(Wrap { trim: false });
     frame.render_widget(input_field, chunks[1]);
 }
@@ -244,7 +286,9 @@ mod tests {
         // Layout: title chunk = rows 0-2, input block = rows 3-11.
         // Input block border occupies row 3 (top) and row 11 (bottom).
         // Inner content starts at row 4. Row 4 = first 28 chars, row 5 = chars 29-56.
-        let row5: String = (1u16..29).map(|x| buf[(x, 5u16)].symbol().to_string()).collect();
+        let row5: String = (1u16..29)
+            .map(|x| buf[(x, 5u16)].symbol().to_string())
+            .collect();
         assert!(
             row5.trim().len() > 0,
             "Expected wrapped text on row 5 but found only whitespace: {:?}",
@@ -254,11 +298,22 @@ mod tests {
 }
 
 fn render_kill_overlay(frame: &mut Frame, area: Rect, agent_id: uuid::Uuid, app: &AppState) {
-    let agent_name = app.agents.get(&agent_id).map(|a| a.name.as_str()).unwrap_or("unknown");
-    
-    let text = format!("\n  Are you sure you want to KILL agent '{}'?\n\n  [y] Yes, Terminate  [n] No, Cancel", agent_name);
+    let agent_name = app
+        .agents
+        .get(&agent_id)
+        .map(|a| a.name.as_str())
+        .unwrap_or("unknown");
+
+    let text = format!(
+        "\n  Are you sure you want to KILL agent '{}'?\n\n  [y] Yes, Terminate  [n] No, Cancel",
+        agent_name
+    );
     let para = Paragraph::new(text)
-        .block(Block::default().borders(Borders::ALL).title(" Confirm Kill "))
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .title(" Confirm Kill "),
+        )
         .style(Style::default().fg(Color::Red));
     frame.render_widget(para, area);
 }

@@ -1,6 +1,6 @@
+use crate::error::AegisCliError;
 use clap::CommandFactory;
 use clap_complete::{generate, Shell};
-use crate::error::AegisCliError;
 
 pub fn run<Cli: CommandFactory>(shell: Shell) -> Result<(), AegisCliError> {
     let mut cmd = Cli::command();

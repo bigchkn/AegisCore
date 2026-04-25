@@ -2,7 +2,7 @@ use std::io::{Read, Seek, SeekFrom};
 use std::sync::Arc;
 use std::time::Duration;
 
-use aegis_core::{AegisError, Result, StorageBackend, AgentRegistry};
+use aegis_core::{AegisError, AgentRegistry, Result, StorageBackend};
 use aegis_tmux::{TmuxClient, TmuxTarget};
 use futures_util::{Sink, SinkExt, Stream, StreamExt};
 use tokio::time::sleep;
@@ -27,7 +27,7 @@ impl LogTailer {
         mut out_tx: impl Sink<String, Error = AegisError> + Unpin,
     ) -> Result<()> {
         let log_path = self.storage.agent_log_path(agent_id);
-        
+
         let mut file = std::fs::File::open(&log_path).map_err(|_| AegisError::LogFileNotFound {
             agent_id,
             path: log_path.clone(),
@@ -35,15 +35,16 @@ impl LogTailer {
 
         // 1. Initial burst: last_n lines
         let mut buffer = Vec::new();
-        file.read_to_end(&mut buffer).map_err(|source| AegisError::StorageIo {
-            path: log_path.clone(),
-            source,
-        })?;
+        file.read_to_end(&mut buffer)
+            .map_err(|source| AegisError::StorageIo {
+                path: log_path.clone(),
+                source,
+            })?;
 
         let text = String::from_utf8_lossy(&buffer);
         let lines: Vec<&str> = text.lines().collect();
         let start = lines.len().saturating_sub(last_n);
-        
+
         for line in &lines[start..] {
             let stripped = strip_ansi_escapes::strip(line);
             let line_clean = String::from_utf8_lossy(&stripped).into_owned();
@@ -51,28 +52,33 @@ impl LogTailer {
         }
 
         // 2. Continuous tail
-        let mut pos = file.seek(SeekFrom::End(0)).map_err(|source| AegisError::StorageIo {
-            path: log_path.clone(),
-            source,
-        })?;
-
-        loop {
-            let metadata = std::fs::metadata(&log_path).map_err(|source| AegisError::StorageIo {
+        let mut pos = file
+            .seek(SeekFrom::End(0))
+            .map_err(|source| AegisError::StorageIo {
                 path: log_path.clone(),
                 source,
             })?;
 
+        loop {
+            let metadata =
+                std::fs::metadata(&log_path).map_err(|source| AegisError::StorageIo {
+                    path: log_path.clone(),
+                    source,
+                })?;
+
             if metadata.len() > pos {
-                file.seek(SeekFrom::Start(pos)).map_err(|source| AegisError::StorageIo {
-                    path: log_path.clone(),
-                    source,
-                })?;
-                
+                file.seek(SeekFrom::Start(pos))
+                    .map_err(|source| AegisError::StorageIo {
+                        path: log_path.clone(),
+                        source,
+                    })?;
+
                 let mut new_bytes = Vec::new();
-                file.read_to_end(&mut new_bytes).map_err(|source| AegisError::StorageIo {
-                    path: log_path.clone(),
-                    source,
-                })?;
+                file.read_to_end(&mut new_bytes)
+                    .map_err(|source| AegisError::StorageIo {
+                        path: log_path.clone(),
+                        source,
+                    })?;
 
                 let new_text = String::from_utf8_lossy(&new_bytes);
                 for line in new_text.lines() {
@@ -117,20 +123,26 @@ impl PaneRelay {
         let agent = AgentRegistry::get(self.registry.as_ref(), agent_id)?
             .ok_or(AegisError::AgentNotFound { agent_id })?;
 
-        let target = TmuxTarget::parse(&agent.tmux_target())
-            .map_err(|e| AegisError::IpcProtocol { reason: e.to_string() })?;
+        let target =
+            TmuxTarget::parse(&agent.tmux_target()).map_err(|e| AegisError::IpcProtocol {
+                reason: e.to_string(),
+            })?;
 
         let log_path = self.storage.agent_log_path(agent_id);
-        let mut log_file = std::fs::File::open(&log_path).map_err(|_| AegisError::LogFileNotFound {
-            agent_id,
-            path: log_path.clone(),
-        })?;
+        let mut log_file =
+            std::fs::File::open(&log_path).map_err(|_| AegisError::LogFileNotFound {
+                agent_id,
+                path: log_path.clone(),
+            })?;
 
         // Start tailing from current end for the relay
-        let mut log_pos = log_file.seek(SeekFrom::End(0)).map_err(|source| AegisError::StorageIo {
-            path: log_path.clone(),
-            source,
-        })?;
+        let mut log_pos =
+            log_file
+                .seek(SeekFrom::End(0))
+                .map_err(|source| AegisError::StorageIo {
+                    path: log_path.clone(),
+                    source,
+                })?;
 
         loop {
             tokio::select! {
@@ -146,7 +158,7 @@ impl PaneRelay {
                             path: log_path.clone(),
                             source,
                         })?;
-                        
+
                         let mut new_bytes = Vec::new();
                         log_file.read_to_end(&mut new_bytes).map_err(|source| AegisError::StorageIo {
                             path: log_path.clone(),

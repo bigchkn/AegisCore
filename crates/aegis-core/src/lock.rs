@@ -173,10 +173,11 @@ impl LockedFile {
             source: e,
         })?;
 
-        let content = toml::to_string_pretty(value).map_err(|e| AegisError::ConfigSerializationError {
-            path: self.path.clone(),
-            source: e,
-        })?;
+        let content =
+            toml::to_string_pretty(value).map_err(|e| AegisError::ConfigSerializationError {
+                path: self.path.clone(),
+                source: e,
+            })?;
 
         tmp.write_all(content.as_bytes())
             .map_err(|e| AegisError::StorageIo {

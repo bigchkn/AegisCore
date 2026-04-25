@@ -83,6 +83,7 @@ If you check the milestone now, task `15.1` will automatically have its status u
 | `aegis taskflow show <M-ID>` | Shows detailed task list and design links for a milestone (e.g., `M13`). |
 | `aegis taskflow create-milestone <ID> <NAME>` | Create a new milestone fragment and register it. |
 | `aegis taskflow add-task <M-ID> <ID> <TASK>` | Add a new task to an existing milestone. |
+| `aegis taskflow set-task-status <M-ID> <TASK-ID> <STATUS>` | Update an existing roadmap task status. |
 | `aegis taskflow sync` | Synchronizes the roadmap TOMLs with the actual Agent Registry state. |
 | `aegis taskflow assign <roadmap_id> <task_id>` | Manually link a roadmap task to a specific agent task UUID. |
 

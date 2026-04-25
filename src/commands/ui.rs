@@ -1,5 +1,7 @@
-use crate::{anchoring::ProjectAnchor, client::DaemonClient, error::AegisCliError, output::Printer};
-use aegis_tui::{AppState, AegisClient, Tui};
+use crate::{
+    anchoring::ProjectAnchor, client::DaemonClient, error::AegisCliError, output::Printer,
+};
+use aegis_tui::{AegisClient, AppState, Tui};
 
 pub async fn run(
     _printer: &Printer,
@@ -11,10 +13,12 @@ pub async fn run(
         anchor.project_root.clone(),
     );
     let app = AppState::new(anchor.project_root.clone());
-    
+
     let mut tui = Tui::new(app, client).map_err(|e| AegisCliError::Unexpected(e.to_string()))?;
-    
-    tui.run().await.map_err(|e| AegisCliError::Unexpected(e.to_string()))?;
-    
+
+    tui.run()
+        .await
+        .map_err(|e| AegisCliError::Unexpected(e.to_string()))?;
+
     Ok(())
 }

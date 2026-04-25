@@ -13,6 +13,31 @@ pub enum TaskflowStatus {
     Blocked,
 }
 
+impl TaskflowStatus {
+    pub fn parse(value: &str) -> Option<Self> {
+        match value {
+            "pending" => Some(Self::Pending),
+            "lld-in-progress" => Some(Self::LldInProgress),
+            "lld-done" => Some(Self::LldDone),
+            "in-progress" => Some(Self::InProgress),
+            "done" => Some(Self::Done),
+            "blocked" => Some(Self::Blocked),
+            _ => None,
+        }
+    }
+
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Pending => "pending",
+            Self::LldInProgress => "lld-in-progress",
+            Self::LldDone => "lld-done",
+            Self::InProgress => "in-progress",
+            Self::Done => "done",
+            Self::Blocked => "blocked",
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProjectIndex {
     pub project: ProjectMeta,
@@ -43,6 +68,7 @@ pub struct Milestone {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProjectTask {
     pub id: String,
+    #[serde(default = "Uuid::new_v4")]
     pub uid: Uuid,
     pub task: String,
     pub status: TaskflowStatus,

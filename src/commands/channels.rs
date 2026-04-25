@@ -1,4 +1,6 @@
-use crate::{anchoring::ProjectAnchor, client::DaemonClient, error::AegisCliError, output::Printer};
+use crate::{
+    anchoring::ProjectAnchor, client::DaemonClient, error::AegisCliError, output::Printer,
+};
 
 pub async fn add_telegram(
     token: Option<&str>,
@@ -84,7 +86,11 @@ pub async fn list(
     anchor: &ProjectAnchor,
 ) -> Result<(), AegisCliError> {
     let payload = client
-        .request(Some(&anchor.project_root), "channel.list", serde_json::json!({}))
+        .request(
+            Some(&anchor.project_root),
+            "channel.list",
+            serde_json::json!({}),
+        )
         .await?;
 
     if printer.format == crate::output::OutputFormat::Json {
@@ -102,9 +108,18 @@ pub async fn list(
         .iter()
         .map(|c| {
             vec![
-                c.get("name").and_then(|v| v.as_str()).unwrap_or("?").to_string(),
-                c.get("kind").and_then(|v| v.as_str()).unwrap_or("?").to_string(),
-                c.get("status").and_then(|v| v.as_str()).unwrap_or("unknown").to_string(),
+                c.get("name")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("?")
+                    .to_string(),
+                c.get("kind")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("?")
+                    .to_string(),
+                c.get("status")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("unknown")
+                    .to_string(),
             ]
         })
         .collect();
@@ -132,8 +147,14 @@ pub async fn channel_status(
         return Ok(());
     }
 
-    let status = payload.get("status").and_then(|v| v.as_str()).unwrap_or("?");
-    let messages = payload.get("messages_queued").and_then(|v| v.as_u64()).unwrap_or(0);
+    let status = payload
+        .get("status")
+        .and_then(|v| v.as_str())
+        .unwrap_or("?");
+    let messages = payload
+        .get("messages_queued")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(0);
     printer.kv(&[
         ("Channel:", name),
         ("Status:", status),

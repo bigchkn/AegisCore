@@ -1,4 +1,7 @@
-use std::{io::{ErrorKind, Write}, path::Path};
+use std::{
+    io::{ErrorKind, Write},
+    path::Path,
+};
 
 use tracing::debug;
 
@@ -184,7 +187,8 @@ impl TmuxClient {
     /// Uses tmux load-buffer + paste-buffer for reliable injection without shell escaping.
     pub async fn send_raw_input(&self, target: &TmuxTarget, data: &[u8]) -> Result<(), TmuxError> {
         let mut tmp = tempfile::NamedTempFile::new().map_err(|e| TmuxError::Io { source: e })?;
-        tmp.write_all(data).map_err(|e| TmuxError::Io { source: e })?;
+        tmp.write_all(data)
+            .map_err(|e| TmuxError::Io { source: e })?;
         tmp.flush().map_err(|e| TmuxError::Io { source: e })?;
 
         let buffer_name = format!("aegis_paste_{}", uuid::Uuid::new_v4());
@@ -196,8 +200,15 @@ impl TmuxClient {
 
         // 2. Paste buffer into target pane
         // -r: do not replace LF with CR (raw)
-        self.run_tmux(&["paste-buffer", "-b", &buffer_name, "-r", "-t", target.as_str()])
-            .await?;
+        self.run_tmux(&[
+            "paste-buffer",
+            "-b",
+            &buffer_name,
+            "-r",
+            "-t",
+            target.as_str(),
+        ])
+        .await?;
 
         // 3. Clean up buffer
         let _ = self.run_tmux(&["delete-buffer", "-b", &buffer_name]).await;

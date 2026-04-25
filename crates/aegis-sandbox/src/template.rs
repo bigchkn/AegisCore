@@ -97,7 +97,7 @@ fn first_unresolved_var(rendered: &str) -> Option<String> {
 mod tests {
     use super::*;
     use aegis_core::{SandboxNetworkPolicy, SandboxPolicy};
-    use std::path::PathBuf;
+    use std::path::{Path, PathBuf};
 
     #[test]
     fn renders_network_variants() {
@@ -137,5 +137,29 @@ mod tests {
         .expect_err("missing token should fail");
 
         assert!(matches!(err, SandboxError::TemplateVar { var } if var == "MISSING"));
+    }
+
+    #[test]
+    fn agent_jail_template_has_no_unresolved_placeholders() {
+        let policy = SandboxPolicy {
+            network: SandboxNetworkPolicy::OutboundOnly,
+            extra_reads: vec![PathBuf::from("/extra/read")],
+            extra_writes: vec![PathBuf::from("/extra/write")],
+            hard_deny_reads: vec![PathBuf::from("/secret")],
+        };
+        let rendered = render_template(
+            AGENT_JAIL_TEMPLATE,
+            Path::new("/tmp/worktree"),
+            Path::new("/Users/testuser"),
+            Path::new("/tmp/.aegis/logs/sessions"),
+            &policy,
+        )
+        .expect("built-in template should render without errors");
+
+        assert!(
+            rendered.find("@@").is_none(),
+            "rendered template still contains unreplaced placeholder: {:?}",
+            rendered.lines().find(|l| l.contains("@@"))
+        );
     }
 }

@@ -1,5 +1,7 @@
+use crate::{
+    anchoring::ProjectAnchor, client::DaemonClient, error::AegisCliError, output::Printer,
+};
 use std::path::{Path, PathBuf};
-use crate::{anchoring::ProjectAnchor, client::DaemonClient, error::AegisCliError, output::Printer};
 
 const GITIGNORE_BLOCK: &str = r#"
 # AegisCore runtime directories
@@ -75,7 +77,11 @@ pub async fn run(
 
     // Best-effort daemon registration — don't fail init if daemon is down.
     match client
-        .request(None, "projects.register", serde_json::json!({ "root_path": cwd }))
+        .request(
+            None,
+            "projects.register",
+            serde_json::json!({ "root_path": cwd }),
+        )
         .await
     {
         Ok(_) => {}
@@ -143,18 +149,18 @@ fn read_global_config_raw() -> Option<String> {
 }
 
 fn scaffold_prompts(aegis_dir: &Path) -> Result<(), AegisCliError> {
-    let system_default = include_str!(
-        "../../crates/aegis-controller/src/prompts/templates/system_default.md"
-    );
-    let recovery_default = include_str!(
-        "../../crates/aegis-controller/src/prompts/templates/recovery_default.md"
-    );
-    let resume_default = include_str!(
-        "../../crates/aegis-controller/src/prompts/templates/resume_default.md"
-    );
+    let system_default =
+        include_str!("../../crates/aegis-controller/src/prompts/templates/system_default.md");
+    let recovery_default =
+        include_str!("../../crates/aegis-controller/src/prompts/templates/recovery_default.md");
+    let resume_default =
+        include_str!("../../crates/aegis-controller/src/prompts/templates/resume_default.md");
 
     write_if_absent(aegis_dir.join("prompts/system/default.md"), system_default)?;
-    write_if_absent(aegis_dir.join("prompts/handoff/recovery.md"), recovery_default)?;
+    write_if_absent(
+        aegis_dir.join("prompts/handoff/recovery.md"),
+        recovery_default,
+    )?;
     write_if_absent(aegis_dir.join("prompts/handoff/resume.md"), resume_default)?;
     Ok(())
 }

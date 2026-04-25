@@ -1,5 +1,7 @@
+use crate::{
+    anchoring::ProjectAnchor, client::DaemonClient, error::AegisCliError, output::Printer,
+};
 use std::path::PathBuf;
-use crate::{anchoring::ProjectAnchor, client::DaemonClient, error::AegisCliError, output::Printer};
 
 struct Check {
     label: String,
@@ -72,7 +74,11 @@ fn check_tmux() -> Check {
             Check {
                 label: "tmux".into(),
                 ok,
-                detail: if ok { ver } else { format!("{ver} (need ≥ 3.0)") },
+                detail: if ok {
+                    ver
+                } else {
+                    format!("{ver} (need ≥ 3.0)")
+                },
             }
         }
         _ => Check {
@@ -105,12 +111,20 @@ fn check_binary(label: &str, args: &[&str], _name: &str) -> Check {
                 .unwrap_or("")
                 .trim()
                 .to_string();
-            Check { label: label.into(), ok: true, detail: ver }
+            Check {
+                label: label.into(),
+                ok: true,
+                detail: ver,
+            }
         }
         _ => Check {
             label: label.into(),
             ok: label == "node", // node is optional
-            detail: if label == "node" { "optional - needed for web UI development".into() } else { format!("{label} not found") },
+            detail: if label == "node" {
+                "optional - needed for web UI development".into()
+            } else {
+                format!("{label} not found")
+            },
         },
     }
 }
@@ -119,7 +133,11 @@ fn check_binary(label: &str, args: &[&str], _name: &str) -> Check {
 fn check_sandbox_exec() -> Check {
     let path = std::path::Path::new("/usr/bin/sandbox-exec");
     if path.exists() {
-        Check { label: "sandbox-exec".into(), ok: true, detail: "present".into() }
+        Check {
+            label: "sandbox-exec".into(),
+            ok: true,
+            detail: "present".into(),
+        }
     } else {
         Check {
             label: "sandbox-exec".into(),
@@ -132,8 +150,9 @@ fn check_sandbox_exec() -> Check {
 #[cfg(target_os = "macos")]
 fn check_launchd() -> Check {
     let home = std::env::var("HOME").unwrap_or_default();
-    let plist_path = std::path::PathBuf::from(&home).join("Library/LaunchAgents/com.aegiscore.aegisd.plist");
-    
+    let plist_path =
+        std::path::PathBuf::from(&home).join("Library/LaunchAgents/com.aegiscore.aegisd.plist");
+
     if !plist_path.exists() {
         return Check {
             label: "launchd plist".into(),
@@ -149,13 +168,11 @@ fn check_launchd() -> Check {
         .output();
 
     match output {
-        Ok(out) if out.status.success() => {
-            Check {
-                label: "launchd service".into(),
-                ok: true,
-                detail: "active".into(),
-            }
-        }
+        Ok(out) if out.status.success() => Check {
+            label: "launchd service".into(),
+            ok: true,
+            detail: "active".into(),
+        },
         _ => Check {
             label: "launchd service".into(),
             ok: false,
@@ -199,13 +216,19 @@ fn check_aegis_dir() -> Check {
 }
 
 async fn check_daemon(client: &DaemonClient) -> Check {
-    match client.request(None, "daemon.status", serde_json::json!({})).await {
+    match client
+        .request(None, "daemon.status", serde_json::json!({}))
+        .await
+    {
         Ok(payload) => {
             let ver = payload
                 .get("version")
                 .and_then(|v| v.as_str())
                 .unwrap_or("?");
-            let uptime = payload.get("uptime_s").and_then(|v| v.as_u64()).unwrap_or(0);
+            let uptime = payload
+                .get("uptime_s")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0);
             Check {
                 label: "aegisd".into(),
                 ok: true,
@@ -227,7 +250,7 @@ async fn check_daemon(client: &DaemonClient) -> Check {
 
 fn check_provider(name: &str, binary: &str) -> Check {
     let mut found = which_binary(binary);
-    
+
     // Special case for claude-code which might be installed as 'claude' or 'claude-code'
     if found.is_none() && name == "claude-code" {
         if binary == "claude" {
@@ -260,7 +283,11 @@ fn which_binary(name: &str) -> Option<PathBuf> {
     std::env::var("PATH").ok().and_then(|path_var| {
         path_var.split(':').find_map(|dir| {
             let p = PathBuf::from(dir).join(name);
-            if p.is_file() { Some(p) } else { None }
+            if p.is_file() {
+                Some(p)
+            } else {
+                None
+            }
         })
     })
 }

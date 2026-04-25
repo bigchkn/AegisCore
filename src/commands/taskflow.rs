@@ -1,4 +1,6 @@
-use crate::{anchoring::ProjectAnchor, client::DaemonClient, error::AegisCliError, output::Printer};
+use crate::{
+    anchoring::ProjectAnchor, client::DaemonClient, error::AegisCliError, output::Printer,
+};
 
 pub async fn status(
     printer: &Printer,
@@ -6,7 +8,11 @@ pub async fn status(
     anchor: &ProjectAnchor,
 ) -> Result<(), AegisCliError> {
     let payload = client
-        .request(Some(&anchor.project_root), "taskflow.status", serde_json::json!({}))
+        .request(
+            Some(&anchor.project_root),
+            "taskflow.status",
+            serde_json::json!({}),
+        )
         .await?;
 
     if printer.format == crate::output::OutputFormat::Json {
@@ -15,8 +21,11 @@ pub async fn status(
     }
 
     let project = payload.get("project");
-    let name = project.and_then(|p| p.get("name")).and_then(|v| v.as_str()).unwrap_or("AegisCore");
-    
+    let name = project
+        .and_then(|p| p.get("name"))
+        .and_then(|v| v.as_str())
+        .unwrap_or("AegisCore");
+
     println!("{} Pipeline Status", name);
     printer.separator();
 
@@ -27,7 +36,10 @@ pub async fn status(
 
         for key in keys {
             let m = m_map.get(key).unwrap();
-            let status = m.get("status").and_then(|v| v.as_str()).unwrap_or("pending");
+            let status = m
+                .get("status")
+                .and_then(|v| v.as_str())
+                .unwrap_or("pending");
             let ok = status == "done";
             printer.status_line(ok, key, status);
         }
@@ -66,9 +78,15 @@ pub async fn show(
         return Ok(());
     }
 
-    let name = payload.get("name").and_then(|v| v.as_str()).unwrap_or(milestone_id);
-    let status = payload.get("status").and_then(|v| v.as_str()).unwrap_or("pending");
-    
+    let name = payload
+        .get("name")
+        .and_then(|v| v.as_str())
+        .unwrap_or(milestone_id);
+    let status = payload
+        .get("status")
+        .and_then(|v| v.as_str())
+        .unwrap_or("pending");
+
     println!("Milestone: {} [{}]", name, status);
     printer.separator();
 
@@ -77,17 +95,33 @@ pub async fn show(
         for t in task_list {
             let id = t.get("id").and_then(|v| v.as_str()).unwrap_or("?");
             let task = t.get("task").and_then(|v| v.as_str()).unwrap_or("?");
-            let st = t.get("status").and_then(|v| v.as_str()).unwrap_or("pending");
-            let reg_id = t.get("registry_task_id").and_then(|v| v.as_str()).unwrap_or("");
-            
+            let st = t
+                .get("status")
+                .and_then(|v| v.as_str())
+                .unwrap_or("pending");
+            let reg_id = t
+                .get("registry_task_id")
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+
             let mark = match st {
                 "done" => "[✓]",
                 "in-progress" => "[>]",
                 "blocked" => "[X]",
                 _ => "[ ]",
             };
-            
-            println!("  {} {} - {} {}", mark, id, task, if reg_id.is_empty() { "".to_string() } else { format!("({})", &reg_id[..8]) });
+
+            println!(
+                "  {} {} - {} {}",
+                mark,
+                id,
+                task,
+                if reg_id.is_empty() {
+                    "".to_string()
+                } else {
+                    format!("({})", &reg_id[..8])
+                }
+            );
         }
     } else {
         printer.line("No tasks found for this milestone.");
@@ -102,10 +136,18 @@ pub async fn sync(
     anchor: &ProjectAnchor,
 ) -> Result<(), AegisCliError> {
     let payload = client
-        .request(Some(&anchor.project_root), "taskflow.sync", serde_json::json!({}))
+        .request(
+            Some(&anchor.project_root),
+            "taskflow.sync",
+            serde_json::json!({}),
+        )
         .await?;
 
-    let updated = payload.get("updated_tasks").and_then(|v| v.as_array()).map(|a| a.len()).unwrap_or(0);
+    let updated = payload
+        .get("updated_tasks")
+        .and_then(|v| v.as_array())
+        .map(|a| a.len())
+        .unwrap_or(0);
     printer.line(&format!("Taskflow synced. {} tasks updated.", updated));
     Ok(())
 }
@@ -125,7 +167,9 @@ pub async fn assign(
         )
         .await?;
 
-    printer.line(&format!("Roadmap task {roadmap_id} linked to registry task {task_id}."));
+    printer.line(&format!(
+        "Roadmap task {roadmap_id} linked to registry task {task_id}."
+    ));
     Ok(())
 }
 
@@ -174,5 +218,31 @@ pub async fn add_task(
         .await?;
 
     printer.line(&format!("Task {id} added to milestone {milestone_id}."));
+    Ok(())
+}
+
+pub async fn set_task_status(
+    milestone_id: &str,
+    task_id: &str,
+    status: &str,
+    printer: &Printer,
+    client: &DaemonClient,
+    anchor: &ProjectAnchor,
+) -> Result<(), AegisCliError> {
+    client
+        .request(
+            Some(&anchor.project_root),
+            "taskflow.set_task_status",
+            serde_json::json!({
+                "milestone_id": milestone_id,
+                "task_id": task_id,
+                "status": status,
+            }),
+        )
+        .await?;
+
+    printer.line(&format!(
+        "Task {task_id} in milestone {milestone_id} marked {status}."
+    ));
     Ok(())
 }
