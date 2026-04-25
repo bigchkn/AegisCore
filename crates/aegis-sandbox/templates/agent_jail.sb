@@ -10,7 +10,11 @@
   (subpath "/opt/homebrew/bin")
   (subpath "/opt/homebrew/Cellar")
   (subpath "/bin")
-  (subpath "/usr/sbin"))
+  (subpath "/usr/sbin")
+  ; User-installed AI CLI tools and their runtimes
+  (subpath "@@HOME@@/.claude")
+  (subpath "@@HOME@@/.nvm")
+  (subpath "@@HOME@@/.local/bin"))
 
 (allow process-fork)
 (allow signal)
@@ -34,7 +38,10 @@
 ; Dynamic linker and runtime
 (allow file-read*
   (subpath "/usr/local/Cellar")
-  (subpath "@@NODE_MODULES_PATH@@"))
+  (subpath "@@NODE_MODULES_PATH@@")
+  (subpath "@@HOME@@/.claude")
+  (subpath "@@HOME@@/.nvm")
+  (subpath "@@HOME@@/.local"))
 
 ; Temp space
 (allow file-read* file-write*

@@ -1,8 +1,11 @@
 use crate::registry::agents::AgentStore;
+use crate::registry::tasks::TaskStore;
 use aegis_core::agent::AgentStatus;
 use aegis_core::error::{AegisError, Result};
 use aegis_core::storage::StorageBackend;
+use aegis_core::task::TaskStatus;
 use chrono::Utc;
+use std::collections::HashSet;
 use std::fs;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -173,6 +176,58 @@ impl StateManager {
             path: registry_path.clone(),
             source: e,
         })?;
+
+        // 3. Reset orphaned Active tasks: any task still Active whose assigned agent
+        //    is no longer live gets returned to Queued so the drain loop can retry it.
+        let tasks_path = self.storage.tasks_path();
+        if tasks_path.exists() {
+            let live_agent_ids: HashSet<_> = store
+                .agents
+                .iter()
+                .filter(|a| {
+                    matches!(
+                        a.status,
+                        AgentStatus::Queued | AgentStatus::Starting | AgentStatus::Active
+                    )
+                })
+                .map(|a| a.agent_id)
+                .collect();
+
+            let content = fs::read_to_string(&tasks_path).map_err(|e| AegisError::StorageIo {
+                path: tasks_path.clone(),
+                source: e,
+            })?;
+            if let Ok(mut task_store) = serde_json::from_str::<TaskStore>(&content) {
+                let mut tasks_reset = 0usize;
+                for task in &mut task_store.tasks {
+                    if task.status == TaskStatus::Active {
+                        let orphaned = task
+                            .assigned_agent_id
+                            .map_or(true, |id| !live_agent_ids.contains(&id));
+                        if orphaned {
+                            task.status = TaskStatus::Queued;
+                            task.assigned_agent_id = None;
+                            tasks_reset += 1;
+                        }
+                    }
+                }
+                if tasks_reset > 0 {
+                    let json = serde_json::to_string_pretty(&task_store).map_err(|e| {
+                        AegisError::RegistryCorrupted {
+                            path: tasks_path.clone(),
+                            source: e,
+                        }
+                    })?;
+                    fs::write(&tasks_path, json).map_err(|e| AegisError::StorageIo {
+                        path: tasks_path.clone(),
+                        source: e,
+                    })?;
+                    info!(count = tasks_reset, "Reset orphaned Active tasks to Queued");
+                }
+            } else {
+                warn!("tasks.json could not be parsed during recovery — skipping task reset");
+            }
+        }
 
         Ok(result)
     }

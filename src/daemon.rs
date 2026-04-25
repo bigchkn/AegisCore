@@ -98,6 +98,12 @@ fn install_launchd() -> Result<()> {
     let bin_path =
         std::env::current_exe().map_err(|e| aegis_core::AegisError::Unexpected(Box::new(e)))?;
 
+    // launchd runs with a minimal PATH; include Homebrew and Claude's install dir
+    // so the daemon can find tmux, claude, git, and other tools at runtime.
+    let path_value = format!(
+        "{home}/.claude/local:/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+    );
+
     let plist_content = format!(
         r#"<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -107,22 +113,29 @@ fn install_launchd() -> Result<()> {
     <string>com.aegiscore.aegisd</string>
     <key>ProgramArguments</key>
     <array>
-        <string>{}</string>
+        <string>{bin}</string>
         <string>run</string>
     </array>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>{path}</string>
+        <key>HOME</key>
+        <string>{home}</string>
+    </dict>
     <key>RunAtLoad</key>
     <true/>
     <key>KeepAlive</key>
     <true/>
     <key>StandardOutPath</key>
-    <string>{}/.aegis/daemon.log</string>
+    <string>{home}/.aegis/daemon.log</string>
     <key>StandardErrorPath</key>
-    <string>{}/.aegis/daemon.err.log</string>
+    <string>{home}/.aegis/daemon.err.log</string>
 </dict>
 </plist>"#,
-        bin_path.display(),
-        home,
-        home
+        bin = bin_path.display(),
+        path = path_value,
+        home = home,
     );
 
     std::fs::create_dir_all(plist_path.parent().unwrap()).map_err(|e| {
