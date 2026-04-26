@@ -1,3 +1,4 @@
+pub mod clarification;
 pub mod commands;
 pub mod daemon;
 pub mod dispatcher;
@@ -13,6 +14,7 @@ pub mod state;
 pub mod storage;
 pub mod watchdog;
 
+pub use clarification::*;
 pub use commands::{ControllerCommands, ProjectStatus};
 pub use dispatcher::Dispatcher;
 pub use events::EventBus;

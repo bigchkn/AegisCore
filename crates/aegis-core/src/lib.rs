@@ -174,12 +174,24 @@ mod tests {
             s.tasks_path(),
             Path::new("/tmp/test-project/.aegis/state/tasks.json")
         );
+        assert_eq!(
+            s.clarifications_path(),
+            Path::new("/tmp/test-project/.aegis/state/clarifications.json")
+        );
+        assert_eq!(
+            s.human_inbox_path(),
+            Path::new("/tmp/test-project/.aegis/channels/human/inbox")
+        );
 
         use uuid::Uuid;
         let id = Uuid::nil();
         let log = s.agent_log_path(id);
         assert!(log.starts_with(s.logs_dir()));
         assert!(log.to_string_lossy().ends_with(".log"));
+        assert_eq!(
+            s.clarification_inbox_path(id),
+            Path::new("/tmp/test-project/.aegis/channels/human/inbox/00000000-0000-0000-0000-000000000000.json")
+        );
     }
 
     #[test]

@@ -9,6 +9,7 @@ use aegis_tmux::TmuxClient;
 use uuid::Uuid;
 
 use crate::{
+    clarification::ClarificationService,
     commands::ControllerCommands,
     daemon::logs::{LogTailer, PaneRelay},
     dispatcher::Dispatcher,
@@ -34,6 +35,8 @@ pub struct AegisRuntime {
     pub recorder: Arc<dyn Recorder>,
     pub providers: Arc<ProviderRegistry>,
     pub prompts: Arc<PromptManager>,
+    pub message_router: Arc<MessageRouter>,
+    pub clarifications: Arc<ClarificationService>,
     pub dispatcher: Arc<Dispatcher>,
     pub scheduler: Arc<Scheduler>,
     pub state: Arc<StateManager>,
@@ -78,6 +81,16 @@ impl AegisRuntime {
         let prompts = Arc::new(PromptManager::new(root_path.clone()));
         let state = Arc::new(StateManager::new(storage.clone()));
         let taskflow = Arc::new(TaskflowEngine::new(storage.clone(), registry.clone()));
+        let message_router = Arc::new(MessageRouter::new(
+            registry.clone(),
+            storage.clone(),
+            Some(tmux.clone()),
+        ));
+        let clarifications = Arc::new(ClarificationService::new(
+            registry.clone(),
+            storage.clone(),
+            message_router.clone(),
+        ));
         let log_tailer = Arc::new(LogTailer::new(storage.clone()));
         let pane_relay = Arc::new(PaneRelay::new(
             storage.clone(),
@@ -119,6 +132,8 @@ impl AegisRuntime {
             recorder,
             providers,
             prompts,
+            message_router,
+            clarifications,
             dispatcher,
             scheduler,
             state,
@@ -136,6 +151,7 @@ impl AegisRuntime {
 
     pub async fn recover(&self) -> Result<()> {
         self.state.recover()?;
+        let _ = self.clarifications.recover_pending_deliveries().await?;
         Ok(())
     }
 
@@ -158,15 +174,11 @@ impl AegisRuntime {
     }
 
     pub fn commands(&self) -> ControllerCommands {
-        let message_router = Arc::new(MessageRouter::new(
-            self.registry.clone(),
-            self.storage.clone(),
-            Some(self.tmux.clone()),
-        ));
         ControllerCommands::new(
             self.registry.clone(),
             self.dispatcher.clone(),
-            message_router,
+            self.message_router.clone(),
+            self.clarifications.clone(),
             self.scheduler.clone(),
             Some(self.recorder.clone()),
             self.taskflow.clone(),

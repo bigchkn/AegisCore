@@ -135,6 +135,12 @@ enum Commands {
         subcommand: MessageCommands,
     },
 
+    /// Request or answer human clarifications
+    Clarify {
+        #[command(subcommand)]
+        subcommand: ClarifyCommands,
+    },
+
     /// Config management
     Config {
         #[command(subcommand)]
@@ -266,6 +272,43 @@ enum MessageCommands {
     Inbox { agent_id: String },
     /// List inbox summaries or a specific inbox when an agent ID is supplied
     List { agent_id: Option<String> },
+}
+
+#[derive(Subcommand)]
+enum ClarifyCommands {
+    /// Create a clarification request for an agent
+    Request {
+        agent_id: String,
+        question: String,
+        #[arg(long)]
+        task_id: Option<String>,
+        #[arg(long, default_value_t = 0)]
+        priority: i32,
+        #[arg(long)]
+        context: Option<String>,
+        #[arg(long)]
+        wait: bool,
+    },
+    /// List clarification requests
+    List {
+        #[arg(long)]
+        agent_id: Option<String>,
+    },
+    /// Show one clarification request
+    Show { request_id: String },
+    /// Answer one clarification request
+    Answer {
+        request_id: String,
+        answer: String,
+        #[arg(long)]
+        payload: Option<String>,
+    },
+    /// Block until a clarification resolves
+    Wait {
+        request_or_agent_id: String,
+        #[arg(long)]
+        timeout_secs: Option<u64>,
+    },
 }
 
 #[tokio::main]
@@ -425,6 +468,67 @@ async fn dispatch(cli: Cli, printer: &Printer, client: &DaemonClient) -> Result<
                 }
                 MessageCommands::List { agent_id } => {
                     commands::messages::list(agent_id.as_deref(), printer, client, &anchor).await
+                }
+            }
+        }
+
+        Commands::Clarify { subcommand } => {
+            let anchor = require_anchor()?;
+            match subcommand {
+                ClarifyCommands::Request {
+                    agent_id,
+                    question,
+                    task_id,
+                    priority,
+                    context,
+                    wait: wait_for_answer,
+                } => {
+                    commands::clarify::request(
+                        &agent_id,
+                        task_id.as_deref(),
+                        &question,
+                        context.as_deref(),
+                        priority,
+                        wait_for_answer,
+                        printer,
+                        client,
+                        &anchor,
+                    )
+                    .await
+                }
+                ClarifyCommands::List { agent_id } => {
+                    commands::clarify::list(agent_id.as_deref(), printer, client, &anchor).await
+                }
+                ClarifyCommands::Show { request_id } => {
+                    commands::clarify::show(&request_id, printer, client, &anchor).await
+                }
+                ClarifyCommands::Answer {
+                    request_id,
+                    answer,
+                    payload,
+                } => {
+                    commands::clarify::answer(
+                        &request_id,
+                        &answer,
+                        payload.as_deref(),
+                        printer,
+                        client,
+                        &anchor,
+                    )
+                    .await
+                }
+                ClarifyCommands::Wait {
+                    request_or_agent_id,
+                    timeout_secs,
+                } => {
+                    commands::clarify::wait_for_response(
+                        &request_or_agent_id,
+                        timeout_secs,
+                        printer,
+                        client,
+                        &anchor,
+                    )
+                    .await
                 }
             }
         }

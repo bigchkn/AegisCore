@@ -175,6 +175,98 @@ async fn dispatch_command(
             commands.kill(agent_id).await.map_err(|e| e.to_string())?;
             Ok(Json(serde_json::json!({ "status": "ok" })))
         }
+        "clarify.request" => {
+            let agent_raw = params
+                .get("agent_id")
+                .and_then(|v| v.as_str())
+                .ok_or("Missing agent_id")?;
+            let question = params
+                .get("question")
+                .and_then(|v| v.as_str())
+                .ok_or("Missing question")?;
+            let task_id = params
+                .get("task_id")
+                .and_then(|v| v.as_str())
+                .and_then(|v| Uuid::parse_str(v).ok());
+            let context = params
+                .get("context")
+                .cloned()
+                .unwrap_or_else(|| serde_json::json!({}));
+            let priority = params.get("priority").and_then(|v| v.as_i64()).unwrap_or(0) as i32;
+            let request = commands
+                .clarify_request(agent_raw, task_id, question, context, priority)
+                .map_err(|e| e.to_string())?;
+            Ok(Json(serde_json::to_value(request).unwrap()))
+        }
+        "clarify.list" => {
+            if let Some(agent_raw) = params.get("agent_id").and_then(|v| v.as_str()) {
+                let requests = commands
+                    .clarify_list_for_agent(agent_raw)
+                    .map_err(|e| e.to_string())?;
+                Ok(Json(serde_json::to_value(requests).unwrap()))
+            } else {
+                let requests = commands.clarify_list().map_err(|e| e.to_string())?;
+                Ok(Json(serde_json::to_value(requests).unwrap()))
+            }
+        }
+        "clarify.show" => {
+            let request_id = params
+                .get("request_id")
+                .and_then(|v| v.as_str())
+                .and_then(|v| Uuid::parse_str(v).ok())
+                .ok_or("Missing or invalid request_id")?;
+            let request = commands
+                .clarify_show(request_id)
+                .map_err(|e| e.to_string())?;
+            Ok(Json(serde_json::to_value(request).unwrap()))
+        }
+        "clarify.answer" => {
+            let request_id = params
+                .get("request_id")
+                .and_then(|v| v.as_str())
+                .and_then(|v| Uuid::parse_str(v).ok())
+                .ok_or("Missing or invalid request_id")?;
+            let answer = params
+                .get("answer")
+                .and_then(|v| v.as_str())
+                .ok_or("Missing answer")?;
+            let payload = params
+                .get("payload")
+                .cloned()
+                .unwrap_or_else(|| serde_json::json!({}));
+            let answered_by = params
+                .get("answered_by")
+                .and_then(|v| v.as_str())
+                .unwrap_or("human_cli");
+            let answered_by = match answered_by {
+                "human_cli" => crate::clarification::ClarifierSource::HumanCli,
+                "human_tui" => crate::clarification::ClarifierSource::HumanTui,
+                "telegram" => crate::clarification::ClarifierSource::Telegram,
+                "system" => crate::clarification::ClarifierSource::System,
+                other => return Err(format!("Unknown clarification source: {other}")),
+            };
+            let request = commands
+                .clarify_answer(request_id, answer, payload, answered_by)
+                .await
+                .map_err(|e| e.to_string())?;
+            Ok(Json(serde_json::to_value(request).unwrap()))
+        }
+        "clarify.wait" => {
+            let target = params
+                .get("request_id")
+                .or_else(|| params.get("agent_id"))
+                .and_then(|v| v.as_str())
+                .ok_or("Missing request_id or agent_id")?;
+            let timeout = params
+                .get("timeout_secs")
+                .and_then(|v| v.as_u64())
+                .map(std::time::Duration::from_secs);
+            let request = commands
+                .clarify_wait(target, timeout)
+                .await
+                .map_err(|e| e.to_string())?;
+            Ok(Json(serde_json::to_value(request).unwrap()))
+        }
         _ => Err(format!("Unknown command: {}", cmd)),
     }
 }

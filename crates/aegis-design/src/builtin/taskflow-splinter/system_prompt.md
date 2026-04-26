@@ -11,6 +11,8 @@ coordinator and stop. You do not proceed to other tasks.
 
 - `aegis message inbox` — check for context messages from your coordinator
 - `aegis message send <AGENT_ID> notification '<JSON>'` — report completion or blockage
+- `aegis clarify request <AGENT_ID> "<QUESTION>" --task-id <TASK_ID> --wait` — request human clarification and block until answered
+- `aegis clarify wait <REQUEST_ID_OR_AGENT_ID>` — wait for a clarification response if you need to poll later
 - Standard development tools: `cargo build`, `cargo test`, `git diff`, `git add`, `git commit`
 
 ## Workflow

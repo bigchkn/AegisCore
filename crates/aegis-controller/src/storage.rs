@@ -19,6 +19,7 @@ impl ProjectStorage {
             self.logs_dir(),
             self.archive_dir(),
             self.channels_dir(),
+            self.human_inbox_dir(),
             self.profiles_dir(),
             self.worktrees_dir(),
             self.handoff_dir(),
@@ -54,6 +55,7 @@ mod tests {
         assert!(storage.logs_dir().is_dir());
         assert!(storage.archive_dir().is_dir());
         assert!(storage.channels_dir().is_dir());
+        assert!(storage.human_inbox_dir().is_dir());
         assert!(storage.profiles_dir().is_dir());
         assert!(storage.worktrees_dir().is_dir());
         assert!(storage.handoff_dir().is_dir());

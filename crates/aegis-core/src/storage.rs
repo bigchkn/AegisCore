@@ -22,6 +22,9 @@ pub trait StorageBackend: Send + Sync {
     fn channels_dir(&self) -> PathBuf {
         self.aegis_dir().join("channels")
     }
+    fn human_inbox_dir(&self) -> PathBuf {
+        self.channels_dir().join("human").join("inbox")
+    }
     fn profiles_dir(&self) -> PathBuf {
         self.aegis_dir().join("profiles")
     }
@@ -49,6 +52,9 @@ pub trait StorageBackend: Send + Sync {
     fn channels_state_path(&self) -> PathBuf {
         self.state_dir().join("channels.json")
     }
+    fn clarifications_path(&self) -> PathBuf {
+        self.state_dir().join("clarifications.json")
+    }
     fn taskflow_path(&self) -> PathBuf {
         self.state_dir().join("taskflow.json")
     }
@@ -63,5 +69,16 @@ pub trait StorageBackend: Send + Sync {
     }
     fn agent_inbox_path(&self, agent_id: Uuid) -> PathBuf {
         self.channels_dir().join(agent_id.to_string()).join("inbox")
+    }
+    fn human_inbox_path(&self) -> PathBuf {
+        self.human_inbox_dir()
+    }
+    fn clarification_inbox_path(&self, request_id: Uuid) -> PathBuf {
+        self.human_inbox_dir().join(format!("{request_id}.json"))
+    }
+    fn clarification_handoff_path(&self, task_id: Uuid, request_id: Uuid) -> PathBuf {
+        self.handoff_dir()
+            .join(task_id.to_string())
+            .join(format!("{request_id}.json"))
     }
 }

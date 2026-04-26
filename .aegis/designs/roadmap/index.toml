@@ -1,10 +1,41 @@
 [project]
 name = "AegisCore"
 current_milestone = 15
+backlog = "backlog.toml"
 
-[milestones.M11]
-name = "Global Daemon & IPC"
-path = "milestones/M11.toml"
+[milestones.M22]
+name = "Agent Design — Taskflow Template Suite"
+path = "milestones/M22.toml"
+status = "pending"
+
+[milestones.M19]
+name = "Agent Design — Design Phase"
+path = "milestones/M19.toml"
+status = "in-progress"
+
+[milestones.M15]
+name = "Web Agent Controls"
+path = "milestones/M15.toml"
+status = "done"
+
+[milestones.M13]
+name = "Taskflow Engine"
+path = "milestones/M13.toml"
+status = "done"
+
+[milestones.M25]
+name = "Human Clarification Loop"
+path = "milestones/M25.toml"
+status = "done"
+
+[milestones.M17]
+name = "Global Backlog & Task Types"
+path = "milestones/M17.toml"
+status = "done"
+
+[milestones.M12]
+name = "CLI Binary"
+path = "milestones/M12.toml"
 status = "done"
 
 [milestones.M18]
@@ -17,24 +48,9 @@ name = "Agent Design — Bootstrap Integration"
 path = "milestones/M21.toml"
 status = "pending"
 
-[milestones.M13]
-name = "Taskflow Engine"
-path = "milestones/M13.toml"
-status = "done"
-
-[milestones.M15]
-name = "Web Agent Controls"
-path = "milestones/M15.toml"
-status = "done"
-
-[milestones.M24]
-name = "Web UI Taskflow Enhancements"
-path = "milestones/M24.toml"
-status = "done"
-
-[milestones.M12]
-name = "CLI Binary"
-path = "milestones/M12.toml"
+[milestones.M11]
+name = "Global Daemon & IPC"
+path = "milestones/M11.toml"
 status = "done"
 
 [milestones.M23]
@@ -42,32 +58,17 @@ name = "Agent-to-Agent Messaging"
 path = "milestones/M23.toml"
 status = "done"
 
-[milestones.M25]
-name = "Human Clarification Loop"
-path = "milestones/M25.toml"
-status = "pending"
-
-[milestones.M17]
-name = "Global Backlog & Task Types"
-path = "milestones/M17.toml"
+[milestones.M14]
+name = "Web UI Implementation"
+path = "milestones/M14.toml"
 status = "done"
 
-[milestones.M22]
-name = "Agent Design — Taskflow Template Suite"
-path = "milestones/M22.toml"
-status = "pending"
-
-[milestones.M19]
-name = "Agent Design — Design Phase"
-path = "milestones/M19.toml"
-status = "in-progress"
+[milestones.M24]
+name = "Web UI Taskflow Enhancements"
+path = "milestones/M24.toml"
+status = "done"
 
 [milestones.M20]
 name = "Agent Design — Template Engine"
 path = "milestones/M20.toml"
 status = "pending"
-
-[milestones.M14]
-name = "Web UI Implementation"
-path = "milestones/M14.toml"
-status = "done"

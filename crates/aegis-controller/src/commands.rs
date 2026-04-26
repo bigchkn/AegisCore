@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use crate::clarification::{ClarificationRequest, ClarificationService, ClarifierSource};
 use crate::messaging::{MessageDeliveryReceipt, MessageInbox, MessageInboxSummary, MessageRouter};
 use aegis_core::{
     AegisError, Agent, AgentRegistry, LogQuery, Recorder, Result, TaskCreator, TaskQueue,
@@ -24,6 +25,7 @@ pub struct ControllerCommands {
     registry: Arc<FileRegistry>,
     dispatcher: Arc<Dispatcher>,
     message_router: Arc<MessageRouter>,
+    clarifications: Arc<ClarificationService>,
     scheduler: Arc<Scheduler>,
     recorder: Option<Arc<dyn Recorder>>,
     taskflow: Option<Arc<TaskflowEngine>>,
@@ -34,6 +36,7 @@ impl ControllerCommands {
         registry: Arc<FileRegistry>,
         dispatcher: Arc<Dispatcher>,
         message_router: Arc<MessageRouter>,
+        clarifications: Arc<ClarificationService>,
         scheduler: Arc<Scheduler>,
         recorder: Option<Arc<dyn Recorder>>,
         taskflow: Option<Arc<TaskflowEngine>>,
@@ -42,6 +45,7 @@ impl ControllerCommands {
             registry,
             dispatcher,
             message_router,
+            clarifications,
             scheduler,
             recorder,
             taskflow,
@@ -122,6 +126,50 @@ impl ControllerCommands {
 
     pub fn list_inboxes(&self) -> Result<Vec<MessageInboxSummary>> {
         self.message_router.list()
+    }
+
+    pub fn clarify_request(
+        &self,
+        agent_raw: &str,
+        task_id: Option<Uuid>,
+        question: &str,
+        context: serde_json::Value,
+        priority: i32,
+    ) -> Result<ClarificationRequest> {
+        self.clarifications
+            .request(agent_raw, task_id, question, context, priority)
+    }
+
+    pub fn clarify_list(&self) -> Result<Vec<ClarificationRequest>> {
+        self.clarifications.list()
+    }
+
+    pub fn clarify_list_for_agent(&self, agent_raw: &str) -> Result<Vec<ClarificationRequest>> {
+        self.clarifications.list_for_agent(agent_raw)
+    }
+
+    pub fn clarify_show(&self, request_id: Uuid) -> Result<ClarificationRequest> {
+        self.clarifications.show(request_id)
+    }
+
+    pub async fn clarify_answer(
+        &self,
+        request_id: Uuid,
+        answer: &str,
+        payload: serde_json::Value,
+        answered_by: ClarifierSource,
+    ) -> Result<ClarificationRequest> {
+        self.clarifications
+            .answer(request_id, answer, payload, answered_by)
+            .await
+    }
+
+    pub async fn clarify_wait(
+        &self,
+        target: &str,
+        timeout: Option<std::time::Duration>,
+    ) -> Result<ClarificationRequest> {
+        self.clarifications.wait(target, timeout).await
     }
 
     pub fn logs(&self, agent_id: Uuid, lines: Option<usize>) -> Result<Vec<String>> {

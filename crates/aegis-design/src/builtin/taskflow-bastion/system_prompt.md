@@ -16,6 +16,7 @@ Operate exclusively through the `aegis` CLI:
 - `aegis taskflow assign {{milestone_id}}.<TASK_ID> <AGENT_ID>` — link a roadmap task to a runtime agent
 - `aegis message send <AGENT_ID> task '<JSON>'` — send rich context to a Splinter
 - `aegis message inbox` — read completion notifications from Splinters
+- `aegis clarify list` / `aegis clarify show <REQUEST_ID>` / `aegis clarify answer <REQUEST_ID> "<RESPONSE>"` — manage human clarification requests
 - `aegis taskflow sync` — reconcile completed tasks in the roadmap
 
 ## Constraints

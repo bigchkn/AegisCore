@@ -389,6 +389,106 @@ async fn dispatch_command(
                 Ok(serde_json::to_value(commands.list_inboxes()?).unwrap())
             }
         }
+        "clarify.request" => {
+            let agent_raw = request
+                .params
+                .get("agent_id")
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| AegisError::IpcProtocol {
+                    reason: "Missing agent_id".to_string(),
+                })?;
+            let question = request
+                .params
+                .get("question")
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| AegisError::IpcProtocol {
+                    reason: "Missing question".to_string(),
+                })?;
+            let task_id = request
+                .params
+                .get("task_id")
+                .and_then(|v| v.as_str())
+                .and_then(|v| Uuid::parse_str(v).ok());
+            let context = request
+                .params
+                .get("context")
+                .cloned()
+                .unwrap_or_else(|| serde_json::json!({}));
+            let priority = request
+                .params
+                .get("priority")
+                .and_then(|v| v.as_i64())
+                .unwrap_or(0) as i32;
+            let clar = commands.clarify_request(agent_raw, task_id, question, context, priority)?;
+            Ok(serde_json::to_value(clar).unwrap())
+        }
+        "clarify.list" => {
+            if let Some(agent_raw) = request.params.get("agent_id").and_then(|v| v.as_str()) {
+                Ok(serde_json::to_value(commands.clarify_list_for_agent(agent_raw)?).unwrap())
+            } else {
+                Ok(serde_json::to_value(commands.clarify_list()?).unwrap())
+            }
+        }
+        "clarify.show" => {
+            let request_id = request
+                .params
+                .get("request_id")
+                .and_then(|v| v.as_str())
+                .and_then(|v| Uuid::parse_str(v).ok())
+                .ok_or_else(|| AegisError::IpcProtocol {
+                    reason: "Missing or invalid request_id".to_string(),
+                })?;
+            Ok(serde_json::to_value(commands.clarify_show(request_id)?).unwrap())
+        }
+        "clarify.answer" => {
+            let request_id = request
+                .params
+                .get("request_id")
+                .and_then(|v| v.as_str())
+                .and_then(|v| Uuid::parse_str(v).ok())
+                .ok_or_else(|| AegisError::IpcProtocol {
+                    reason: "Missing or invalid request_id".to_string(),
+                })?;
+            let answer = request
+                .params
+                .get("answer")
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| AegisError::IpcProtocol {
+                    reason: "Missing answer".to_string(),
+                })?;
+            let payload = request
+                .params
+                .get("payload")
+                .cloned()
+                .unwrap_or_else(|| serde_json::json!({}));
+            let answered_by = request
+                .params
+                .get("answered_by")
+                .and_then(|v| v.as_str())
+                .unwrap_or("human_cli");
+            let answered_by = parse_clarifier_source(answered_by)?;
+            let clar = commands
+                .clarify_answer(request_id, answer, payload, answered_by)
+                .await?;
+            Ok(serde_json::to_value(clar).unwrap())
+        }
+        "clarify.wait" => {
+            let target = request
+                .params
+                .get("request_id")
+                .or_else(|| request.params.get("agent_id"))
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| AegisError::IpcProtocol {
+                    reason: "Missing request_id or agent_id".to_string(),
+                })?;
+            let timeout = request
+                .params
+                .get("timeout_secs")
+                .and_then(|v| v.as_u64())
+                .map(std::time::Duration::from_secs);
+            let clar = commands.clarify_wait(target, timeout).await?;
+            Ok(serde_json::to_value(clar).unwrap())
+        }
         "agents.spawn" => {
             let task = request
                 .params
@@ -570,6 +670,18 @@ fn parse_message_type(value: Option<&serde_json::Value>) -> Result<aegis_core::M
             reason: format!("Invalid message kind `{raw}`: {e}"),
         }
     })
+}
+
+fn parse_clarifier_source(value: &str) -> Result<crate::clarification::ClarifierSource> {
+    match value {
+        "human_cli" => Ok(crate::clarification::ClarifierSource::HumanCli),
+        "human_tui" => Ok(crate::clarification::ClarifierSource::HumanTui),
+        "telegram" => Ok(crate::clarification::ClarifierSource::Telegram),
+        "system" => Ok(crate::clarification::ClarifierSource::System),
+        other => Err(AegisError::IpcProtocol {
+            reason: format!("Unknown clarification source `{other}`"),
+        }),
+    }
 }
 
 async fn handle_subscription(mut lines: Framed<UnixStream, LinesCodec>, event_bus: Arc<EventBus>) {
@@ -945,6 +1057,19 @@ cli_provider = "claude-code"
                 serde_json::json!({ "agent_id": Uuid::new_v4() }),
             ),
             request("message.list", Some(project_path), serde_json::Value::Null),
+            request(
+                "clarify.request",
+                Some(project_path),
+                serde_json::Value::Null,
+            ),
+            request("clarify.list", Some(project_path), serde_json::Value::Null),
+            request("clarify.show", Some(project_path), serde_json::json!({})),
+            request(
+                "clarify.answer",
+                Some(project_path),
+                serde_json::Value::Null,
+            ),
+            request("clarify.wait", Some(project_path), serde_json::Value::Null),
         ];
 
         for case in cases {
