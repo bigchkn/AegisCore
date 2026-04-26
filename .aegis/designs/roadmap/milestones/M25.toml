@@ -2,4 +2,38 @@ id = 25
 name = "Human Clarification Loop"
 status = "pending"
 lld = "lld/human-clarification.md"
-tasks = []
+
+[[tasks]]
+id = "25.1"
+uid = "dbc03a51-7ddc-4b75-8de3-168e210f2c57"
+task = "Add clarification request storage and status model"
+task_type = "feature"
+status = "pending"
+
+[[tasks]]
+id = "25.2"
+uid = "c75969f4-2ea5-497e-b2b7-295ae27bc003"
+task = "Add controller clarification IPC and routing"
+task_type = "feature"
+status = "pending"
+
+[[tasks]]
+id = "25.3"
+uid = "621df19e-7e9f-459d-9514-8808e79cebc0"
+task = "Add clarify CLI and human-facing reply surfaces"
+task_type = "feature"
+status = "pending"
+
+[[tasks]]
+id = "25.4"
+uid = "f2976b67-0275-42d4-beb7-54a5fbb06e24"
+task = "Wire agent wait/resume and response delivery"
+task_type = "feature"
+status = "pending"
+
+[[tasks]]
+id = "25.5"
+uid = "9d558ab4-4737-431f-b24c-1821410ff930"
+task = "Add clarification loop tests and recovery coverage"
+task_type = "feature"
+status = "pending"
