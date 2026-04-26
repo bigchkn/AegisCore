@@ -1,6 +1,6 @@
 # HLD: Agent Design & Template System
 
-**Status:** Draft v0.1 — Pending Review  
+**Status:** Draft v0.2 — Pending Review  
 **Milestones:** M19 (design) · M20 (template engine) · M21 (bootstrap integration) · M22 (taskflow suite)  
 **Platform:** macOS (Darwin / Apple Silicon primary)  
 **Implementation Language:** Rust
@@ -67,7 +67,16 @@ network = "outbound_only"
 # Values are provided by the bootstrap context; missing required vars
 # cause an error at design time, not spawn time.
 required = ["project_root", "milestone_id"]
-optional = ["lld_path", "task_id", "task_description"]
+optional = ["lld_path", "task_id", "task_description", "bastion_agent_id"]
+```
+
+For `taskflow-splinter`, `bastion_agent_id` is **required** — the splinter must know where to send completion notifications.
+
+```toml
+# taskflow-splinter/template.toml
+[variables]
+required = ["project_root", "task_description", "bastion_agent_id"]
+optional = ["lld_path", "task_id", "milestone_id"]
 ```
 
 ### 3.2 Variable System
@@ -83,6 +92,7 @@ Templates use `{{variable}}` substitution in all prose files (`system_prompt.md`
 | `{{worktree_path}}` | Dispatcher |
 | `{{role}}` | Template `agent.role` |
 | `{{provider}}` | Template `agent.cli_provider` |
+| `{{bastion_agent_id}}` | Set by `DesignEngine` when spawning a splinter from a bastion context; empty string for top-level spawns |
 
 **Taskflow variables (available when milestone context is bound):**
 
@@ -210,14 +220,17 @@ This is the primary built-in template set. It implements an autonomous taskflow 
 1. Run `aegis taskflow status` to orient yourself.
 2. Run `aegis taskflow show {{milestone_id}}` to load the milestone.
 3. Read the LLD at {{lld_path}} for full technical context.
-4. For each pending task, run `aegis spawn "<task description from LLD>"`.
-5. After each spawn, note the returned task UUID and run:
-   `aegis taskflow assign {{milestone_id}}.<task_id> <uuid>`
-6. Poll with `aegis agents` until splinters complete.
-7. Run `aegis taskflow sync` to update roadmap statuses.
-8. If all tasks are done, mark the milestone: 
-   `aegis taskflow set-task-status {{milestone_id}} <task_id> done`
-   for each task, then report completion.
+4. For each pending task:
+   a. Run `aegis spawn "<task description from LLD>"` to create a splinter.
+      Note the returned task UUID.
+   b. Run `aegis taskflow assign {{milestone_id}}.<task_id> <uuid>` to link
+      the roadmap task to the runtime task.
+   c. Send rich context to the splinter:
+      `aegis message send <splinter_agent_id> task '{"lld_path":"{{lld_path}}","task_id":"<task_id>","acceptance_criteria":"..."}'`
+5. Check inbox for splinter completions:
+   `aegis message inbox`
+   When a splinter reports done, run `aegis taskflow sync` to update the roadmap.
+6. Repeat step 5 until all tasks are complete, then report milestone done.
 ```
 
 **System prompt focus:** Project coordinator, delegator, non-implementer. The bastion never writes code directly — it plans, delegates, and verifies.
@@ -231,41 +244,53 @@ This is the primary built-in template set. It implements an autonomous taskflow 
 Your task: {{task_description}}
 LLD context: {{lld_path}} (read this for design decisions and constraints)
 
-1. Read the LLD section relevant to your task.
-2. Implement the task as described.
-3. Run tests: `cargo test -p <crate>` (check LLD for which crate).
-4. When complete, write a brief summary of what changed.
-5. Signal completion by outputting: [AEGIS:DONE]
+1. Check your inbox for additional context from the coordinator:
+   `aegis message inbox`
+2. Read the LLD section relevant to your task.
+3. Implement the task as described.
+4. Run tests: `cargo test -p <crate>` (check LLD for which crate).
+5. When complete, notify your coordinator:
+   `aegis message send {{bastion_agent_id}} notification '{"status":"done","task_description":"{{task_description}}","summary":"<one line of what changed>"}'`
 ```
 
 **System prompt focus:** Implementer with strong read-only context access. Writes only within its assigned worktree.
 
 ### 7.3 Coordination Protocol
 
-The bastion and splinters coordinate entirely through existing Aegis primitives — no new IPC is required:
+The bastion and splinters coordinate through the M23 agent-to-agent messaging layer. The controller mediates all message delivery — no direct tmux peer-to-peer links are used.
 
 ```
-Bastion                          Splinter(s)
-  │                                  │
-  │  aegis spawn "task desc"         │
-  ├─────────────────────────────────►│ spawned with task in initial prompt
-  │                                  │
-  │  aegis taskflow assign           │ (bastion links roadmap ↔ runtime task)
-  │                                  │
-  │  poll: aegis agents              │ implements task
-  │  poll: aegis taskflow sync       │
-  │                                  │
-  │◄─── [AEGIS:DONE] detected ───────┤ watchdog triggers completion
-  │                                  │
-  │  aegis taskflow set-task-status  │
-  │  → done                          │
+Bastion                                    Splinter(s)
+  │                                              │
+  │  aegis spawn "implement task X"              │
+  ├─────────────────────────────────────────────►│ spawned; bastion_agent_id injected
+  │                                              │
+  │  aegis taskflow assign M{{milestone_id}}.X <uuid>  │
+  │  (links roadmap task ↔ runtime task)         │
+  │                                              │
+  │  aegis message send <splinter_id> task {...} │
+  ├─────────────────────────────────────────────►│ receives rich context in inbox
+  │                                              │
+  │                                              │  implements task
+  │                                              │  runs tests
+  │                                              │
+  │◄── aegis message send {{bastion_agent_id}} ──┤ sends notification{status:done}
+  │        notification {...}                    │
+  │                                              │
+  │  aegis message inbox  (reads completion)     │
+  │  aegis taskflow sync                         │
+  │  → roadmap task marked done                  │
 ```
 
-The bastion uses the Observation Channel (watchdog) passively and the Injection Channel (aegis spawn) actively. No new channel types needed.
+Message delivery is durable: the notification JSON is written atomically to the bastion's mailbox before any tmux nudge is attempted. If the bastion is temporarily inactive, the message queues and is read on the next `aegis message inbox` call.
+
+This pattern composes naturally for multi-bastion scenarios: an architect bastion can send a `handoff` message to a reviewer bastion with implementation context, and the reviewer replies with a `notification` containing findings — all through the same `message.send` / `message.inbox` path.
 
 ### 7.4 Variable Binding at Spawn
 
 When the user runs `aegis design spawn taskflow-bastion`, the `BootstrapContext` auto-reads the current milestone from `.aegis/designs/roadmap/index.toml` (`current_milestone` field). The LLD path is resolved from the milestone's TOML file (`lld` field). Both are injected into the rendered startup prompt automatically — the user only needs to invoke the command.
+
+When the bastion subsequently spawns a splinter (via `aegis spawn`), the `DesignEngine` is called again with `spawn_from_template("taskflow-splinter", ...)`. At that point `{{bastion_agent_id}}` is populated with the live bastion's `agent_id` from the registry. This is the only variable that cannot be known at user-invocation time and must be resolved dynamically at splinter spawn time.
 
 ---
 
@@ -348,7 +373,7 @@ crates/aegis-design/
 |---|---|---|---|
 | Template Engine | `lld/agent-design-engine.md` | M20 | `aegis-design` crate: types, registry, rendering engine, variable resolution, `include_dir!` embedding |
 | Bootstrap Integration | `lld/agent-design-bootstrap.md` | M21 | `aegis design` CLI subcommands, `Dispatcher::spawn_from_template`, `apply` TOML emission, removal of hardcoded `taskflow_snippet` |
-| Taskflow Template Suite | `lld/agent-design-taskflow.md` | M22 | Built-in template content, startup protocol, variable binding from `index.toml`, coordination protocol tests |
+| Taskflow Template Suite | `lld/agent-design-taskflow.md` | M22 | Built-in template content, startup protocol, variable binding from `index.toml`, messaging-based coordination protocol, tests. **Depends on M23.** |
 
 ---
 
@@ -362,3 +387,6 @@ crates/aegis-design/
 | Built-in embedding | `include_dir!` macro | Consistent with how `builtin_providers.yaml` is embedded. Single binary, no install-time file placement. |
 | Bootstrap reads `index.toml` | Auto | The common case is "drive the current milestone". Manual `--milestone` override available for edge cases. |
 | Hardcoded snippet removal | Replace entirely | The `taskflow_snippet` injected today is blunt and appended to every agent regardless of intent. Template-based startup is more precise and user-controllable. |
+| Completion signalling | M23 messaging (`aegis message send`) | Durable, structured, and independent of watchdog poll timing. `[AEGIS:DONE]` string matching is fragile — it evaporates from the pane once the agent moves on. Messaging delivers a persistent JSON notification to the bastion's mailbox regardless of whether the bastion is active at that moment. |
+| Rich task delegation | Two-step: spawn + message | `aegis spawn` creates the agent; a follow-up `aegis message send task {...}` delivers LLD context, acceptance criteria, and any prior context that won't fit in a shell argument. |
+| `{{bastion_agent_id}}` resolution | Dynamic at splinter spawn | This variable cannot be known at user invocation time. The `DesignEngine` resolves it from the registry at the moment the bastion calls `aegis design spawn taskflow-splinter`, not when the user first boots the bastion. |
