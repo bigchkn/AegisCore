@@ -1,0 +1,6 @@
+[[tasks]]
+id = "B1"
+uid = "7db4179f-61a6-4443-b32c-066b03061bc5"
+task = "Fix project status 'unknown' in CLI"
+task_type = "bug"
+status = "done"

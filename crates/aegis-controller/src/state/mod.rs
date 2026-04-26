@@ -197,7 +197,7 @@ impl StateManager {
                 path: tasks_path.clone(),
                 source: e,
             })?;
-            if let Ok(mut task_store) = serde_json::from_str::<TaskStore>(&content) {
+            if let Ok(mut task_store) = parse_task_store(&content) {
                 let mut tasks_reset = 0usize;
                 for task in &mut task_store.tasks {
                     if task.status == TaskStatus::Active {
@@ -230,5 +230,103 @@ impl StateManager {
         }
 
         Ok(result)
+    }
+}
+
+fn parse_task_store(content: &str) -> std::result::Result<TaskStore, serde_json::Error> {
+    if content.trim().is_empty() {
+        serde_json::from_str("{}")
+    } else {
+        serde_json::from_str(content)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::registry::agents::AgentStore;
+    use aegis_core::agent::{Agent, AgentKind, AgentStatus};
+    use aegis_core::storage::StorageBackend;
+    use chrono::Utc;
+    use std::fs;
+    use std::path::{Path, PathBuf};
+    use std::sync::Arc;
+    use tempfile::tempdir;
+    use uuid::Uuid;
+
+    #[derive(Clone)]
+    struct TestStorage {
+        root: PathBuf,
+    }
+
+    impl TestStorage {
+        fn new(root: PathBuf) -> Self {
+            Self { root }
+        }
+    }
+
+    impl StorageBackend for TestStorage {
+        fn project_root(&self) -> &Path {
+            &self.root
+        }
+    }
+
+    fn agent(agent_id: Uuid) -> Agent {
+        Agent {
+            agent_id,
+            name: "test".to_string(),
+            kind: AgentKind::Splinter,
+            status: AgentStatus::Active,
+            role: "splinter".to_string(),
+            parent_id: None,
+            task_id: None,
+            tmux_session: "aegis".to_string(),
+            tmux_window: 0,
+            tmux_pane: "%0".to_string(),
+            worktree_path: PathBuf::from("/tmp/worktree"),
+            cli_provider: "claude-code".to_string(),
+            fallback_cascade: vec![],
+            sandbox_profile: PathBuf::from("/tmp/profile.sb"),
+            log_path: PathBuf::from("/tmp/log.log"),
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+            terminated_at: None,
+        }
+    }
+
+    #[test]
+    fn parse_task_store_accepts_empty_content() {
+        let store = parse_task_store("").unwrap();
+
+        assert_eq!(store.version, 1);
+        assert!(store.tasks.is_empty());
+    }
+
+    #[test]
+    fn recover_accepts_empty_tasks_file() {
+        let dir = tempdir().unwrap();
+        let storage = TestStorage::new(dir.path().to_path_buf());
+        fs::create_dir_all(storage.state_dir()).unwrap();
+        fs::create_dir_all(storage.snapshots_dir()).unwrap();
+
+        let agent_id = Uuid::new_v4();
+        let registry = AgentStore {
+            version: 1,
+            agents: vec![agent(agent_id)],
+            archived: vec![],
+        };
+        fs::write(
+            storage.registry_path(),
+            serde_json::to_string_pretty(&registry).unwrap(),
+        )
+        .unwrap();
+        fs::write(storage.tasks_path(), "").unwrap();
+
+        let manager = StateManager::new(Arc::new(storage));
+        let result = manager.recover().unwrap();
+
+        assert!(!result.registry_restored);
+        assert_eq!(result.agents_marked_failed, 1);
+        assert_eq!(result.agents_recovered, 0);
     }
 }

@@ -5,9 +5,15 @@ use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+fn default_task_store_version() -> u32 {
+    1
+}
+
 #[derive(Debug, Default, Serialize, Deserialize)]
 pub struct TaskStore {
+    #[serde(default = "default_task_store_version")]
     pub version: u32,
+    #[serde(default)]
     pub tasks: Vec<Task>,
 }
 
@@ -134,5 +140,26 @@ impl TaskRegistry for FileRegistry {
         let mut file = LockedFile::open_shared(&self.storage.tasks_path())?;
         let store: TaskStore = file.read_json()?;
         Ok(store.tasks.clone())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn task_store_deserializes_legacy_empty_object() {
+        let store: TaskStore = serde_json::from_str("{}").unwrap();
+
+        assert_eq!(store.version, 1);
+        assert!(store.tasks.is_empty());
+    }
+
+    #[test]
+    fn task_store_deserializes_legacy_versionless_payload() {
+        let store: TaskStore = serde_json::from_str(r#"{"tasks":[]}"#).unwrap();
+
+        assert_eq!(store.version, 1);
+        assert!(store.tasks.is_empty());
     }
 }

@@ -204,7 +204,18 @@ async fn dispatch_command(
                 "socket_path": "/tmp/aegis.sock", // TODO: Pass this from supervisor
             }));
         }
-        "projects.list" => return Ok(serde_json::to_value(project_registry.load()?).unwrap()),
+        "projects.list" => {
+            let mut projects = project_registry.load()?;
+            let runtimes = active_runtimes.lock().await;
+            for p in &mut projects {
+                if runtimes.contains_key(&p.id) {
+                    p.status = Some("active".to_string());
+                } else {
+                    p.status = Some("idle".to_string());
+                }
+            }
+            return Ok(serde_json::to_value(projects).unwrap());
+        }
         "projects.register" => {
             let root_path = request
                 .params
@@ -432,7 +443,13 @@ async fn dispatch_command(
                 .ok_or_else(|| AegisError::IpcProtocol {
                     reason: "Missing task".to_string(),
                 })?;
-            commands.taskflow_add_task(milestone_id, id, task)?;
+            let task_type: aegis_taskflow::model::TaskType = request
+                .params
+                .get("task_type")
+                .and_then(|v| serde_json::from_value(v.clone()).ok())
+                .unwrap_or_default();
+
+            commands.taskflow_add_task(milestone_id, id, task, task_type)?;
             Ok(serde_json::json!({ "message": "Task added" }))
         }
         "taskflow.set_task_status" => {

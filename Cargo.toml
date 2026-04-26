@@ -58,6 +58,7 @@ path = "src/daemon.rs"
 [dependencies]
 aegis-core = { workspace = true }
 aegis-controller = { workspace = true }
+aegis-taskflow = { workspace = true }
 aegis-tui = { workspace = true }
 clap = { version = "4", features = ["derive", "env"] }
 clap_complete = "4"

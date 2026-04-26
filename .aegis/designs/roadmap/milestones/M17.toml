@@ -1,0 +1,27 @@
+id = 17
+name = "Global Backlog & Task Types"
+status = "done"
+
+[[tasks]]
+id = "M17.1"
+uid = "87f59212-b023-4515-a973-07bf2b735ae6"
+task = "Design TaskType enum and backlog.toml strategy"
+status = "done"
+
+[[tasks]]
+id = "M17.2"
+uid = "592402b7-6802-435c-b6f6-133d742e6c45"
+task = "Update aegis-taskflow model and serialization"
+status = "done"
+
+[[tasks]]
+id = "M17.3"
+uid = "33e8cafb-9ad6-48fc-b801-073769d4c38f"
+task = "Implement Backlog support in TaskflowEngine"
+status = "done"
+
+[[tasks]]
+id = "M17.4"
+uid = "05b4f2bc-87be-45ef-96a5-387506a6dcac"
+task = "Add CLI support for --bug flag and backlog management"
+status = "done"

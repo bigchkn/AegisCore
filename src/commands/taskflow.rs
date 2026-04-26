@@ -201,6 +201,7 @@ pub async fn add_task(
     milestone_id: &str,
     id: &str,
     task: &str,
+    task_type: aegis_taskflow::model::TaskType,
     printer: &Printer,
     client: &DaemonClient,
     anchor: &ProjectAnchor,
@@ -213,11 +214,15 @@ pub async fn add_task(
                 "milestone_id": milestone_id,
                 "id": id,
                 "task": task,
+                "task_type": task_type,
             }),
         )
         .await?;
 
-    printer.line(&format!("Task {id} added to milestone {milestone_id}."));
+    printer.line(&format!(
+        "Task {id} added to {} [{:?}].",
+        milestone_id, task_type
+    ));
     Ok(())
 }
 

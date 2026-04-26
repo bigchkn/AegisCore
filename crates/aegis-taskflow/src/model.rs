@@ -38,10 +38,25 @@ impl TaskflowStatus {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum TaskType {
+    Feature,
+    Bug,
+    Maintenance,
+}
+
+impl Default for TaskType {
+    fn default() -> Self {
+        Self::Feature
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProjectIndex {
     pub project: ProjectMeta,
     pub milestones: HashMap<String, MilestoneRef>,
+    pub backlog: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -71,6 +86,8 @@ pub struct ProjectTask {
     #[serde(default = "Uuid::new_v4")]
     pub uid: Uuid,
     pub task: String,
+    #[serde(default)]
+    pub task_type: TaskType,
     pub status: TaskflowStatus,
     pub crate_name: Option<String>,
     pub notes: Option<String>,

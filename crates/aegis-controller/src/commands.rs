@@ -126,12 +126,7 @@ impl ControllerCommands {
             reason: "Taskflow engine is not initialized".to_string(),
         })?;
 
-        let full_id = if milestone_id.starts_with('M') {
-            milestone_id.to_string()
-        } else {
-            format!("M{}", milestone_id)
-        };
-        tf.get_milestone(&full_id)
+        tf.get_milestone(milestone_id)
     }
 
     pub fn taskflow_assign(&self, roadmap_id: &str, task_id: Uuid) -> Result<()> {
@@ -158,12 +153,18 @@ impl ControllerCommands {
         tf.create_milestone(id, name, lld)
     }
 
-    pub fn taskflow_add_task(&self, milestone_id: &str, task_id: &str, task: &str) -> Result<()> {
+    pub fn taskflow_add_task(
+        &self,
+        milestone_id: &str,
+        task_id: &str,
+        task: &str,
+        task_type: aegis_taskflow::model::TaskType,
+    ) -> Result<()> {
         let tf = self.taskflow.as_ref().ok_or_else(|| AegisError::Config {
             field: "taskflow".to_string(),
             reason: "Taskflow engine is not initialized".to_string(),
         })?;
-        tf.add_task(milestone_id, task_id, task)
+        tf.add_task(milestone_id, task_id, task, task_type)
     }
 
     pub fn taskflow_set_task_status(

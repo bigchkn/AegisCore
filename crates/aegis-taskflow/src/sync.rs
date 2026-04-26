@@ -9,6 +9,11 @@ pub struct SyncReport {
     pub updated_tasks: Vec<String>, // roadmap_ids
 }
 
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct Backlog {
+    pub tasks: Vec<crate::model::ProjectTask>,
+}
+
 impl TaskflowEngine {
     fn resolve_taskflow_status(value: &str) -> Result<TaskflowStatus> {
         TaskflowStatus::parse(value).ok_or_else(|| {
@@ -49,8 +54,30 @@ impl TaskflowEngine {
     }
 
     pub fn get_milestone(&self, milestone_id: &str) -> Result<Milestone> {
+        if milestone_id == "backlog" {
+            let backlog = self.get_backlog()?;
+            return Ok(Milestone {
+                id: 0,
+                name: "Global Backlog".to_string(),
+                status: "n/a".to_string(),
+                lld: None,
+                tasks: backlog.tasks,
+            });
+        }
+
         let index = self.get_status()?;
-        let m_ref = index.milestones.get(milestone_id).ok_or_else(|| {
+        let full_id = if milestone_id.starts_with('M') || milestone_id.chars().all(|c| c.is_numeric())
+        {
+            if milestone_id.starts_with('M') {
+                milestone_id.to_string()
+            } else {
+                format!("M{}", milestone_id)
+            }
+        } else {
+            milestone_id.to_string()
+        };
+
+        let m_ref = index.milestones.get(&full_id).ok_or_else(|| {
             aegis_core::error::AegisError::ConfigValidation {
                 field: "milestone".into(),
                 reason: format!("Milestone {} not found in index", milestone_id),
@@ -66,6 +93,21 @@ impl TaskflowEngine {
         lock.read_toml()
     }
 
+    pub fn get_backlog(&self) -> Result<Backlog> {
+        let backlog_path = self
+            .storage()
+            .designs_dir()
+            .join("roadmap")
+            .join("backlog.toml");
+
+        if !backlog_path.exists() {
+            return Ok(Backlog { tasks: Vec::new() });
+        }
+
+        let mut lock = LockedFile::open_shared(&backlog_path)?;
+        lock.read_toml()
+    }
+
     pub fn sync(&self) -> Result<SyncReport> {
         let mut report = SyncReport {
             updated_tasks: Vec::new(),
@@ -73,7 +115,7 @@ impl TaskflowEngine {
         let links = self.links().list_all()?;
         let index = self.get_status()?;
 
-        // For each milestone in index
+        // 1. Sync Milestones
         for (_m_id, m_ref) in index.milestones {
             let m_path = self
                 .storage()
@@ -106,7 +148,47 @@ impl TaskflowEngine {
             }
 
             if modified {
+                milestone.status = Self::derive_milestone_status(&milestone.tasks)
+                    .as_str()
+                    .to_string();
                 lock.write_toml_atomic(&milestone)?;
+            }
+        }
+
+        // 2. Sync Backlog
+        let backlog_path = self
+            .storage()
+            .designs_dir()
+            .join("roadmap")
+            .join("backlog.toml");
+
+        if backlog_path.exists() {
+            let mut lock = LockedFile::open_exclusive(&backlog_path)?;
+            let mut backlog: Backlog = lock.read_toml()?;
+            let mut modified = false;
+
+            for task in &mut backlog.tasks {
+                if let Some(registry_id) = links.get(&task.id) {
+                    if let Some(registry_task) = self.registry().get(*registry_id)? {
+                        let new_status = match registry_task.status {
+                            TaskStatus::Complete => TaskflowStatus::Done,
+                            TaskStatus::Active => TaskflowStatus::InProgress,
+                            TaskStatus::Failed => TaskflowStatus::Blocked,
+                            TaskStatus::Queued => TaskflowStatus::InProgress,
+                        };
+
+                        if task.status != new_status {
+                            task.status = new_status;
+                            task.registry_task_id = Some(*registry_id);
+                            report.updated_tasks.push(task.id.clone());
+                            modified = true;
+                        }
+                    }
+                }
+            }
+
+            if modified {
+                lock.write_toml_atomic(&backlog)?;
             }
         }
 
@@ -114,13 +196,36 @@ impl TaskflowEngine {
     }
 
     pub fn set_task_status(&self, milestone_id: &str, task_id: &str, status: &str) -> Result<()> {
+        let new_status = Self::resolve_taskflow_status(status)?;
+
+        if milestone_id == "backlog" {
+            let backlog_path = self
+                .storage()
+                .designs_dir()
+                .join("roadmap")
+                .join("backlog.toml");
+            let mut lock = LockedFile::open_exclusive(&backlog_path)?;
+            let mut backlog: Backlog = lock.read_toml()?;
+            let task = backlog
+                .tasks
+                .iter_mut()
+                .find(|task| task.id == task_id)
+                .ok_or_else(|| aegis_core::error::AegisError::ConfigValidation {
+                    field: "task_id".into(),
+                    reason: format!("Task ID {} not found in backlog", task_id),
+                })?;
+
+            task.status = new_status;
+            lock.write_toml_atomic(&backlog)?;
+            return Ok(());
+        }
+
         let full_m_id = if milestone_id.starts_with('M') {
             milestone_id.to_string()
         } else {
             format!("M{}", milestone_id)
         };
 
-        let new_status = Self::resolve_taskflow_status(status)?;
         let index = self.get_status()?;
         let m_ref = index.milestones.get(&full_m_id).ok_or_else(|| {
             aegis_core::error::AegisError::ConfigValidation {
@@ -221,7 +326,57 @@ impl TaskflowEngine {
         Ok(())
     }
 
-    pub fn add_task(&self, milestone_id: &str, task_id: &str, task_desc: &str) -> Result<()> {
+    pub fn add_task(
+        &self,
+        milestone_id: &str,
+        task_id: &str,
+        task_desc: &str,
+        task_type: crate::model::TaskType,
+    ) -> Result<()> {
+        if milestone_id == "backlog" {
+            let backlog_path = self
+                .storage()
+                .designs_dir()
+                .join("roadmap")
+                .join("backlog.toml");
+            
+            // Create directory if it doesn't exist
+            if let Some(parent) = backlog_path.parent() {
+                std::fs::create_dir_all(parent).map_err(|e| aegis_core::error::AegisError::StorageIo {
+                    path: parent.to_path_buf(),
+                    source: e,
+                })?;
+            }
+
+            let mut lock = LockedFile::open_exclusive(&backlog_path)?;
+            let mut backlog: Backlog = if backlog_path.exists() {
+                lock.read_toml()?
+            } else {
+                Backlog { tasks: Vec::new() }
+            };
+
+            if backlog.tasks.iter().any(|t| t.id == task_id) {
+                return Err(aegis_core::error::AegisError::ConfigValidation {
+                    field: "task_id".into(),
+                    reason: format!("Task ID {} already exists in backlog", task_id),
+                });
+            }
+
+            backlog.tasks.push(crate::model::ProjectTask {
+                id: task_id.to_string(),
+                uid: Uuid::new_v4(),
+                task: task_desc.to_string(),
+                task_type,
+                status: TaskflowStatus::Pending,
+                crate_name: None,
+                notes: None,
+                registry_task_id: None,
+            });
+
+            lock.write_toml_atomic(&backlog)?;
+            return Ok(());
+        }
+
         let full_m_id = if milestone_id.starts_with('M') {
             milestone_id.to_string()
         } else {
@@ -260,6 +415,7 @@ impl TaskflowEngine {
             id: task_id.to_string(),
             uid: Uuid::new_v4(),
             task: task_desc.to_string(),
+            task_type,
             status: TaskflowStatus::Pending,
             crate_name: None,
             notes: None,
@@ -356,7 +512,7 @@ mod tests {
                 name: "Test".to_string(),
                 current_milestone: 1,
             },
-            milestones: HashMap::new(),
+            milestones: HashMap::new(), backlog: None,
         };
         std::fs::write(
             roadmap_dir.join("index.toml"),
@@ -384,7 +540,7 @@ mod tests {
     fn test_add_task() {
         let (_tmp, engine) = setup_engine();
         engine.create_milestone("10", "Initial", None).unwrap();
-        engine.add_task("M10", "10.1", "First task").unwrap();
+        engine.add_task("M10", "10.1", "First task", crate::model::TaskType::Feature).unwrap();
 
         let m = engine.get_milestone("M10").unwrap();
         assert_eq!(m.tasks.len(), 1);
@@ -396,7 +552,7 @@ mod tests {
     fn test_sync_updates_status() {
         let (_tmp, engine) = setup_engine();
         engine.create_milestone("1", "M1", None).unwrap();
-        engine.add_task("M1", "1.1", "Task 1").unwrap();
+        engine.add_task("M1", "1.1", "Task 1", crate::model::TaskType::Feature).unwrap();
 
         let task_uuid = Uuid::new_v4();
         engine
@@ -428,7 +584,7 @@ mod tests {
     fn test_set_task_status_updates_milestone_and_index() {
         let (_tmp, engine) = setup_engine();
         engine.create_milestone("15", "Web", None).unwrap();
-        engine.add_task("M15", "15.1", "Spawn agent").unwrap();
+        engine.add_task("M15", "15.1", "Spawn agent", crate::model::TaskType::Feature).unwrap();
 
         engine.set_task_status("15", "15.1", "done").unwrap();
 

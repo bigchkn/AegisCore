@@ -14,6 +14,8 @@ pub struct ProjectRecord {
     pub root_path: PathBuf,
     pub auto_start: bool,
     pub last_seen: DateTime<Utc>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub status: Option<String>,
 }
 
 #[derive(Debug, Default, Serialize, Deserialize)]
@@ -110,6 +112,7 @@ impl ProjectRegistry {
             root_path: abs_path,
             auto_start: true,
             last_seen: Utc::now(),
+            status: None,
         };
 
         projects.push(record.clone());

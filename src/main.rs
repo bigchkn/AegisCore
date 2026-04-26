@@ -224,11 +224,18 @@ enum TaskflowCommands {
     },
     /// Add a task to a milestone
     AddTask {
-        milestone_id: String,
         /// Short unique ID (e.g., 13.1)
         id: String,
         /// Task description
         task: String,
+        /// Milestone ID (defaults to 'backlog' if omitted)
+        milestone_id: Option<String>,
+        /// Mark as a bug
+        #[arg(long)]
+        bug: bool,
+        /// Mark as maintenance
+        #[arg(long)]
+        maint: bool,
     },
     /// Update the status of a roadmap task
     SetTaskStatus {
@@ -414,11 +421,23 @@ async fn dispatch(cli: Cli, printer: &Printer, client: &DaemonClient) -> Result<
                     milestone_id,
                     id,
                     task,
+                    bug,
+                    maint,
                 } => {
+                    let m_id = milestone_id.unwrap_or_else(|| "backlog".to_string());
+                    let task_type = if bug {
+                        aegis_taskflow::model::TaskType::Bug
+                    } else if maint {
+                        aegis_taskflow::model::TaskType::Maintenance
+                    } else {
+                        aegis_taskflow::model::TaskType::Feature
+                    };
+
                     commands::taskflow::add_task(
-                        &milestone_id,
+                        &m_id,
                         &id,
                         &task,
+                        task_type,
                         printer,
                         client,
                         &anchor,
