@@ -2,9 +2,10 @@ use std::{path::PathBuf, sync::Arc};
 
 use aegis_core::{
     config::AgentEntry, AegisError, AegisEvent, Agent, AgentKind, AgentRegistry, AgentStatus,
-    FailoverContext, LogQuery, Recorder, Result, SandboxProfile, StorageBackend, Task,
-    TaskRegistry, TaskStatus,
+    FailoverContext, LogQuery, Recorder, Result, SandboxPolicy,
+    SandboxProfile, StorageBackend, Task, TaskRegistry, TaskStatus,
 };
+use aegis_design::{RenderedTemplate, TemplateKind};
 use aegis_providers::ProviderRegistry;
 use aegis_tmux::{TmuxClient, TmuxTarget};
 use chrono::Utc;
@@ -93,6 +94,7 @@ impl Dispatcher {
             cli_provider: self.config.splinter_defaults.cli_provider.clone(),
             fallback_cascade: self.config.splinter_defaults.fallback_cascade.clone(),
             system_prompt: None,
+            inline_prompt: None,
             sandbox: sandbox_policy_from_config(&self.config.sandbox_defaults),
             auto_cleanup: self.config.splinter_defaults.auto_cleanup,
             model_override: self.config.splinter_defaults.model.clone(),
@@ -163,25 +165,23 @@ impl Dispatcher {
             previous_cli: None,
         };
 
-        let prompt_type = match spec.kind {
-            AgentKind::Bastion => PromptType::System,
-            AgentKind::Splinter => PromptType::Task,
+        let initial_prompt = if let Some(inline) = spec.inline_prompt.take() {
+            // Template-based agent: use the fully rendered prompt as-is.
+            inline
+        } else {
+            let prompt_type = match spec.kind {
+                AgentKind::Bastion => PromptType::System,
+                AgentKind::Splinter => PromptType::Task,
+            };
+            let mut p = self.prompts.resolve_prompt(
+                prompt_type,
+                &prompt_context,
+                spec.system_prompt.as_deref(),
+            )?;
+            // Taskflow context hint for non-template agents.
+            p.push_str("\n### Project Context & Navigation\nYou are operating within an AegisCore autonomous environment. To understand your place in the broader project roadmap, use the following tools:\n- Run `aegis taskflow status` to see the overall project health.\n- Run `aegis taskflow show <M-ID>` (e.g., M13) to see the specific tasks and design goals for your current milestone.\n- Read design documents directly at `.aegis/designs/` for deep technical context (Read-Only).\n");
+            p
         };
-        let mut initial_prompt = self.prompts.resolve_prompt(
-            prompt_type,
-            &prompt_context,
-            spec.system_prompt.as_deref(),
-        )?;
-
-        // Taskflow awareness injection (Task 13.7).
-        let taskflow_snippet = r#"
-### Project Context & Navigation
-You are operating within an AegisCore autonomous environment. To understand your place in the broader project roadmap, use the following tools:
-- Run `aegis taskflow status` to see the overall project health.
-- Run `aegis taskflow show <M-ID>` (e.g., M13) to see the specific tasks and design goals for your current milestone.
-- Read design documents directly at `.aegis/designs/` for deep technical context (Read-Only).
-"#;
-        initial_prompt.push_str(taskflow_snippet);
 
         Ok(SpawnPlan {
             agent,
@@ -232,6 +232,53 @@ You are operating within an AegisCore autonomous environment. To understand your
 
         tracing::debug!(%agent_id, launch_cmd = ?plan.launch_command, "launching");
         TaskRegistry::assign(self.registry.as_ref(), task.task_id, agent_id)?;
+        self.launch_or_insert_plan(plan).await
+    }
+
+    /// Spawn an agent directly from a rendered template.
+    ///
+    /// The rendered system_prompt and startup are combined into a single initial
+    /// message injected after the agent CLI is launched. No PromptManager or
+    /// taskflow_snippet is used — the template fully owns the prompt content.
+    pub async fn spawn_from_template(&self, rendered: &RenderedTemplate) -> Result<Agent> {
+        let agent_id = Uuid::new_v4();
+
+        let kind = match rendered.kind {
+            TemplateKind::Bastion => AgentKind::Bastion,
+            TemplateKind::Splinter => AgentKind::Splinter,
+        };
+
+        let mut inline_prompt = rendered.system_prompt.clone();
+        if let Some(startup) = &rendered.startup {
+            inline_prompt.push_str("\n\n---\n\n");
+            inline_prompt.push_str(startup);
+        }
+
+        let spec = AgentSpec {
+            name: rendered.role.clone(),
+            kind: kind.clone(),
+            role: rendered.role.clone(),
+            parent_id: None,
+            task_id: None,
+            task_description: None,
+            cli_provider: rendered.cli_provider.clone(),
+            fallback_cascade: rendered.fallback_cascade.clone(),
+            system_prompt: None,
+            inline_prompt: Some(inline_prompt),
+            sandbox: SandboxPolicy {
+                network: rendered.sandbox_network.clone(),
+                ..SandboxPolicy::default()
+            },
+            auto_cleanup: rendered.auto_cleanup,
+            model_override: rendered.model.clone(),
+        };
+
+        if kind == AgentKind::Splinter {
+            self.prepare_splinter_worktree(agent_id, &rendered.role).await?;
+        }
+
+        let (window, pane) = self.prepare_tmux_window(agent_id, &rendered.role).await?;
+        let plan = self.build_spawn_plan(spec, agent_id, window, pane)?;
         self.launch_or_insert_plan(plan).await
     }
 
@@ -646,6 +693,7 @@ fn spec_from_agent_entry(
         cli_provider: entry.cli_provider.clone(),
         fallback_cascade: entry.fallback_cascade.clone(),
         system_prompt: entry.system_prompt.clone(),
+        inline_prompt: None,
         sandbox: sandbox_policy_from_config(&entry.sandbox),
         auto_cleanup: entry.auto_cleanup,
         model_override: entry.model.clone(),
@@ -926,5 +974,58 @@ mod tests {
             .unwrap();
         assert_eq!(stored_agent.status, AgentStatus::Failed);
         assert!(agent.worktree_path.exists());
+    }
+
+    #[tokio::test]
+    async fn spawn_from_template_creates_active_bastion() {
+        use aegis_design::{RenderedTemplate, TemplateKind};
+        use aegis_core::SandboxNetworkPolicy;
+
+        let (dispatcher, _dir) = dispatcher();
+
+        let rendered = RenderedTemplate {
+            name: "test-template".into(),
+            kind: TemplateKind::Bastion,
+            role: "test-coordinator".into(),
+            cli_provider: "claude-code".into(),
+            model: None,
+            auto_cleanup: false,
+            fallback_cascade: vec![],
+            sandbox_network: SandboxNetworkPolicy::OutboundOnly,
+            system_prompt: "You are a coordinator.".into(),
+            startup: Some("Begin by checking status.".into()),
+        };
+
+        let agent = dispatcher.spawn_from_template(&rendered).await.unwrap();
+
+        assert_eq!(agent.kind, AgentKind::Bastion);
+        assert_eq!(agent.role, "test-coordinator");
+        assert_eq!(agent.status, AgentStatus::Active);
+        assert_eq!(agent.cli_provider, "claude-code");
+    }
+
+    #[test]
+    fn build_spawn_plan_inline_prompt_skips_prompt_manager() {
+        let (dispatcher, _dir) = dispatcher();
+        let spec = AgentSpec {
+            name: "tpl-agent".into(),
+            kind: AgentKind::Bastion,
+            role: "tpl-role".into(),
+            parent_id: None,
+            task_id: None,
+            task_description: None,
+            cli_provider: "claude-code".into(),
+            fallback_cascade: vec![],
+            system_prompt: None,
+            inline_prompt: Some("TEMPLATE PROMPT".into()),
+            sandbox: aegis_core::SandboxPolicy::default(),
+            auto_cleanup: false,
+            model_override: None,
+        };
+        let plan = dispatcher
+            .build_spawn_plan(spec, Uuid::nil(), 1, "%1")
+            .unwrap();
+        assert_eq!(plan.initial_prompt, "TEMPLATE PROMPT");
+        assert!(!plan.initial_prompt.contains("Project Context"));
     }
 }

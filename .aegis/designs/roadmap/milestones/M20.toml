@@ -1,52 +1,52 @@
 id = 20
 name = "Agent Design — Template Engine"
-status = "pending"
+status = "done"
 
 [[tasks]]
 id = "20.1"
 uid = "2eda54bc-6f92-4a87-b410-885e91579938"
 task = "Scaffold crates/aegis-design: Cargo.toml, lib.rs, workspace registration"
 task_type = "feature"
-status = "pending"
+status = "done"
 
 [[tasks]]
 id = "20.2"
 uid = "56147fb5-51d5-4677-a6c3-f899c22cd858"
 task = "Implement template schema types: Template, TemplateMetadata, TemplateKind, TemplateVar"
 task_type = "feature"
-status = "pending"
+status = "done"
 
 [[tasks]]
 id = "20.3"
 uid = "7d1812c7-f2e3-4596-8af2-0cd5a69ba679"
 task = "Implement TemplateRegistry: three-layer discovery (built-in, global, project-local)"
 task_type = "feature"
-status = "pending"
+status = "done"
 
 [[tasks]]
 id = "20.4"
 uid = "2ddd1e9b-f9e7-45e1-883d-ecfd77f9b083"
 task = "Implement DesignEngine: {{var}} substitution, required/optional validation, no-unresolved check"
 task_type = "feature"
-status = "pending"
+status = "done"
 
 [[tasks]]
 id = "20.5"
 uid = "707e60e8-8be0-424d-af1e-a0ee54ad99b8"
 task = "Implement BootstrapContext: resolve standard + taskflow vars from project state and index.toml"
 task_type = "feature"
-status = "pending"
+status = "done"
 
 [[tasks]]
 id = "20.6"
 uid = "b6dbea55-5c0e-4b21-83fb-fa07495e8633"
 task = "Embed built-in template directory stubs via include_dir! macro"
 task_type = "feature"
-status = "pending"
+status = "done"
 
 [[tasks]]
 id = "20.7"
 uid = "97b07aba-268a-429b-99f3-215cc902c839"
 task = "Tests: registry layer precedence, rendering, missing required var error, no-unresolved guard"
 task_type = "feature"
-status = "pending"
+status = "done"

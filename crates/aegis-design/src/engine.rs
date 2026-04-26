@@ -2,9 +2,10 @@ use crate::error::{DesignError, Result};
 use crate::template::{Template, TemplateKind};
 use aegis_core::SandboxNetworkPolicy;
 use regex::Regex;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RenderedTemplate {
     pub name: String,
     pub kind: TemplateKind,

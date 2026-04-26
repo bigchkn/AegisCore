@@ -500,6 +500,20 @@ async fn dispatch_command(
             let task_id = commands.spawn(task).await?;
             Ok(serde_json::json!({ "task_id": task_id }))
         }
+        "design.spawn" => {
+            let rendered: aegis_design::RenderedTemplate =
+                serde_json::from_value(request.params.clone()).map_err(|e| {
+                    AegisError::IpcProtocol {
+                        reason: format!("design.spawn: invalid RenderedTemplate: {e}"),
+                    }
+                })?;
+            let agent = commands.spawn_from_template(rendered).await?;
+            Ok(serde_json::json!({
+                "agent_id": agent.agent_id,
+                "role": agent.role,
+                "kind": format!("{:?}", agent.kind),
+            }))
+        }
         "agents.pause" => {
             let agent_id = parse_agent_id(&request.params, &commands)?;
             commands.pause(agent_id).await?;
@@ -1070,6 +1084,11 @@ cli_provider = "claude-code"
                 serde_json::Value::Null,
             ),
             request("clarify.wait", Some(project_path), serde_json::Value::Null),
+            request(
+                "design.spawn",
+                Some(project_path),
+                serde_json::Value::Null,
+            ),
         ];
 
         for case in cases {

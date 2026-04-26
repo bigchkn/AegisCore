@@ -8,6 +8,7 @@ version = "0.1.0"
 dependencies = [
  "aegis-controller",
  "aegis-core",
+ "aegis-design",
  "aegis-taskflow",
  "aegis-tui",
  "atty",
@@ -49,6 +50,7 @@ version = "0.1.0"
 dependencies = [
  "aegis-channels",
  "aegis-core",
+ "aegis-design",
  "aegis-providers",
  "aegis-recorder",
  "aegis-sandbox",

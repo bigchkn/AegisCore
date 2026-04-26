@@ -5,6 +5,7 @@ use crate::messaging::{MessageDeliveryReceipt, MessageInbox, MessageInboxSummary
 use aegis_core::{
     AegisError, Agent, AgentRegistry, LogQuery, Recorder, Result, TaskCreator, TaskQueue,
 };
+use aegis_design::RenderedTemplate;
 use aegis_taskflow::model::{Milestone, ProjectIndex};
 use aegis_taskflow::TaskflowEngine;
 use serde::Serialize;
@@ -85,6 +86,10 @@ impl ControllerCommands {
             tracing::error!(task_id = %task_id, error = %e, "dispatch failed after enqueue — task remains queued");
         }
         Ok(task_id)
+    }
+
+    pub async fn spawn_from_template(&self, rendered: RenderedTemplate) -> Result<Agent> {
+        self.dispatcher.spawn_from_template(&rendered).await
     }
 
     pub async fn pause(&self, agent_id: Uuid) -> Result<()> {

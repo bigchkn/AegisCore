@@ -1,6 +1,7 @@
 pub mod agents;
 pub mod channels;
 pub mod clarify;
+pub mod design;
 pub mod completions;
 pub mod config;
 pub mod daemon;

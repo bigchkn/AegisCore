@@ -153,8 +153,49 @@ enum Commands {
         subcommand: TaskflowCommands,
     },
 
+    /// Agent design and template management
+    Design {
+        #[command(subcommand)]
+        subcommand: DesignCommands,
+    },
+
     /// Generate shell completions
     Completions { shell: Shell },
+}
+
+#[derive(Subcommand)]
+enum DesignCommands {
+    /// List all available templates
+    List,
+    /// Show details for a template
+    Show { name: String },
+    /// Spawn an agent from a template
+    Spawn {
+        name: String,
+        /// Override the agent's model
+        #[arg(long)]
+        model: Option<String>,
+        /// Set a template variable: KEY=VALUE
+        #[arg(long = "var", value_name = "KEY=VALUE")]
+        vars: Vec<String>,
+    },
+    /// Write a template as an [agent.<role>] block in aegis.toml
+    Apply {
+        name: String,
+        /// Override the agent role name in the output TOML
+        #[arg(long)]
+        role: Option<String>,
+        /// Set a template variable: KEY=VALUE
+        #[arg(long = "var", value_name = "KEY=VALUE")]
+        vars: Vec<String>,
+    },
+    /// Scaffold a blank project-local template
+    New {
+        name: String,
+        /// Template kind: bastion or splinter
+        #[arg(long, default_value = "bastion")]
+        kind: String,
+    },
 }
 
 #[derive(Subcommand)]
@@ -608,6 +649,23 @@ async fn dispatch(cli: Cli, printer: &Printer, client: &DaemonClient) -> Result<
                         &anchor,
                     )
                     .await
+                }
+            }
+        }
+
+        Commands::Design { subcommand } => {
+            let anchor = require_anchor()?;
+            match subcommand {
+                DesignCommands::List => commands::design::list(printer, &anchor),
+                DesignCommands::Show { name } => commands::design::show(&name, printer, &anchor),
+                DesignCommands::Spawn { name, model, vars } => {
+                    commands::design::spawn(&name, model.as_deref(), &vars, printer, client, &anchor).await
+                }
+                DesignCommands::Apply { name, role, vars } => {
+                    commands::design::apply(&name, role.as_deref(), &vars, printer, &anchor)
+                }
+                DesignCommands::New { name, kind } => {
+                    commands::design::new(&name, &kind, printer, &anchor)
                 }
             }
         }

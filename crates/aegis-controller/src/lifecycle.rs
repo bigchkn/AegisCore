@@ -20,6 +20,9 @@ pub struct AgentSpec {
     pub cli_provider: String,
     pub fallback_cascade: Vec<String>,
     pub system_prompt: Option<PathBuf>,
+    /// Fully rendered prompt string from a template. When set, bypasses PromptManager
+    /// and the taskflow_snippet injection.
+    pub inline_prompt: Option<String>,
     pub sandbox: SandboxPolicy,
     pub auto_cleanup: bool,
     pub model_override: Option<String>,
