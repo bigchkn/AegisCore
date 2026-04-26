@@ -15,35 +15,29 @@
   (subpath "@@HOME@@/.claude")
   (subpath "@@HOME@@/.nvm")
   (subpath "@@HOME@@/.local/bin"))
-
+@@EXTRA_EXEC_PATHS@@
 (allow process-fork)
 (allow signal)
 
-; System reads
-(allow file-read*
-  (subpath "/usr/lib")
-  (subpath "/usr/share")
-  (subpath "/usr/local/lib")
-  (subpath "/opt/homebrew/lib")
-  (subpath "/opt/homebrew/share")
-  (subpath "/System/Library")
-  (subpath "/Library/Apple")
-  (subpath "/private/var/folders")
-  (subpath "/private/tmp")
-  (subpath "/tmp")
-  (literal "/dev/null")
-  (literal "/dev/random")
-  (literal "/dev/urandom"))
+; Hard denials — must appear before the broad file-read allow (first-match wins in Seatbelt).
+; These protect credentials even though (allow file-read* /) comes after.
+(deny file-read*
+  (subpath "@@HOME@@/.ssh")
+  (subpath "@@HOME@@/.aws")
+  (subpath "@@HOME@@/.gnupg")
+  (subpath "@@HOME@@/.config/1Password")
+  (subpath "@@HOME@@/Library/Keychains"))
 
-; Dynamic linker and runtime
-(allow file-read*
-  (subpath "/usr/local/Cellar")
-  (subpath "@@NODE_MODULES_PATH@@")
-  (subpath "@@HOME@@/.claude")
-  (subpath "@@HOME@@/.nvm")
-  (subpath "@@HOME@@/.local"))
+(deny file-read*
+  (subpath "@@AEGIS_LOGS_DIR@@"))
 
-; Temp space
+@@HARD_DENY_READS@@
+
+; Broad read access — agents need to read freely to understand project context,
+; run bash commands, and load system libraries. Writes are still tightly restricted.
+(allow file-read* (subpath "/"))
+
+; Restricted write access: worktree + shared temp space only
 (allow file-read* file-write*
   (subpath "/tmp")
   (subpath "/private/tmp")
@@ -61,16 +55,3 @@
 
 ; Network policy
 @@NETWORK_POLICY@@
-
-; Hard denials
-(deny file-read*
-  (subpath "@@HOME@@/.ssh")
-  (subpath "@@HOME@@/.aws")
-  (subpath "@@HOME@@/.gnupg")
-  (subpath "@@HOME@@/.config/1Password")
-  (subpath "@@HOME@@/Library/Keychains"))
-
-(deny file-read*
-  (subpath "@@AEGIS_LOGS_DIR@@"))
-
-@@HARD_DENY_READS@@

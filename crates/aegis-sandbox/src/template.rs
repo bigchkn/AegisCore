@@ -19,6 +19,7 @@ pub fn render_template(
     let logs_dir = path_to_sbpl(aegis_logs_dir)?;
     let extra_reads = render_allow_paths("file-read*", &policy.extra_reads)?;
     let extra_writes = render_allow_paths("file-write*", &policy.extra_writes)?;
+    let extra_exec_paths = render_allow_paths("process-exec", &policy.extra_exec_paths)?;
     let hard_deny_reads = render_deny_paths("file-read*", &policy.hard_deny_reads)?;
     let network_policy = render_network_policy(&policy.network);
 
@@ -29,6 +30,7 @@ pub fn render_template(
         .replace("@@NODE_MODULES_PATH@@", NODE_MODULES_PATH)
         .replace("@@EXTRA_READS@@", &extra_reads)
         .replace("@@EXTRA_WRITES@@", &extra_writes)
+        .replace("@@EXTRA_EXEC_PATHS@@", &extra_exec_paths)
         .replace("@@HARD_DENY_READS@@", &hard_deny_reads)
         .replace("@@NETWORK_POLICY@@", network_policy);
 
@@ -145,6 +147,7 @@ mod tests {
             network: SandboxNetworkPolicy::OutboundOnly,
             extra_reads: vec![PathBuf::from("/extra/read")],
             extra_writes: vec![PathBuf::from("/extra/write")],
+            extra_exec_paths: vec![PathBuf::from("/extra/bin")],
             hard_deny_reads: vec![PathBuf::from("/secret")],
         };
         let rendered = render_template(

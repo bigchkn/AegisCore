@@ -100,7 +100,7 @@ impl Dispatcher {
 
     pub fn build_spawn_plan(
         &self,
-        spec: AgentSpec,
+        mut spec: AgentSpec,
         agent_id: Uuid,
         tmux_window: u32,
         tmux_pane: impl Into<String>,
@@ -114,6 +114,15 @@ impl Dispatcher {
 
         let provider = self.providers.get(&spec.cli_provider)?;
         let provider_command = provider.spawn_command(&worktree_path, None);
+
+        // Auto-add the provider binary's parent directory to sandbox exec paths so the
+        // binary can be launched regardless of where the user installed it.
+        if let Some(exec_dir) = resolve_binary_exec_dir(&provider.config().binary) {
+            if !spec.sandbox.extra_exec_paths.contains(&exec_dir) {
+                spec.sandbox.extra_exec_paths.push(exec_dir);
+            }
+        }
+
         let mut launch_command = Vec::new();
         if let Some(sandbox) = &self.sandbox {
             launch_command.extend(sandbox.exec_prefix(&sandbox_profile));
@@ -675,6 +684,21 @@ fn shell_quote(value: &str) -> String {
 
 fn short_id(id: Uuid) -> String {
     id.to_string().chars().take(8).collect()
+}
+
+/// Resolve a binary name (e.g. "claude") to its parent directory via `which`.
+/// Returns None if the binary cannot be found or its path cannot be determined.
+fn resolve_binary_exec_dir(binary: &str) -> Option<std::path::PathBuf> {
+    let output = std::process::Command::new("which")
+        .arg(binary)
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let path = String::from_utf8(output.stdout).ok()?;
+    let path = std::path::PathBuf::from(path.trim());
+    path.parent().map(|p| p.to_path_buf())
 }
 
 #[cfg(test)]

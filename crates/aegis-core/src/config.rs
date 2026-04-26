@@ -78,6 +78,7 @@ pub struct RawSandboxPolicy {
     pub network: Option<String>, // "none" | "outbound" | "any"
     pub extra_reads: Option<Vec<PathBuf>>,
     pub extra_writes: Option<Vec<PathBuf>>,
+    pub extra_exec_paths: Option<Vec<PathBuf>>,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -185,6 +186,7 @@ pub struct SandboxPolicyConfig {
     pub network: NetworkPolicy,
     pub extra_reads: Vec<PathBuf>,
     pub extra_writes: Vec<PathBuf>,
+    pub extra_exec_paths: Vec<PathBuf>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -392,6 +394,9 @@ impl EffectiveConfig {
                     .unwrap_or_default(),
                 extra_writes: policy
                     .and_then(|p| p.extra_writes.clone())
+                    .unwrap_or_default(),
+                extra_exec_paths: policy
+                    .and_then(|p| p.extra_exec_paths.clone())
                     .unwrap_or_default(),
             }
         };
@@ -656,6 +661,10 @@ fn resolve_agent(raw: &RawAgentConfig, defaults: &SandboxPolicyConfig) -> Result
                 .extra_writes
                 .clone()
                 .unwrap_or_else(|| defaults.extra_writes.clone()),
+            extra_exec_paths: raw_sb
+                .extra_exec_paths
+                .clone()
+                .unwrap_or_else(|| defaults.extra_exec_paths.clone()),
         }
     } else {
         defaults.clone()

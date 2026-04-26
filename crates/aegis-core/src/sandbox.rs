@@ -17,6 +17,9 @@ pub struct SandboxPolicy {
     pub network: SandboxNetworkPolicy,
     pub extra_reads: Vec<PathBuf>,
     pub extra_writes: Vec<PathBuf>,
+    /// Additional directories from which processes may be executed.
+    /// Use this to allow provider binaries installed outside the hardcoded system paths.
+    pub extra_exec_paths: Vec<PathBuf>,
     /// Paths explicitly denied even if a parent subpath rule would allow them.
     pub hard_deny_reads: Vec<PathBuf>,
 }

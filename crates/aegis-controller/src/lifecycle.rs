@@ -75,6 +75,7 @@ pub fn sandbox_policy_from_config(config: &SandboxPolicyConfig) -> SandboxPolicy
         },
         extra_reads: config.extra_reads.clone(),
         extra_writes: config.extra_writes.clone(),
+        extra_exec_paths: config.extra_exec_paths.clone(),
         hard_deny_reads: Vec::new(),
     }
 }

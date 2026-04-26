@@ -20,6 +20,28 @@ fn temp_path(name: &str) -> PathBuf {
     std::env::temp_dir().join(format!("aegis-sandbox-{name}-{suffix}"))
 }
 
+/// Returns a path under /private/tmp (canonical, no symlinks) for use in exec tests.
+/// Seatbelt resolves symlinks when checking process-exec rules, so paths through /var/folders
+/// (which is a symlink to /private/var/folders) will not match non-canonical SBPL rules.
+#[cfg(target_os = "macos")]
+fn canonical_temp_path(name: &str) -> PathBuf {
+    let suffix = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("time moves forward")
+        .as_nanos();
+    PathBuf::from(format!("/private/tmp/aegis-sandbox-{name}-{suffix}"))
+}
+
+fn sandbox_exec_available() -> bool {
+    Command::new("which")
+        .arg("sandbox-exec")
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .map(|s| s.success())
+        .unwrap_or(false)
+}
+
 #[test]
 fn render_contains_worktree() {
     let rendered = sandbox()
@@ -183,20 +205,144 @@ fn sandbox_error_maps_to_core_error() {
 }
 
 #[test]
+fn render_includes_extra_exec_paths_in_process_exec() {
+    let policy = SandboxPolicy {
+        extra_exec_paths: vec![PathBuf::from("/custom/bin")],
+        ..SandboxPolicy::default()
+    };
+
+    let rendered = sandbox()
+        .render(
+            Path::new("/tmp/aegis-worktree"),
+            Path::new("/Users/tester"),
+            &policy,
+        )
+        .expect("profile renders");
+
+    assert!(rendered.contains("(allow process-exec\n  (subpath \"/custom/bin\"))"));
+    assert!(!rendered.contains("@@"));
+}
+
+/// Demonstrates the bug: a script at a path outside the hardcoded process-exec rules
+/// cannot be executed under the default sandbox policy.
+///
+/// macOS exec syscall checks the script's own path against process-exec rules (shebang causes
+/// the kernel to exec the interpreter, but the script path is still checked first). So a shell
+/// script in a custom dir is a reliable, dependency-free way to test process-exec enforcement.
+#[test]
 #[cfg(target_os = "macos")]
-fn file_access_denied_outside_worktree() {
-    if Command::new("which")
-        .arg("sandbox-exec")
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status()
-        .map(|status| !status.success())
-        .unwrap_or(true)
-    {
+fn exec_path_outside_policy_is_denied() {
+    if !sandbox_exec_available() {
         return;
     }
 
-    let dir = temp_path("exec");
+    let wt = canonical_temp_path("deny-wt");
+    let bin_dir = canonical_temp_path("deny-bins");
+    fs::create_dir_all(&wt).expect("worktree dir");
+    fs::create_dir_all(&bin_dir).expect("bin dir");
+
+    // Shell script: the script path itself is checked for process-exec on macOS (shebang exec).
+    let test_bin = bin_dir.join("run.sh");
+    fs::write(&test_bin, "#!/bin/sh\nexit 0\n").expect("write script");
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(&test_bin, fs::Permissions::from_mode(0o755)).expect("chmod");
+    }
+
+    let profile = wt.join("agent.sb");
+    sandbox()
+        .write(
+            &wt,
+            Path::new("/Users/tester"),
+            &SandboxPolicy {
+                network: SandboxNetworkPolicy::None,
+                ..SandboxPolicy::default()
+            },
+            &profile,
+        )
+        .expect("profile writes");
+
+    let status = Command::new("sandbox-exec")
+        .arg("-f")
+        .arg(&profile)
+        .arg(&test_bin)
+        .status()
+        .expect("sandbox-exec launches");
+
+    assert!(
+        !status.success(),
+        "script at {:?} should be exec-denied by default policy",
+        test_bin
+    );
+
+    let _ = fs::remove_dir_all(&wt);
+    let _ = fs::remove_dir_all(&bin_dir);
+}
+
+/// Validates the fix: the same script executes when its parent dir is in extra_exec_paths.
+#[test]
+#[cfg(target_os = "macos")]
+fn exec_path_via_extra_exec_paths_is_allowed() {
+    if !sandbox_exec_available() {
+        return;
+    }
+
+    let wt = canonical_temp_path("allow-wt");
+    let bin_dir = canonical_temp_path("allow-bins");
+    fs::create_dir_all(&wt).expect("worktree dir");
+    fs::create_dir_all(&bin_dir).expect("bin dir");
+
+    let test_bin = bin_dir.join("run.sh");
+    fs::write(&test_bin, "#!/bin/sh\nexit 0\n").expect("write script");
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(&test_bin, fs::Permissions::from_mode(0o755)).expect("chmod");
+    }
+
+    let profile = wt.join("agent.sb");
+    sandbox()
+        .write(
+            &wt,
+            Path::new("/Users/tester"),
+            &SandboxPolicy {
+                network: SandboxNetworkPolicy::None,
+                extra_exec_paths: vec![bin_dir.clone()],
+                ..SandboxPolicy::default()
+            },
+            &profile,
+        )
+        .expect("profile writes");
+
+    let status = Command::new("sandbox-exec")
+        .arg("-f")
+        .arg(&profile)
+        .arg(&test_bin)
+        .status()
+        .expect("sandbox-exec launches");
+
+    assert!(
+        status.success(),
+        "script at {:?} should execute when its dir is in extra_exec_paths",
+        test_bin
+    );
+
+    let _ = fs::remove_dir_all(&wt);
+    let _ = fs::remove_dir_all(&bin_dir);
+}
+
+/// With the broad read policy, agents CAN read any file (except hard-denied credential paths).
+/// What they cannot do is WRITE outside the worktree and temp space.
+/// This test verifies that write attempts to non-temp system paths are denied.
+#[test]
+#[cfg(target_os = "macos")]
+fn write_denied_outside_worktree() {
+    if !sandbox_exec_available() {
+        return;
+    }
+
+    let dir = canonical_temp_path("write-wt");
     fs::create_dir_all(&dir).expect("temp dir");
     let profile = dir.join("agent.sb");
 
@@ -212,14 +358,15 @@ fn file_access_denied_outside_worktree() {
         )
         .expect("profile writes");
 
+    // Attempt to create a file in /usr/bin — allowed for exec but not for writes.
     let status = Command::new("sandbox-exec")
         .arg("-f")
         .arg(&profile)
-        .arg("/bin/cat")
-        .arg("/etc/passwd")
+        .arg("/usr/bin/touch")
+        .arg("/usr/bin/aegis_sandbox_test_canary")
         .status()
         .expect("sandbox-exec launches");
 
-    assert!(!status.success());
+    assert!(!status.success(), "write to /usr/bin should be denied");
     let _ = fs::remove_dir_all(dir);
 }
