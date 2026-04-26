@@ -1,0 +1,32 @@
+id = 19
+name = "Agent Design — Design Phase"
+status = "in-progress"
+lld = "hld/agent-design.md"
+
+[[tasks]]
+id = "19.1"
+uid = "e2ef5943-72c9-4c4f-ab44-dd1681d9deb6"
+task = "Write HLD: Agent Design & Template System"
+task_type = "feature"
+status = "in-progress"
+
+[[tasks]]
+id = "19.2"
+uid = "2093159a-4d15-4aea-a177-cbafc64d350c"
+task = "Write LLD-A: Template Engine (aegis-design crate)"
+task_type = "feature"
+status = "pending"
+
+[[tasks]]
+id = "19.3"
+uid = "e6c0f873-8b83-4114-94f2-c03dde65cbef"
+task = "Write LLD-B: Bootstrap Integration (CLI + dispatcher wiring)"
+task_type = "feature"
+status = "pending"
+
+[[tasks]]
+id = "19.4"
+uid = "035517c3-a0ff-4b74-bcd8-f3d2d64002f8"
+task = "Write LLD-C: Taskflow Template Suite (built-in templates + coordination protocol)"
+task_type = "feature"
+status = "pending"
