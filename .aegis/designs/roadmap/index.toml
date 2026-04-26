@@ -2,14 +2,14 @@
 name = "AegisCore"
 current_milestone = 15
 
+[milestones.M22]
+name = "Agent Design — Taskflow Template Suite"
+path = "milestones/M22.toml"
+status = "pending"
+
 [milestones.M13]
 name = "Taskflow Engine"
 path = "milestones/M13.toml"
-status = "done"
-
-[milestones.M14]
-name = "Web UI Implementation"
-path = "milestones/M14.toml"
 status = "done"
 
 [milestones.M21]
@@ -22,35 +22,15 @@ name = "Web UI Taskflow Enhancements"
 path = "milestones/M24.toml"
 status = "done"
 
-[milestones.M15]
-name = "Web Agent Controls"
-path = "milestones/M15.toml"
-status = "done"
-
-[milestones.M17]
-name = "Global Backlog & Task Types"
-path = "milestones/M17.toml"
-status = "done"
-
-[milestones.M18]
-name = "Per-Agent Model Override"
-path = "milestones/M18.toml"
-status = "done"
-
 [milestones.M11]
 name = "Global Daemon & IPC"
 path = "milestones/M11.toml"
 status = "done"
 
-[milestones.M22]
-name = "Agent Design — Taskflow Template Suite"
-path = "milestones/M22.toml"
-status = "pending"
-
-[milestones.M20]
-name = "Agent Design — Template Engine"
-path = "milestones/M20.toml"
-status = "pending"
+[milestones.M15]
+name = "Web Agent Controls"
+path = "milestones/M15.toml"
+status = "done"
 
 [milestones.M12]
 name = "CLI Binary"
@@ -66,3 +46,23 @@ status = "done"
 name = "Agent Design — Design Phase"
 path = "milestones/M19.toml"
 status = "in-progress"
+
+[milestones.M20]
+name = "Agent Design — Template Engine"
+path = "milestones/M20.toml"
+status = "pending"
+
+[milestones.M17]
+name = "Global Backlog & Task Types"
+path = "milestones/M17.toml"
+status = "done"
+
+[milestones.M18]
+name = "Per-Agent Model Override"
+path = "milestones/M18.toml"
+status = "done"
+
+[milestones.M14]
+name = "Web UI Implementation"
+path = "milestones/M14.toml"
+status = "done"

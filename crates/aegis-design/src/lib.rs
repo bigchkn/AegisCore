@@ -4,6 +4,9 @@ pub mod error;
 pub mod registry;
 pub mod template;
 
+#[cfg(test)]
+mod tests;
+
 pub use context::BootstrapContext;
 pub use engine::{DesignEngine, RenderedTemplate};
 pub use error::{DesignError, Result};

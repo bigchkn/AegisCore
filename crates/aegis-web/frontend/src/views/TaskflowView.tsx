@@ -11,7 +11,7 @@ type MilestoneState = {
   error: string | null;
 };
 
-type Filter = 'all' | 'incomplete';
+type Filter = 'all' | 'incomplete' | 'bugs';
 
 export function TaskflowView() {
   const activeProjectId = useAppSelector((state) => state.ui.activeProjectId);
@@ -90,9 +90,14 @@ export function TaskflowView() {
     return <EmptyPanel title="No taskflow" body="No roadmap index has been loaded." />;
   }
 
-  const milestoneEntries = Object.entries(index.milestones).sort(([left], [right]) =>
-    left.localeCompare(right, undefined, { numeric: true }),
-  );
+  const milestoneEntries = Object.entries(index.milestones)
+    .sort(([left], [right]) => left.localeCompare(right, undefined, { numeric: true }))
+    .filter(([_, ref]) => {
+      if (filter === 'incomplete') {
+        return ref.status !== 'done';
+      }
+      return true; // Show all for 'all' or 'bugs' (bugs might be in done milestones)
+    });
 
   return (
     <section className="taskflow-view">
@@ -109,10 +114,16 @@ export function TaskflowView() {
             Incomplete
           </button>
           <button 
+            className={filter === 'bugs' ? 'filter-btn is-active' : 'filter-btn'} 
+            onClick={() => setFilter('bugs')}
+          >
+            Bugs
+          </button>
+          <button 
             className={filter === 'all' ? 'filter-btn is-active' : 'filter-btn'} 
             onClick={() => setFilter('all')}
           >
-            All Tasks
+            All
           </button>
         </div>
       </header>
@@ -167,11 +178,18 @@ export function TaskflowView() {
 }
 
 function MilestoneDetail({ milestone, filter }: { milestone: TaskflowMilestone; filter: Filter }) {
-  const tasks = filter === 'incomplete' 
-    ? milestone.tasks.filter(t => t.status !== 'done')
-    : milestone.tasks;
+  const tasks = milestone.tasks.filter(t => {
+    if (filter === 'incomplete') {
+      return t.status !== 'done';
+    }
+    if (filter === 'bugs') {
+      return t.task_type === 'bug';
+    }
+    return true;
+  });
 
   if (tasks.length === 0) {
+    if (filter === 'bugs') return null; // Hide milestone detail entirely if no bugs
     return <p className="muted">No {filter === 'incomplete' ? 'pending ' : ''}tasks found.</p>;
   }
 
