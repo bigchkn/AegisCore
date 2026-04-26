@@ -557,6 +557,12 @@ tbody tr:hover {
   color: #9ea7b3;
 }
 
+.taskflow-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
 .taskflow-filters {
   display: flex;
   gap: 8px;

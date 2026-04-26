@@ -18,17 +18,27 @@ const mockIndex = {
   project: { name: 'Test Project', current_milestone: 1 },
   milestones: {
     M1: { name: 'Milestone 1', path: 'milestones/M1.toml', status: 'in-progress' },
+    M2: { name: 'Milestone 2', path: 'milestones/M2.toml', status: 'done' },
   },
   backlog: 'backlog.toml',
 };
 
-const mockMilestone = {
+const mockMilestone1 = {
   id: 1,
   name: 'Milestone 1',
   status: 'in-progress',
   tasks: [
-    { id: '1.1', task: 'A Feature', status: 'pending', task_type: 'feature' },
-    { id: '1.2', task: 'A Bug', status: 'pending', task_type: 'bug' },
+    { id: '1.1', task: 'Active Feature', status: 'pending', task_type: 'feature' },
+    { id: '1.2', task: 'Active Bug', status: 'pending', task_type: 'bug' },
+  ],
+};
+
+const mockMilestone2 = {
+  id: 2,
+  name: 'Milestone 2',
+  status: 'done',
+  tasks: [
+    { id: '2.1', task: 'Completed Bug', status: 'done', task_type: 'bug' },
   ],
 };
 
@@ -67,33 +77,45 @@ function renderWithStore() {
   );
 }
 
-describe('TaskflowView Bugs Filter', () => {
+describe('TaskflowView Enhanced Filters', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  it('verifies bugs are visible when Bugs filter is active', async () => {
+  it('filters by View Mode and Status Toggle', async () => {
     (api.taskflowStatus as any).mockResolvedValue(mockIndex);
     (api.taskflowMilestone as any).mockImplementation((_pid: string, id: string) => {
-      if (id === 'M1') return Promise.resolve(mockMilestone);
+      if (id === 'M1') return Promise.resolve(mockMilestone1);
+      if (id === 'M2') return Promise.resolve(mockMilestone2);
       if (id === 'backlog') return Promise.resolve(mockBacklog);
       return Promise.reject(new Error('Not found'));
     });
 
     renderWithStore();
 
-    // Wait for index to load
+    // 1. Default state: Milestones View + Active
     await waitFor(() => expect(screen.getByText('Milestone 1')).toBeDefined());
+    expect(screen.queryByText('Milestone 2')).toBeNull(); // Completed milestone hidden
 
-    // Switch to Bugs filter
-    const bugsBtn = screen.getByText('Bugs');
-    fireEvent.click(bugsBtn);
+    // 2. Switch to All (Still in Milestones view)
+    fireEvent.click(screen.getByText('All'));
+    await waitFor(() => expect(screen.getByText('Milestone 2')).toBeDefined());
 
-    // FIX VERIFICATION: Bugs should now be visible because the filter effect auto-loads and expands them
-    await waitFor(() => expect(screen.getByText('A Bug')).toBeDefined());
+    // 3. Switch to Bugs view (Should auto-expand and show bugs)
+    fireEvent.click(screen.getByText('Bugs'));
+    
+    // Should see bugs from M1, M2 and Backlog
+    await waitFor(() => expect(screen.getByText('Active Bug')).toBeDefined());
+    await waitFor(() => expect(screen.getByText('Completed Bug')).toBeDefined());
     await waitFor(() => expect(screen.getByText('Backlog Bug')).toBeDefined());
     
-    // Feature should NOT be visible in Bugs filter
-    expect(screen.queryByText('A Feature')).toBeNull();
+    // Should NOT see feature
+    expect(screen.queryByText('Active Feature')).toBeNull();
+
+    // 4. Switch Bugs to Active (Should hide Completed Bug)
+    fireEvent.click(screen.getByText('Active'));
+    await waitFor(() => expect(screen.queryByText('Completed Bug')).toBeNull());
+    expect(screen.getByText('Active Bug')).toBeDefined();
+    expect(screen.getByText('Backlog Bug')).toBeDefined();
   });
 });

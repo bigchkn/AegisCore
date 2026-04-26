@@ -11,7 +11,7 @@ type MilestoneState = {
   error: string | null;
 };
 
-type Filter = 'all' | 'incomplete' | 'bugs';
+type ViewMode = 'milestones' | 'bugs';
 
 export function TaskflowView() {
   const activeProjectId = useAppSelector((state) => state.ui.activeProjectId);
@@ -19,7 +19,9 @@ export function TaskflowView() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [milestones, setMilestones] = useState<Record<string, MilestoneState>>({});
-  const [filter, setFilter] = useState<Filter>('incomplete');
+  
+  const [viewMode, setViewMode] = useState<ViewMode>('milestones');
+  const [showAll, setShowAll] = useState(false);
 
   useEffect(() => {
     setIndex(null);
@@ -76,9 +78,9 @@ export function TaskflowView() {
     loadMilestone(milestoneId);
   };
 
-  // Auto-expand milestones when switching to 'bugs' or 'all'
+  // Auto-expand milestones when in Bugs view
   useEffect(() => {
-    if (filter === 'all' || filter === 'bugs') {
+    if (viewMode === 'bugs') {
       if (!index) return;
       
       const ids = Object.keys(index.milestones);
@@ -95,7 +97,7 @@ export function TaskflowView() {
         }
       }
     }
-  }, [filter, index]);
+  }, [viewMode, index]);
 
   if (!activeProjectId) {
     return <EmptyPanel title="Select a project" body="Taskflow status is loaded per project." />;
@@ -116,7 +118,8 @@ export function TaskflowView() {
   const milestoneEntries = Object.entries(index.milestones)
     .sort(([left], [right]) => left.localeCompare(right, undefined, { numeric: true }))
     .filter(([_, ref]) => {
-      if (filter === 'incomplete') {
+      // In Milestone view, hide completed milestones if showAll is false
+      if (viewMode === 'milestones' && !showAll) {
         return ref.status !== 'done';
       }
       return true;
@@ -129,25 +132,37 @@ export function TaskflowView() {
           <h2>{index.project.name}</h2>
           <p>Current milestone M{index.project.current_milestone}</p>
         </div>
-        <div className="taskflow-filters">
-          <button 
-            className={filter === 'incomplete' ? 'filter-btn is-active' : 'filter-btn'} 
-            onClick={() => setFilter('incomplete')}
-          >
-            Incomplete
-          </button>
-          <button 
-            className={filter === 'bugs' ? 'filter-btn is-active' : 'filter-btn'} 
-            onClick={() => setFilter('bugs')}
-          >
-            Bugs
-          </button>
-          <button 
-            className={filter === 'all' ? 'filter-btn is-active' : 'filter-btn'} 
-            onClick={() => setFilter('all')}
-          >
-            All
-          </button>
+        
+        <div className="taskflow-controls">
+          <div className="segmented-control">
+            <button 
+              className={viewMode === 'milestones' ? 'is-active' : ''} 
+              onClick={() => setViewMode('milestones')}
+            >
+              Milestones
+            </button>
+            <button 
+              className={viewMode === 'bugs' ? 'is-active' : ''} 
+              onClick={() => setViewMode('bugs')}
+            >
+              Bugs
+            </button>
+          </div>
+
+          <div className="segmented-control">
+            <button 
+              className={!showAll ? 'is-active' : ''} 
+              onClick={() => setShowAll(false)}
+            >
+              Active
+            </button>
+            <button 
+              className={showAll ? 'is-active' : ''} 
+              onClick={() => setShowAll(true)}
+            >
+              All
+            </button>
+          </div>
         </div>
       </header>
 
@@ -165,7 +180,11 @@ export function TaskflowView() {
                 {milestones['backlog'].loading ? <p className="muted">Loading backlog...</p> : null}
                 {milestones['backlog'].error ? <p className="error">{milestones['backlog'].error}</p> : null}
                 {milestones['backlog'].data ? (
-                  <MilestoneDetail milestone={milestones['backlog'].data} filter={filter} />
+                  <MilestoneDetail 
+                    milestone={milestones['backlog'].data} 
+                    viewMode={viewMode}
+                    showAll={showAll}
+                  />
                 ) : null}
               </div>
             ) : null}
@@ -189,7 +208,13 @@ export function TaskflowView() {
                 <div className="milestone-detail">
                   {state.loading ? <p className="muted">Loading milestone...</p> : null}
                   {state.error ? <p className="error">{state.error}</p> : null}
-                  {state.data ? <MilestoneDetail milestone={state.data} filter={filter} /> : null}
+                  {state.data ? (
+                    <MilestoneDetail 
+                      milestone={state.data} 
+                      viewMode={viewMode}
+                      showAll={showAll}
+                    />
+                  ) : null}
                 </div>
               ) : null}
             </div>
@@ -200,20 +225,30 @@ export function TaskflowView() {
   );
 }
 
-function MilestoneDetail({ milestone, filter }: { milestone: TaskflowMilestone; filter: Filter }) {
+interface MilestoneDetailProps {
+  milestone: TaskflowMilestone;
+  viewMode: ViewMode;
+  showAll: boolean;
+}
+
+function MilestoneDetail({ milestone, viewMode, showAll }: MilestoneDetailProps) {
   const tasks = milestone.tasks.filter(t => {
-    if (filter === 'incomplete') {
-      return t.status !== 'done';
+    // 1. Filter by View Mode
+    if (viewMode === 'bugs' && t.task_type !== 'bug') {
+      return false;
     }
-    if (filter === 'bugs') {
-      return t.task_type === 'bug';
+    
+    // 2. Filter by Status
+    if (!showAll && t.status === 'done') {
+      return false;
     }
+    
     return true;
   });
 
   if (tasks.length === 0) {
-    if (filter === 'bugs') return null; // Hide milestone detail entirely if no bugs
-    return <p className="muted">No {filter === 'incomplete' ? 'pending ' : ''}tasks found.</p>;
+    if (viewMode === 'bugs') return null; // Hide milestone detail entirely if no matching bugs
+    return <p className="muted">No {!showAll ? 'active ' : ''}tasks found.</p>;
   }
 
   return (
