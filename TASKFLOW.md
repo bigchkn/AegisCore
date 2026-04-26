@@ -7,13 +7,14 @@ The **Taskflow Engine** is the orchestration heart of AegisCore. It bridges proj
 AegisCore projects are **self-documenting**. Instead of a single monolithic roadmap, Taskflow uses a **Modular Content** model:
 - **Project Index**: A central manifest (`roadmap/index.toml`) tracking milestones.
 - **Milestone Fragments**: Individual TOML files for each milestone (e.g., `M13.toml`), preventing Git merge conflicts.
+- **Global Backlog**: A dedicated file (`roadmap/backlog.toml`) for tasks not tied to a specific milestone (bugs, maintenance, general ideas).
 - **Design Docs**: Markdown files in `.aegis/designs/lld/` linked directly to roadmap tasks.
 
 ### Collision Prevention & GUIDs
-Every task in the roadmap is assigned a unique `uid` (UUID) upon creation. While tasks have friendly IDs (like `14.1`), the `uid` is the immutable internal identifier. This ensures that even if multiple agents attempt to modify the roadmap simultaneously, their work remains distinct and traceable.
+Every task in the roadmap is assigned a unique `uid` (UUID) upon creation. While tasks have friendly IDs (like `14.1` or `B1`), the `uid` is the immutable internal identifier. This ensures that even if multiple agents attempt to modify the roadmap simultaneously, their work remains distinct and traceable.
 
 ### Concurrency Control
-The Taskflow Engine employs **mandatory file locking** (`fs2`) and **atomic writes**. When an agent (or the CLI) modifies a roadmap fragment, it acquires an exclusive lock, ensuring that no two processes can overwrite each other's changes.
+The Taskflow Engine employs **mandatory file locking** (`fs2`) and **atomic writes**. When an agent (or the CLI) modifies a roadmap fragment or the backlog, it acquires an exclusive lock, ensuring that no two processes can overwrite each other's changes.
 
 ---
 
@@ -27,9 +28,31 @@ aegis taskflow create-milestone 14 "Web UI Implementation" --lld "lld/web-ui.md"
 ```
 This creates `milestones/M14.toml` and registers it in `index.toml`.
 
-### Adding a Task to a Milestone
+### Adding a Task
+Tasks are categorized by type: **Feature** (default), **Bug**, or **Maintenance**.
+
+**To a Milestone:**
 ```bash
 aegis taskflow add-task 14 14.1 "Setup React frontend project"
+```
+
+**To the Global Backlog:**
+If you omit the milestone ID, the task is automatically routed to the global backlog. You can use flags to specify the task type.
+```bash
+# Add a bug to the backlog
+aegis taskflow add-task B1 "Fix project status 'unknown' in CLI" --bug
+
+# Add maintenance task
+aegis taskflow add-task M1 "Upgrade tokio to 1.30" --maint
+```
+
+### Viewing the Roadmap
+```bash
+# View a milestone
+aegis taskflow show 14
+
+# View the global backlog
+aegis taskflow show backlog
 ```
 
 ---
@@ -78,13 +101,13 @@ If you check the milestone now, task `15.1` will automatically have its status u
 
 | Command | Description |
 |---------|-------------|
-| `aegis taskflow status` | High-level summary of active milestones and project health. |
+| `aegis taskflow status` | High-level summary of active milestones, backlog size, and project health. |
 | `aegis taskflow list` | Lists all milestones and their current statuses. |
-| `aegis taskflow show <M-ID>` | Shows detailed task list and design links for a milestone (e.g., `M13`). |
+| `aegis taskflow show <ID>` | Shows detailed tasks for a milestone (e.g., `M13`) or the `backlog`. |
 | `aegis taskflow create-milestone <ID> <NAME>` | Create a new milestone fragment and register it. |
-| `aegis taskflow add-task <M-ID> <ID> <TASK>` | Add a new task to an existing milestone. |
-| `aegis taskflow set-task-status <M-ID> <TASK-ID> <STATUS>` | Update an existing roadmap task status. |
-| `aegis taskflow sync` | Synchronizes the roadmap TOMLs with the actual Agent Registry state. |
+| `aegis taskflow add-task <ID> <TASK> [M-ID]` | Add a task. Defaults to `backlog` if `M-ID` is omitted. |
+| `aegis taskflow set-task-status <M-ID> <TASK-ID> <STATUS>` | Update a roadmap task status (use `backlog` as M-ID for global tasks). |
+| `aegis taskflow sync` | Synchronizes all roadmap TOMLs and the backlog with Agent Registry state. |
 | `aegis taskflow assign <roadmap_id> <task_id>` | Manually link a roadmap task to a specific agent task UUID. |
 
 ---
@@ -94,5 +117,5 @@ If you check the milestone now, task `15.1` will automatically have its status u
 When an agent is spawned, it is instructed to use Taskflow to gain context. A typical agent workflow looks like this:
 
 1. **Orientation**: Run `aegis taskflow status` to see where the project stands.
-2. **Detail**: Run `aegis taskflow show M13` to see the current tasks.
+2. **Detail**: Run `aegis taskflow show M13` or `aegis taskflow show backlog` to see current priorities.
 3. **Execution**: Perform the task, then use `aegis taskflow sync` to update the roadmap once the registry reflects completion.
