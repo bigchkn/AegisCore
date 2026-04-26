@@ -47,6 +47,7 @@ dependencies = [
 name = "aegis-controller"
 version = "0.1.0"
 dependencies = [
+ "aegis-channels",
  "aegis-core",
  "aegis-providers",
  "aegis-recorder",

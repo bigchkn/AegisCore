@@ -15,32 +15,32 @@ id = "23.2"
 uid = "7a0e29b0-e231-428b-b49d-df2119faae41"
 task = "Add controller IPC and CLI command for agent-to-agent message send"
 task_type = "feature"
-status = "pending"
+status = "done"
 
 [[tasks]]
 id = "23.3"
 uid = "7a93209c-f7e3-4d11-ae69-2657df70b030"
 task = "Implement mailbox delivery path and inbox file writer helpers"
 task_type = "feature"
-status = "pending"
+status = "done"
 
 [[tasks]]
 id = "23.4"
 uid = "69d34b67-5dcf-4b82-8cbf-13987b046463"
 task = "Implement recipient inbox polling and optional injection nudge"
 task_type = "feature"
-status = "pending"
+status = "done"
 
 [[tasks]]
 id = "23.5"
 uid = "6cd82351-8567-4c72-9451-15eb2daef391"
 task = "Add message inbox/listing commands and storage accessors"
 task_type = "feature"
-status = "pending"
+status = "done"
 
 [[tasks]]
 id = "23.6"
 uid = "8a747277-4f9a-4203-bf83-7342184a10ad"
 task = "Add tests for routing, queueing, delivery ordering, and prefix resolution"
 task_type = "feature"
-status = "pending"
+status = "done"

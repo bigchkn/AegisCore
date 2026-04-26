@@ -270,6 +270,7 @@ fn format_event(event: &AegisEvent) -> String {
         AegisEvent::SystemNotification { message } => {
             format!("ℹ️ *System*\n{}", message)
         }
+        _ => "ℹ️ *System*\nUnhandled event".to_string(),
     }
 }
 

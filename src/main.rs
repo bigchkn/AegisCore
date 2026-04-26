@@ -486,13 +486,7 @@ async fn dispatch(cli: Cli, printer: &Printer, client: &DaemonClient) -> Result<
                     };
 
                     commands::taskflow::add_task(
-                        &m_id,
-                        &id,
-                        &task,
-                        task_type,
-                        printer,
-                        client,
-                        &anchor,
+                        &m_id, &id, &task, task_type, printer, client, &anchor,
                     )
                     .await
                 }

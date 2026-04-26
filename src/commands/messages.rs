@@ -1,4 +1,6 @@
-use crate::{anchoring::ProjectAnchor, client::DaemonClient, error::AegisCliError, output::Printer};
+use crate::{
+    anchoring::ProjectAnchor, client::DaemonClient, error::AegisCliError, output::Printer,
+};
 use clap::ValueEnum;
 use uuid::Uuid;
 
@@ -178,7 +180,19 @@ pub async fn list(
         return Ok(());
     }
 
-    let inboxes = payload.as_array().cloned().unwrap_or_default();
+    let inboxes: Vec<_> = payload
+        .as_array()
+        .cloned()
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|entry| {
+            entry
+                .get("queued_messages")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0)
+                > 0
+        })
+        .collect();
     if inboxes.is_empty() {
         printer.line("No inboxes with queued messages.");
         return Ok(());
@@ -188,7 +202,13 @@ pub async fn list(
         .iter()
         .map(|entry| {
             vec![
-                short_id(entry.get("agent_id").and_then(|v| v.as_str()).unwrap_or("?")),
+                short_id(
+                    entry
+                        .get("agent_id")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("?"),
+                )
+                .to_string(),
                 entry
                     .get("agent_name")
                     .and_then(|v| v.as_str())

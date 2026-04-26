@@ -1,6 +1,5 @@
 use aegis_core::{AegisError, Channel, ChannelKind, Message, Result};
 use async_trait::async_trait;
-use chrono::Utc;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -41,11 +40,13 @@ impl MailboxChannel {
                 source: e,
             })?;
 
-            if !entry.file_type().map_err(|e| AegisError::StorageIo {
-                path: entry.path(),
-                source: e,
-            })?
-            .is_file()
+            if !entry
+                .file_type()
+                .map_err(|e| AegisError::StorageIo {
+                    path: entry.path(),
+                    source: e,
+                })?
+                .is_file()
             {
                 continue;
             }
@@ -136,6 +137,7 @@ mod tests {
     use super::*;
     use aegis_core::{MessageSource, MessageType};
     use chrono::TimeZone;
+    use chrono::Utc;
     use tempfile::tempdir;
     use uuid::Uuid;
 
@@ -168,15 +170,27 @@ mod tests {
         );
 
         std::fs::create_dir_all(mailbox.inbox_path()).unwrap();
-        std::fs::write(mailbox.message_path(&later), serde_json::to_string(&later).unwrap())
-            .unwrap();
-        std::fs::write(mailbox.message_path(&earlier), serde_json::to_string(&earlier).unwrap())
-            .unwrap();
+        std::fs::write(
+            mailbox.message_path(&later),
+            serde_json::to_string(&later).unwrap(),
+        )
+        .unwrap();
+        std::fs::write(
+            mailbox.message_path(&earlier),
+            serde_json::to_string(&earlier).unwrap(),
+        )
+        .unwrap();
 
         let messages = mailbox.list_messages().unwrap();
         assert_eq!(messages.len(), 2);
-        assert_eq!(messages[0].payload, serde_json::Value::String("earlier".into()));
-        assert_eq!(messages[1].payload, serde_json::Value::String("later".into()));
+        assert_eq!(
+            messages[0].payload,
+            serde_json::Value::String("earlier".into())
+        );
+        assert_eq!(
+            messages[1].payload,
+            serde_json::Value::String("later".into())
+        );
     }
 
     #[test]

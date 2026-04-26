@@ -3,7 +3,8 @@ use std::sync::Arc;
 
 use aegis_channels::MailboxChannel;
 use aegis_core::{
-    AegisError, Agent, AgentRegistry, AgentStatus, Message, MessageSource, MessageType, Result,
+    AegisError, Agent, AgentRegistry, AgentStatus, Channel, Message, MessageSource, MessageType,
+    Result, StorageBackend,
 };
 use aegis_tmux::{TmuxClient, TmuxTarget};
 use chrono::{DateTime, Utc};
@@ -72,14 +73,19 @@ impl MessageRouter {
         let agent = self.agent_by_id(to_agent_id)?;
 
         if let Some(from_agent_id) = from_agent_id {
-            let sender_exists = AgentRegistry::get(self.registry.as_ref(), from_agent_id)?.is_some();
+            let sender_exists =
+                AgentRegistry::get(self.registry.as_ref(), from_agent_id)?.is_some();
             if !sender_exists {
-                return Err(AegisError::AgentNotFound { agent_id: from_agent_id });
+                return Err(AegisError::AgentNotFound {
+                    agent_id: from_agent_id,
+                });
             }
         }
 
         let message = Message::new(
-            from_agent_id.map(MessageSource::Agent).unwrap_or(MessageSource::System),
+            from_agent_id
+                .map(MessageSource::Agent)
+                .unwrap_or(MessageSource::System),
             to_agent_id,
             kind,
             payload,
@@ -152,9 +158,8 @@ impl MessageRouter {
     }
 
     fn agent_by_id(&self, agent_id: Uuid) -> Result<Agent> {
-        AgentRegistry::get(self.registry.as_ref(), agent_id)?.ok_or(AegisError::AgentNotFound {
-            agent_id,
-        })
+        AgentRegistry::get(self.registry.as_ref(), agent_id)?
+            .ok_or(AegisError::AgentNotFound { agent_id })
     }
 
     fn resolve_agent_id(&self, raw: &str) -> Result<Uuid> {
@@ -193,16 +198,17 @@ impl MessageRouter {
             return Ok(false);
         };
 
-        let target = TmuxTarget::parse(&agent.tmux_target()).map_err(|e| AegisError::IpcProtocol {
-            reason: e.to_string(),
-        })?;
+        let target =
+            TmuxTarget::parse(&agent.tmux_target()).map_err(|e| AegisError::IpcProtocol {
+                reason: e.to_string(),
+            })?;
         let command = format!("aegis message inbox {}", agent.agent_id);
 
-        tmux.send_text(&target, &command).await.map_err(|e| {
-            AegisError::IpcConnection {
+        tmux.send_text(&target, &command)
+            .await
+            .map_err(|e| AegisError::IpcConnection {
                 source: std::io::Error::new(std::io::ErrorKind::Other, e.to_string()),
-            }
-        })?;
+            })?;
 
         Ok(true)
     }
@@ -265,10 +271,7 @@ cli_provider = "claude-code"
         )
         .unwrap();
 
-        (
-            MessageRouter::new(registry, storage, None),
-            agent_id,
-        )
+        (MessageRouter::new(registry, storage, None), agent_id)
     }
 
     #[tokio::test]
@@ -291,7 +294,10 @@ cli_provider = "claude-code"
 
         let inbox = router.inbox(&agent_id.to_string()).unwrap();
         assert_eq!(inbox.messages.len(), 1);
-        assert_eq!(inbox.messages[0].payload, serde_json::json!({"text": "hello"}));
+        assert_eq!(
+            inbox.messages[0].payload,
+            serde_json::json!({"text": "hello"})
+        );
     }
 
     #[test]
@@ -312,8 +318,11 @@ cli_provider = "claude-code"
             created_at: Utc.timestamp_opt(1, 0).single().unwrap(),
         };
         std::fs::create_dir_all(mailbox.inbox_path()).unwrap();
-        std::fs::write(mailbox.message_path(&message), serde_json::to_string(&message).unwrap())
-            .unwrap();
+        std::fs::write(
+            mailbox.message_path(&message),
+            serde_json::to_string(&message).unwrap(),
+        )
+        .unwrap();
 
         let summaries = router.list().unwrap();
         assert_eq!(summaries.len(), 1);

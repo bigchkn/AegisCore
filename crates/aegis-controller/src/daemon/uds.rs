@@ -312,8 +312,14 @@ async fn dispatch_command(
             use aegis_core::{AgentStatus, TaskStatus};
             let agents = commands.list_agents()?;
             let tasks = commands.list_tasks()?;
-            let active_agents = agents.iter().filter(|a| a.status == AgentStatus::Active).count() as u64;
-            let queued_agents = agents.iter().filter(|a| a.status == AgentStatus::Queued).count() as u64;
+            let active_agents = agents
+                .iter()
+                .filter(|a| a.status == AgentStatus::Active)
+                .count() as u64;
+            let queued_agents = agents
+                .iter()
+                .filter(|a| a.status == AgentStatus::Queued)
+                .count() as u64;
             let providers: Vec<String> = runtime.config.providers.keys().cloned().collect();
             Ok(serde_json::json!({
                 "project_root": runtime.root_path.display().to_string(),
@@ -537,9 +543,11 @@ fn parse_agent_id(params: &serde_json::Value, commands: &ControllerCommands) -> 
             reason: "Missing agent_id".to_string(),
         })?;
 
-    commands.resolve_agent_id(raw).map_err(|e| AegisError::IpcProtocol {
-        reason: e.to_string(),
-    })
+    commands
+        .resolve_agent_id(raw)
+        .map_err(|e| AegisError::IpcProtocol {
+            reason: e.to_string(),
+        })
 }
 
 fn parse_uuid(raw: &str) -> Result<Uuid> {
@@ -699,12 +707,14 @@ async fn handle_log_tail(
         .unwrap_or(100) as usize;
 
     match commands.logs(agent_id, Some(last_n)) {
-        Ok(logs) => send_response(
-            &mut lines,
-            request.id,
-            serde_json::to_value(logs).unwrap_or(serde_json::Value::Null),
-        )
-        .await,
+        Ok(logs) => {
+            send_response(
+                &mut lines,
+                request.id,
+                serde_json::to_value(logs).unwrap_or(serde_json::Value::Null),
+            )
+            .await
+        }
         Err(e) => send_error(&mut lines, request.id, e).await,
     }
 }
@@ -811,8 +821,14 @@ mod tests {
         assert!(response.error.is_none());
 
         let json = serde_json::to_value(response).unwrap();
-        assert_eq!(json.get("id").and_then(|v| v.as_str()), Some("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"));
-        assert_eq!(json.get("payload"), Some(&serde_json::json!(["line one", "line two"])));
+        assert_eq!(
+            json.get("id").and_then(|v| v.as_str()),
+            Some("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
+        );
+        assert_eq!(
+            json.get("payload"),
+            Some(&serde_json::json!(["line one", "line two"]))
+        );
     }
 
     fn home_lock() -> &'static Mutex<()> {
@@ -869,12 +885,20 @@ cli_provider = "claude-code"
                 None,
                 serde_json::json!({ "root_path": project_path.display().to_string() }),
             ),
-            request("project.status", Some(project_path), serde_json::Value::Null),
+            request(
+                "project.status",
+                Some(project_path),
+                serde_json::Value::Null,
+            ),
             request("agents.list", Some(project_path), serde_json::Value::Null),
             request("tasks.list", Some(project_path), serde_json::Value::Null),
             request("channels.list", Some(project_path), serde_json::Value::Null),
             request("session.start", Some(project_path), serde_json::Value::Null),
-            request("session.stop", Some(project_path), serde_json::json!({ "force": true })),
+            request(
+                "session.stop",
+                Some(project_path),
+                serde_json::json!({ "force": true }),
+            ),
             request(
                 "agents.pause",
                 Some(project_path),
@@ -895,7 +919,11 @@ cli_provider = "claude-code"
                 Some(project_path),
                 serde_json::json!({ "agent_id": Uuid::new_v4() }),
             ),
-            request("taskflow.status", Some(project_path), serde_json::Value::Null),
+            request(
+                "taskflow.status",
+                Some(project_path),
+                serde_json::Value::Null,
+            ),
             request("taskflow.show", Some(project_path), serde_json::json!("M1")),
             request(
                 "taskflow.assign",
