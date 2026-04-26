@@ -35,7 +35,8 @@ pub trait Provider: Send + Sync {
     fn config(&self) -> &ProviderConfig;
 
     /// Build the Command to launch this provider in the given worktree.
-    fn spawn_command(&self, worktree: &Path, session: Option<&SessionRef>) -> Command;
+    /// `model_override` takes precedence over any model set in the provider config.
+    fn spawn_command(&self, worktree: &Path, session: Option<&SessionRef>, model_override: Option<&str>) -> Command;
 
     /// Arguments to append for resuming a session (used by providers that resume via CLI flags).
     fn resume_args(&self, session: &SessionRef) -> Vec<String>;

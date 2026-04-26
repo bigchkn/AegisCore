@@ -106,6 +106,7 @@ pub struct RawAgentConfig {
     pub system_prompt: Option<PathBuf>,
     pub sandbox: Option<RawSandboxPolicy>,
     pub auto_cleanup: Option<bool>,
+    pub model: Option<String>,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -113,6 +114,7 @@ pub struct RawSplinterDefaults {
     pub cli_provider: Option<String>,
     pub fallback_cascade: Option<Vec<String>>,
     pub auto_cleanup: Option<bool>,
+    pub model: Option<String>,
 }
 
 // --- Effective Config (Resolved) ---
@@ -213,6 +215,7 @@ pub struct AgentEntry {
     pub system_prompt: Option<PathBuf>,
     pub sandbox: SandboxPolicyConfig,
     pub auto_cleanup: bool,
+    pub model: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -220,6 +223,7 @@ pub struct SplinterDefaults {
     pub cli_provider: String,
     pub fallback_cascade: Vec<String>,
     pub auto_cleanup: bool,
+    pub model: Option<String>,
 }
 
 /// A single validation failure.
@@ -492,6 +496,16 @@ impl EffectiveConfig {
                         .and_then(|s| s.auto_cleanup)
                 })
                 .unwrap_or(true),
+            model: project
+                .splinter_defaults
+                .as_ref()
+                .and_then(|s| s.model.clone())
+                .or_else(|| {
+                    global
+                        .splinter_defaults
+                        .as_ref()
+                        .and_then(|s| s.model.clone())
+                }),
         };
 
         Ok(Self {
@@ -681,6 +695,7 @@ fn resolve_agent(raw: &RawAgentConfig, defaults: &SandboxPolicyConfig) -> Result
         system_prompt: raw.system_prompt.clone(),
         sandbox,
         auto_cleanup: raw.auto_cleanup.unwrap_or(true),
+        model: raw.model.clone(),
     })
 }
 
@@ -805,10 +820,42 @@ mod tests {
                 system_prompt: None,
                 sandbox: config.sandbox_defaults.clone(),
                 auto_cleanup: true,
+                model: None,
             },
         );
 
         let errors = config.validate();
         assert!(errors.iter().any(|e| e.field == "agent.test.cli_provider"));
+    }
+
+    #[test]
+    fn agent_model_field_parses_from_toml() {
+        let toml = r#"
+            [agent.bastion]
+            type = "bastion"
+            role = "bastion"
+            model = "claude-opus-4-7"
+        "#;
+        let raw: RawConfig = toml::from_str(toml).unwrap();
+        let resolved = EffectiveConfig::resolve(&RawConfig::default(), &raw).unwrap();
+        assert_eq!(
+            resolved.agents["bastion"].model.as_deref(),
+            Some("claude-opus-4-7")
+        );
+    }
+
+    #[test]
+    fn splinter_defaults_model_parses_from_toml() {
+        let toml = r#"
+            [splinter_defaults]
+            cli_provider = "claude-code"
+            model = "claude-sonnet-4-6"
+        "#;
+        let raw: RawConfig = toml::from_str(toml).unwrap();
+        let resolved = EffectiveConfig::resolve(&RawConfig::default(), &raw).unwrap();
+        assert_eq!(
+            resolved.splinter_defaults.model.as_deref(),
+            Some("claude-sonnet-4-6")
+        );
     }
 }

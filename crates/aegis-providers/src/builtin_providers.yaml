@@ -6,6 +6,7 @@ providers:
     resume_mechanism: "cli_flag"
     resume_flag: "--resume"
     export_command: "/export"
+    model_flag: "--model"
     error_patterns:
       rate_limit: ["rate limit", "429", "usage limit reached"]
       auth: ["401", "authentication failed"]
@@ -17,6 +18,7 @@ providers:
     resume_mechanism: "injection"
     resume_command: "/resume {session_id}"
     export_command: "/checkpoint save aegis-handoff"
+    model_flag: "--model"
     error_patterns:
       rate_limit: ["quota exceeded", "429"]
       auth: ["401", "permission denied"]
@@ -28,6 +30,7 @@ providers:
     resume_mechanism: "subcommand"
     resume_command: "resume {session_id}"
     export_command: null
+    model_flag: "--model"
     error_patterns:
       rate_limit: ["rate limit", "429", "too many requests", "quota exceeded"]
       auth: ["401", "unauthorized", "invalid api key", "not logged in"]

@@ -106,7 +106,7 @@ mod tests {
         let registry = ProviderRegistry::from_config(&cfg).unwrap();
         let claude = registry.get("claude-code").unwrap();
 
-        let cmd = claude.spawn_command(&PathBuf::from("/tmp"), None);
+        let cmd = claude.spawn_command(&PathBuf::from("/tmp"), None, None);
         let args: Vec<_> = cmd.get_args().map(|a| a.to_str().unwrap()).collect();
 
         assert!(args.contains(&"--yolo"));
@@ -119,7 +119,7 @@ mod tests {
         let registry = ProviderRegistry::from_config(&cfg).unwrap();
         let gemini = registry.get("gemini-cli").unwrap();
 
-        let cmd = gemini.spawn_command(&PathBuf::from("/tmp"), None);
+        let cmd = gemini.spawn_command(&PathBuf::from("/tmp"), None, None);
         let args: Vec<_> = cmd.get_args().map(|a| a.to_str().unwrap()).collect();
 
         assert!(args.contains(&"--yes"));
@@ -131,7 +131,7 @@ mod tests {
         let registry = ProviderRegistry::from_config(&cfg).unwrap();
         let codex = registry.get("codex").unwrap();
 
-        let cmd = codex.spawn_command(&PathBuf::from("/tmp"), None);
+        let cmd = codex.spawn_command(&PathBuf::from("/tmp"), None, None);
         let args: Vec<_> = cmd.get_args().map(|a| a.to_str().unwrap()).collect();
 
         assert!(args.contains(&"--full-auto"));
@@ -157,7 +157,7 @@ mod tests {
             ]
         );
 
-        let cmd = codex.spawn_command(&PathBuf::from("/tmp"), Some(&session));
+        let cmd = codex.spawn_command(&PathBuf::from("/tmp"), Some(&session), None);
         let args: Vec<_> = cmd.get_args().map(|a| a.to_str().unwrap()).collect();
 
         assert_eq!(args[0], "resume");
@@ -182,5 +182,76 @@ mod tests {
         assert!(codex.is_rate_limit_error("429 too many requests"));
         assert!(codex.is_auth_error("invalid api key"));
         assert!(codex.is_auth_error("not logged in"));
+    }
+
+    fn provider_with_model(model: Option<&str>) -> GenericProvider {
+        let manifest = BuiltinManifest::load().unwrap();
+        let definition = manifest.providers["claude-code"].clone();
+        GenericProvider::new(
+            definition,
+            aegis_core::provider::ProviderConfig {
+                name: "claude-code".into(),
+                binary: "claude".into(),
+                extra_args: vec![],
+                resume_flag: None,
+                model: model.map(str::to_owned),
+            },
+        )
+    }
+
+    #[test]
+    fn spawn_command_applies_extra_args() {
+        let manifest = BuiltinManifest::load().unwrap();
+        let definition = manifest.providers["claude-code"].clone();
+        let provider = GenericProvider::new(
+            definition,
+            aegis_core::provider::ProviderConfig {
+                name: "claude-code".into(),
+                binary: "claude".into(),
+                extra_args: vec!["--verbose".into(), "--debug".into()],
+                resume_flag: None,
+                model: None,
+            },
+        );
+
+        let cmd = provider.spawn_command(&PathBuf::from("/tmp"), None, None);
+        let args: Vec<_> = cmd.get_args().map(|a| a.to_str().unwrap()).collect();
+
+        // extra_args must appear before auto_approve_flags
+        let verbose_pos = args.iter().position(|a| *a == "--verbose").unwrap();
+        let yolo_pos = args.iter().position(|a| *a == "--yolo").unwrap();
+        assert!(verbose_pos < yolo_pos, "extra_args must precede auto_approve_flags");
+        assert!(args.contains(&"--debug"));
+    }
+
+    #[test]
+    fn spawn_command_applies_model_from_config() {
+        let provider = provider_with_model(Some("claude-opus-4-7"));
+        let cmd = provider.spawn_command(&PathBuf::from("/tmp"), None, None);
+        let args: Vec<_> = cmd.get_args().map(|a| a.to_str().unwrap()).collect();
+
+        let flag_pos = args.iter().position(|a| *a == "--model").unwrap();
+        assert_eq!(args[flag_pos + 1], "claude-opus-4-7");
+    }
+
+    #[test]
+    fn spawn_command_model_override_takes_precedence() {
+        let provider = provider_with_model(Some("claude-sonnet-4-6"));
+        let cmd = provider.spawn_command(&PathBuf::from("/tmp"), None, Some("claude-opus-4-7"));
+        let args: Vec<_> = cmd.get_args().map(|a| a.to_str().unwrap()).collect();
+
+        let flag_pos = args.iter().position(|a| *a == "--model").unwrap();
+        assert_eq!(args[flag_pos + 1], "claude-opus-4-7", "override must win over provider config");
+        // ensure --model appears only once
+        assert_eq!(args.iter().filter(|a| **a == "--model").count(), 1);
+    }
+
+    #[test]
+    fn spawn_command_no_model_emits_no_model_flag() {
+        let provider = provider_with_model(None);
+        let cmd = provider.spawn_command(&PathBuf::from("/tmp"), None, None);
+        let args: Vec<_> = cmd.get_args().map(|a| a.to_str().unwrap()).collect();
+
+        assert!(!args.contains(&"--model"), "no --model flag when no model is set");
     }
 }

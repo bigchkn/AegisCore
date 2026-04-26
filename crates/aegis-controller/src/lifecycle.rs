@@ -22,6 +22,7 @@ pub struct AgentSpec {
     pub system_prompt: Option<PathBuf>,
     pub sandbox: SandboxPolicy,
     pub auto_cleanup: bool,
+    pub model_override: Option<String>,
 }
 
 #[derive(Debug)]

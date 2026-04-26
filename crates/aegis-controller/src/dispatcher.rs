@@ -95,6 +95,7 @@ impl Dispatcher {
             system_prompt: None,
             sandbox: sandbox_policy_from_config(&self.config.sandbox_defaults),
             auto_cleanup: self.config.splinter_defaults.auto_cleanup,
+            model_override: self.config.splinter_defaults.model.clone(),
         }
     }
 
@@ -113,7 +114,7 @@ impl Dispatcher {
         let log_path = self.storage.agent_log_path(agent_id);
 
         let provider = self.providers.get(&spec.cli_provider)?;
-        let provider_command = provider.spawn_command(&worktree_path, None);
+        let provider_command = provider.spawn_command(&worktree_path, None, spec.model_override.as_deref());
 
         // Auto-add the provider binary's parent directory to sandbox exec paths so the
         // binary can be launched regardless of where the user installed it.
@@ -413,7 +414,7 @@ You are operating within an AegisCore autonomous environment. To understand your
 
         AgentRegistry::update_provider(self.registry.as_ref(), agent_id, &next_provider)?;
         let provider = self.providers.get(&next_provider)?;
-        let provider_command = provider.spawn_command(&agent.worktree_path, None);
+        let provider_command = provider.spawn_command(&agent.worktree_path, None, None);
         let mut launch_command = Vec::new();
         if let Some(sandbox) = &self.sandbox {
             launch_command.extend(sandbox.exec_prefix(&agent.sandbox_profile));
@@ -646,6 +647,7 @@ fn spec_from_agent_entry(
         system_prompt: entry.system_prompt.clone(),
         sandbox: sandbox_policy_from_config(&entry.sandbox),
         auto_cleanup: entry.auto_cleanup,
+        model_override: entry.model.clone(),
     }
 }
 
@@ -734,6 +736,7 @@ mod tests {
             cli_provider: Some("claude-code".to_string()),
             fallback_cascade: Some(vec!["gemini-cli".to_string()]),
             auto_cleanup: Some(false),
+            model: None,
         });
         project.agent = HashMap::from([(
             "architect".to_string(),

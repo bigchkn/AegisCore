@@ -27,7 +27,7 @@ impl Provider for GenericProvider {
         &self.user_config
     }
 
-    fn spawn_command(&self, worktree: &Path, session: Option<&SessionRef>) -> Command {
+    fn spawn_command(&self, worktree: &Path, session: Option<&SessionRef>, model_override: Option<&str>) -> Command {
         let mut cmd = Command::new(&self.user_config.binary);
         cmd.current_dir(worktree);
 
@@ -36,6 +36,9 @@ impl Provider for GenericProvider {
                 cmd.args(self.resume_args(s));
             }
         }
+
+        // User extra_args before framework flags so they can't accidentally override unattended mode
+        cmd.args(&self.user_config.extra_args);
 
         // Standard unattended flags
         cmd.args(&self.definition.auto_approve_flags);
@@ -48,6 +51,12 @@ impl Provider for GenericProvider {
                     cmd.arg(flag).arg(&s.session_id);
                 }
             }
+        }
+
+        // Model: per-call override wins over provider-level config
+        let model = model_override.or(self.user_config.model.as_deref());
+        if let (Some(flag), Some(model)) = (&self.definition.model_flag, model) {
+            cmd.arg(flag).arg(model);
         }
 
         cmd

@@ -26,6 +26,7 @@ pub struct ProviderDefinition {
     pub resume_flag: Option<String>,
     pub resume_command: Option<String>,
     pub export_command: Option<String>,
+    pub model_flag: Option<String>,
     pub error_patterns: ErrorPatterns,
 }
 
