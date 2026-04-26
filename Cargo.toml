@@ -12,6 +12,7 @@ members = [
     "crates/aegis-tui",
     "crates/aegis-web",
     "crates/aegis-controller",
+    "crates/aegis-design",
 ]
 resolver = "2"
 
@@ -28,6 +29,7 @@ aegis-taskflow   = { path = "crates/aegis-taskflow" }
 aegis-tui        = { path = "crates/aegis-tui" }
 aegis-web        = { path = "crates/aegis-web" }
 aegis-controller = { path = "crates/aegis-controller" }
+aegis-design     = { path = "crates/aegis-design" }
 
 uuid       = { version = "1", features = ["v4", "serde"] }
 chrono     = { version = "0.4", features = ["serde"] }

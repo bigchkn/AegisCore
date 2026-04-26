@@ -1,0 +1,20 @@
+[template]
+name = "taskflow-bastion"
+description = "Coordinates an AegisCore milestone: reads the taskflow, delegates tasks to Splinters, monitors completion."
+kind = "bastion"
+version = "1"
+tags = ["taskflow", "coordinator"]
+
+[agent]
+role = "taskflow-coordinator"
+cli_provider = "claude-code"
+model = "claude-opus-4-7"
+auto_cleanup = false
+fallback_cascade = ["gemini-cli"]
+
+[agent.sandbox]
+network = "outbound_only"
+
+[variables]
+required = ["project_root", "milestone_id"]
+optional = ["lld_path", "milestone_name", "task_id", "task_description", "bastion_agent_id"]

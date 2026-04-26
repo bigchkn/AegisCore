@@ -1,0 +1,20 @@
+[template]
+name = "taskflow-splinter"
+description = "Implements one AegisCore taskflow task and notifies its coordinator on completion."
+kind = "splinter"
+version = "1"
+tags = ["taskflow", "implementer"]
+
+[agent]
+role = "taskflow-implementer"
+cli_provider = "claude-code"
+model = "claude-sonnet-4-6"
+auto_cleanup = true
+fallback_cascade = []
+
+[agent.sandbox]
+network = "outbound_only"
+
+[variables]
+required = ["project_root", "task_description", "bastion_agent_id"]
+optional = ["lld_path", "task_id", "milestone_id", "milestone_name"]

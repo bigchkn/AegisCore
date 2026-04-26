@@ -40,5 +40,6 @@ aegis.secrets.toml
 
 # Specific script used during testing but not part of the project.
 clean_worktrees.sh
+restart_daemon_dev.sh
 
 

@@ -15,8 +15,11 @@ export type TaskflowIndex = {
     name: string;
     current_milestone: number;
   };
-  milestones: Record<string, { path: string; status: string }>;
+  milestones: Record<string, { name: string; path: string; status: string }>;
+  backlog?: string;
 };
+
+export type TaskType = 'feature' | 'bug' | 'maintenance';
 
 export type TaskflowMilestone = {
   id: number;
@@ -27,6 +30,7 @@ export type TaskflowMilestone = {
     id: string;
     task: string;
     status: string;
+    task_type: TaskType;
     crate_name: string | null;
     notes: string | null;
     registry_task_id: string | null;

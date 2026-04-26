@@ -90,6 +90,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "aegis-design"
+version = "0.1.0"
+dependencies = [
+ "aegis-core",
+ "aegis-taskflow",
+ "regex",
+ "serde",
+ "tempfile",
+ "thiserror 2.0.18",
+ "toml",
+ "tracing",
+]
+
+[[package]]
 name = "aegis-providers"
 version = "0.1.0"
 dependencies = [

@@ -316,6 +316,7 @@ impl TaskflowEngine {
         index.milestones.insert(
             format!("M{}", id),
             crate::model::MilestoneRef {
+                name: name.to_string(),
                 path: rel_path,
                 status: "pending".to_string(),
             },

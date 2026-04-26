@@ -1,0 +1,31 @@
+id = 24
+name = "Web UI Taskflow Enhancements"
+status = "done"
+
+[[tasks]]
+id = "24.1"
+uid = "9b531535-ad40-4f53-b347-f18873598545"
+task = "Update MilestoneRef model with name field"
+task_type = "feature"
+status = "done"
+
+[[tasks]]
+id = "24.2"
+uid = "cfb1de5a-90fe-4e49-b119-ad30d2234491"
+task = "Update create-milestone logic to save name in index.toml"
+task_type = "feature"
+status = "done"
+
+[[tasks]]
+id = "24.3"
+uid = "6b2c5b80-61b5-4daa-9611-f24a09324029"
+task = "Update Frontend domain types"
+task_type = "feature"
+status = "done"
+
+[[tasks]]
+id = "24.4"
+uid = "b24c148b-c6cf-4ec0-9190-7b00142b07a1"
+task = "Implement filtering and backlog display in TaskflowView"
+task_type = "feature"
+status = "done"

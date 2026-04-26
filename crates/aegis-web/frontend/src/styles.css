@@ -540,18 +540,128 @@ tbody tr:hover {
 }
 
 .taskflow-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   padding: 14px;
   border-bottom: 1px solid #303842;
 }
 
-.taskflow-header h2 {
+.taskflow-title h2 {
   margin: 0 0 4px;
   font-size: 1rem;
 }
 
-.taskflow-header p {
+.taskflow-title p {
   margin: 0;
   color: #9ea7b3;
+}
+
+.taskflow-filters {
+  display: flex;
+  gap: 8px;
+}
+
+.filter-btn {
+  min-height: 28px;
+  padding: 0 10px;
+  border: 1px solid #3b4652;
+  border-radius: 4px;
+  background: #20262d;
+  color: #d7dde4;
+  font-size: 0.78rem;
+  cursor: pointer;
+}
+
+.filter-btn.is-active {
+  border-color: #e1b84b;
+  background: #2a2417;
+  color: #f2d28b;
+}
+
+.milestone-ref-info {
+  display: flex;
+  flex-direction: column;
+}
+
+.milestone-name {
+  color: #9ea7b3;
+  font-size: 0.85rem;
+  font-weight: normal;
+}
+
+.status-pill {
+  min-height: 20px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  font-style: normal;
+}
+
+.status-done {
+  background: #143b2a;
+  color: #7ce2ab;
+}
+
+.status-in-progress {
+  background: #34311c;
+  color: #e4cf75;
+}
+
+.status-pending {
+  background: #2f333a;
+  color: #b6c0ca;
+}
+
+.taskflow-task {
+  display: grid;
+  grid-template-columns: 26px minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+  padding: 8px;
+  border-radius: 6px;
+}
+
+.taskflow-task:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.task-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.task-type-badge {
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.type-feature {
+  background: #1f3d57;
+  color: #9bd2f8;
+}
+
+.type-bug {
+  background: #461f25;
+  color: #f08b98;
+}
+
+.type-maintenance {
+  background: #3b3b3b;
+  color: #d1d1d1;
+}
+
+.task-notes {
+  display: block;
+  margin-top: 4px;
+  margin-left: 0;
+  color: #8e99a6;
+  font-size: 0.8rem;
 }
 
 .milestone-node {

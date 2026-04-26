@@ -1,0 +1,18 @@
+[package]
+name = "aegis-design"
+version = "0.1.0"
+edition = "2021"
+description = "Template engine and agent design system for AegisCore"
+license = "MIT"
+
+[dependencies]
+aegis-core     = { workspace = true }
+aegis-taskflow = { path = "../aegis-taskflow" }
+serde          = { workspace = true }
+toml           = { workspace = true }
+thiserror      = { workspace = true }
+tracing        = { workspace = true }
+regex          = "1"
+
+[dev-dependencies]
+tempfile = "3"

@@ -67,6 +67,7 @@ pub struct ProjectMeta {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MilestoneRef {
+    pub name: String,
     pub path: String,
     pub status: String,
 }

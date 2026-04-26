@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 
 import { api } from '../api/rest';
-import type { TaskflowIndex, TaskflowMilestone } from '../store/domain';
+import type { TaskflowIndex, TaskflowMilestone, TaskType } from '../store/domain';
 import { useAppSelector } from '../store/hooks';
 
 type MilestoneState = {
@@ -11,12 +11,15 @@ type MilestoneState = {
   error: string | null;
 };
 
+type Filter = 'all' | 'incomplete';
+
 export function TaskflowView() {
   const activeProjectId = useAppSelector((state) => state.ui.activeProjectId);
   const [index, setIndex] = useState<TaskflowIndex | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [milestones, setMilestones] = useState<Record<string, MilestoneState>>({});
+  const [filter, setFilter] = useState<Filter>('incomplete');
 
   useEffect(() => {
     setIndex(null);
@@ -87,33 +90,72 @@ export function TaskflowView() {
     return <EmptyPanel title="No taskflow" body="No roadmap index has been loaded." />;
   }
 
-  const entries = Object.entries(index.milestones).sort(([left], [right]) =>
+  const milestoneEntries = Object.entries(index.milestones).sort(([left], [right]) =>
     left.localeCompare(right, undefined, { numeric: true }),
   );
 
   return (
     <section className="taskflow-view">
       <header className="taskflow-header">
-        <div>
+        <div className="taskflow-title">
           <h2>{index.project.name}</h2>
           <p>Current milestone M{index.project.current_milestone}</p>
         </div>
+        <div className="taskflow-filters">
+          <button 
+            className={filter === 'incomplete' ? 'filter-btn is-active' : 'filter-btn'} 
+            onClick={() => setFilter('incomplete')}
+          >
+            Incomplete
+          </button>
+          <button 
+            className={filter === 'all' ? 'filter-btn is-active' : 'filter-btn'} 
+            onClick={() => setFilter('all')}
+          >
+            All Tasks
+          </button>
+        </div>
       </header>
+
       <div className="taskflow-tree">
-        {entries.map(([milestoneId, ref]) => {
+        {/* Global Backlog */}
+        {index.backlog ? (
+          <div className="milestone-node">
+            <button type="button" onClick={() => toggleMilestone('backlog')}>
+              <span>{milestones['backlog']?.expanded ? '▼' : '▶'}</span>
+              <strong>Backlog</strong>
+              <em>Global</em>
+            </button>
+            {milestones['backlog']?.expanded ? (
+              <div className="milestone-detail">
+                {milestones['backlog'].loading ? <p className="muted">Loading backlog...</p> : null}
+                {milestones['backlog'].error ? <p className="error">{milestones['backlog'].error}</p> : null}
+                {milestones['backlog'].data ? (
+                  <MilestoneDetail milestone={milestones['backlog'].data} filter={filter} />
+                ) : null}
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+
+        {/* Milestones */}
+        {milestoneEntries.map(([milestoneId, ref]) => {
           const state = milestones[milestoneId];
           return (
             <div key={milestoneId} className="milestone-node">
               <button type="button" onClick={() => toggleMilestone(milestoneId)}>
-                <span>{state?.expanded ? 'v' : '>'}</span>
-                <strong>{milestoneId}</strong>
-                <em>{ref.status}</em>
+                <span>{state?.expanded ? '▼' : '▶'}</span>
+                <div className="milestone-ref-info">
+                  <strong>{milestoneId}</strong>
+                  <span className="milestone-name">{ref.name}</span>
+                </div>
+                <em className={`status-pill status-${ref.status}`}>{ref.status}</em>
               </button>
               {state?.expanded ? (
                 <div className="milestone-detail">
-                  {state.loading ? <p>Loading milestone</p> : null}
-                  {state.error ? <p>{state.error}</p> : null}
-                  {state.data ? <MilestoneDetail milestone={state.data} /> : null}
+                  {state.loading ? <p className="muted">Loading milestone...</p> : null}
+                  {state.error ? <p className="error">{state.error}</p> : null}
+                  {state.data ? <MilestoneDetail milestone={state.data} filter={filter} /> : null}
                 </div>
               ) : null}
             </div>
@@ -124,28 +166,37 @@ export function TaskflowView() {
   );
 }
 
-function MilestoneDetail({ milestone }: { milestone: TaskflowMilestone }) {
+function MilestoneDetail({ milestone, filter }: { milestone: TaskflowMilestone; filter: Filter }) {
+  const tasks = filter === 'incomplete' 
+    ? milestone.tasks.filter(t => t.status !== 'done')
+    : milestone.tasks;
+
+  if (tasks.length === 0) {
+    return <p className="muted">No {filter === 'incomplete' ? 'pending ' : ''}tasks found.</p>;
+  }
+
   return (
-    <>
-      <div className="milestone-title">
-        <span>M{milestone.id}</span>
-        <strong>{milestone.name}</strong>
-        <em>{milestone.status}</em>
-      </div>
-      <div className="taskflow-task-list">
-        {milestone.tasks.map((task) => (
-          <div key={task.id} className="taskflow-task">
-            <span className={`task-icon task-${task.status}`}>{symbolForStatus(task.status)}</span>
-            <div>
+    <div className="taskflow-task-list">
+      {tasks.map((task) => (
+        <div key={task.id} className="taskflow-task">
+          <span className={`task-icon task-${task.status}`}>{symbolForStatus(task.status)}</span>
+          <div className="task-content">
+            <div className="task-row">
+              <TaskTypeBadge type={task.task_type} />
               <strong>{task.id}</strong>
               <p>{task.task}</p>
-              {task.notes ? <small>{task.notes}</small> : null}
             </div>
+            {task.notes ? <small className="task-notes">{task.notes}</small> : null}
           </div>
-        ))}
-      </div>
-    </>
+        </div>
+      ))}
+    </div>
   );
+}
+
+function TaskTypeBadge({ type }: { type: TaskType }) {
+  const label = type.charAt(0).toUpperCase() + type.slice(1);
+  return <span className={`task-type-badge type-${type}`}>{label}</span>;
 }
 
 function EmptyPanel({ title, body }: { title: string; body: string }) {
