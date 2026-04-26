@@ -1,0 +1,39 @@
+id = 30
+name = "Milestone Dependency Ordering & taskflow next"
+status = "pending"
+lld = "lld/milestone-dependency-ordering.md"
+
+[[tasks]]
+id = "30.1"
+uid = "b2e1f4a3-9c87-4d56-8a21-3f6e72b1c905"
+task = "Add depends_on field to Milestone model with serde(default)"
+task_type = "feature"
+status = "pending"
+
+[[tasks]]
+id = "30.2"
+uid = "c3f2a5b4-0d98-4e67-9b32-4g7f83c2d016"
+task = "Implement next_milestone greedy topological sort in aegis-taskflow"
+task_type = "feature"
+status = "pending"
+
+[[tasks]]
+id = "30.3"
+uid = "d4g3b6c5-1e09-5f78-ac43-5h8g94d3e127"
+task = "Add taskflow.next IPC handler and Commands::taskflow_next"
+task_type = "feature"
+status = "pending"
+
+[[tasks]]
+id = "30.4"
+uid = "e5h4c7d6-2f10-6g89-bd54-6i9h05e4f238"
+task = "Add aegis taskflow next CLI subcommand"
+task_type = "feature"
+status = "pending"
+
+[[tasks]]
+id = "30.5"
+uid = "f6i5d8e7-3g21-7h90-ce65-7j0i16f5g349"
+task = "Write unit tests for next_milestone algorithm (ready, blocked, exhausted cases)"
+task_type = "feature"
+status = "pending"

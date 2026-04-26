@@ -91,4 +91,24 @@ status = "in-progress"
 [milestones.M29]
 name = "Continuous Taskflow Workflow — Design Phase"
 path = "milestones/M29.toml"
-status = "in-progress"
+status = "done"
+
+[milestones.M30]
+name = "Milestone Dependency Ordering & taskflow next"
+path = "milestones/M30.toml"
+status = "pending"
+
+[milestones.M31]
+name = "Milestone Worktree Lifecycle"
+path = "milestones/M31.toml"
+status = "pending"
+
+[milestones.M32]
+name = "taskflow notify & Bastion Registry"
+path = "milestones/M32.toml"
+status = "pending"
+
+[milestones.M33]
+name = "Continuous Bastion Template"
+path = "milestones/M33.toml"
+status = "pending"

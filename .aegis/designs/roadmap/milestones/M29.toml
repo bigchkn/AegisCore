@@ -1,6 +1,6 @@
 id = 29
 name = "Continuous Taskflow Workflow — Design Phase"
-status = "in-progress"
+status = "done"
 lld = "hld/continuous-taskflow.md"
 
 [[tasks]]
@@ -8,4 +8,39 @@ id = "29.1"
 uid = "a1f3c920-2d84-4e71-b8a3-7c5f91e6d014"
 task = "Write HLD: Continuous Bastion Milestone-Processing Workflow"
 task_type = "feature"
-status = "in-progress"
+status = "done"
+
+[[tasks]]
+id = "29.2"
+uid = "b2e4d031-3e95-5f82-c9b4-8d6g02f7e125"
+task = "Write LLD-A: Continuous bastion state machine and loop architecture"
+task_type = "feature"
+status = "done"
+
+[[tasks]]
+id = "29.3"
+uid = "c3f5e142-4fa6-6g93-dac5-9e7h13g8f236"
+task = "Write LLD-B: Milestone worktree lifecycle (create/merge/cleanup)"
+task_type = "feature"
+status = "done"
+
+[[tasks]]
+id = "29.4"
+uid = "d4g6f253-5gb7-7h04-ebd6-0f8i24h9g347"
+task = "Write LLD-C: Milestone dependency ordering and aegis taskflow next"
+task_type = "feature"
+status = "done"
+
+[[tasks]]
+id = "29.5"
+uid = "e5h7g364-6hc8-8i15-fce7-1g9j35i0h458"
+task = "Write LLD-D: aegis taskflow notify and bastion registry"
+task_type = "feature"
+status = "done"
+
+[[tasks]]
+id = "29.6"
+uid = "f6i8h475-7id9-9j26-gdf8-2h0k46j1i569"
+task = "Create implementation milestones M30-M33"
+task_type = "feature"
+status = "done"
