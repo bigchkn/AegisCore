@@ -1,14 +1,18 @@
 id = 14
 name = "Web UI Implementation"
-status = "pending"
+status = "done"
 lld = "lld/web-ui.md"
 
 [[tasks]]
 id = "14.1"
+uid = "925d3314-a314-45fb-8996-9602657f0f59"
 task = "Setup React frontend project"
-status = "pending"
+task_type = "feature"
+status = "done"
 
 [[tasks]]
 id = "14.2"
+uid = "e7a89d66-5a93-4176-be33-17d4b36e6e78"
 task = "Test GUID generation"
-status = "pending"
+task_type = "feature"
+status = "done"
