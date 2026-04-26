@@ -10,6 +10,7 @@ import { LogView } from '../views/LogView';
 import { PaneView } from '../views/PaneView';
 import { TaskflowView } from '../views/TaskflowView';
 import { TasksView } from '../views/TasksView';
+import { ClarificationsView } from '../views/ClarificationsView';
 import { Sidebar } from './Sidebar';
 
 export function App() {
@@ -67,6 +68,7 @@ export function App() {
           <Route path="/tasks" element={<TasksView />} />
           <Route path="/channels" element={<ChannelsView />} />
           <Route path="/taskflow" element={<TaskflowView />} />
+          <Route path="/clarifications" element={<ClarificationsView />} />
           
           <Route path="*" element={<Navigate to="/agents" replace />} />
         </Routes>
@@ -101,6 +103,7 @@ function ProjectRoutes() {
       <Route path="tasks" element={<TasksView />} />
       <Route path="channels" element={<ChannelsView />} />
       <Route path="taskflow" element={<TaskflowView />} />
+      <Route path="clarifications" element={<ClarificationsView />} />
       <Route path="*" element={<Navigate to="agents" replace />} />
     </Routes>
   );
@@ -118,6 +121,8 @@ function titleForView(view: string) {
       return 'Channels';
     case 'taskflow':
       return 'Taskflow';
+    case 'clarifications':
+      return 'Clarifications';
     case 'agents':
     default:
       return 'Agents';

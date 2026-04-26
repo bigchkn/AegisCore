@@ -40,6 +40,18 @@ pub struct MessageWrapper {
     pub data: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ClarificationRequest {
+    pub request_id: Uuid,
+    pub agent_id: Uuid,
+    pub task_id: Option<Uuid>,
+    pub question: String,
+    pub context: serde_json::Value,
+    pub priority: i32,
+    pub status: String,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+}
+
 pub struct AegisClient {
     uds_path: PathBuf,
     project_path: PathBuf,
@@ -217,5 +229,37 @@ impl AegisClient {
         });
 
         Ok((in_tx, out_rx))
+    }
+
+    pub async fn clarify_list(
+        &self,
+        agent_id: Option<Uuid>,
+    ) -> anyhow::Result<Vec<ClarificationRequest>> {
+        let params = if let Some(id) = agent_id {
+            serde_json::json!({ "agent_id": id })
+        } else {
+            serde_json::Value::Null
+        };
+
+        let payload = self.send_command("clarify.list", params).await?;
+        let requests: Vec<ClarificationRequest> = serde_json::from_value(payload)?;
+        Ok(requests)
+    }
+
+    pub async fn clarify_answer(
+        &self,
+        request_id: Uuid,
+        answer: String,
+        payload: serde_json::Value,
+    ) -> anyhow::Result<()> {
+        let params = serde_json::json!({
+            "request_id": request_id,
+            "answer": answer,
+            "payload": payload,
+            "answered_by": "human_tui"
+        });
+
+        self.send_command("clarify.answer", params).await?;
+        Ok(())
     }
 }

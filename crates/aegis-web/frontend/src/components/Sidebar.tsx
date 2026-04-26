@@ -9,6 +9,7 @@ const navItems: Array<{ id: ActiveView; label: string }> = [
   { id: 'tasks', label: 'Tasks' },
   { id: 'channels', label: 'Channels' },
   { id: 'taskflow', label: 'Taskflow' },
+  { id: 'clarifications', label: 'Clarifications' },
 ];
 
 export function Sidebar() {

@@ -1,4 +1,4 @@
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::HashMap;
 use uuid::Uuid;
 
@@ -74,11 +74,91 @@ pub struct MilestoneRef {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Milestone {
+    #[serde(deserialize_with = "deserialize_milestone_id")]
     pub id: u32,
     pub name: String,
     pub status: String,
     pub lld: Option<String>,
     pub tasks: Vec<ProjectTask>,
+}
+
+fn deserialize_milestone_id<'de, D>(deserializer: D) -> Result<u32, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    struct MilestoneIdVisitor;
+
+    impl<'de> serde::de::Visitor<'de> for MilestoneIdVisitor {
+        type Value = u32;
+
+        fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            formatter.write_str("a milestone id as a number or an M-prefixed string")
+        }
+
+        fn visit_u64<E>(self, value: u64) -> Result<Self::Value, E>
+        where
+            E: serde::de::Error,
+        {
+            u32::try_from(value)
+                .map_err(|_| E::custom(format!("milestone id {value} is too large")))
+        }
+
+        fn visit_i64<E>(self, value: i64) -> Result<Self::Value, E>
+        where
+            E: serde::de::Error,
+        {
+            u32::try_from(value).map_err(|_| E::custom(format!("milestone id {value} is invalid")))
+        }
+
+        fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
+        where
+            E: serde::de::Error,
+        {
+            let trimmed = value.trim();
+            let numeric = trimmed.strip_prefix('M').unwrap_or(trimmed);
+            numeric
+                .parse::<u32>()
+                .map_err(|_| E::custom(format!("milestone id {value} is invalid")))
+        }
+    }
+
+    deserializer.deserialize_any(MilestoneIdVisitor)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Milestone;
+
+    #[test]
+    fn milestone_id_accepts_legacy_string_prefix() {
+        let milestone: Milestone = toml::from_str(
+            r#"
+id = "M26"
+name = "Human Clarification UI"
+status = "pending"
+lld = "lld/human-clarification.md"
+tasks = []
+"#,
+        )
+        .unwrap();
+
+        assert_eq!(milestone.id, 26);
+    }
+
+    #[test]
+    fn milestone_id_accepts_numeric_value() {
+        let milestone: Milestone = toml::from_str(
+            r#"
+id = 27
+name = "Agent Attach & Live Inspection"
+status = "pending"
+tasks = []
+"#,
+        )
+        .unwrap();
+
+        assert_eq!(milestone.id, 27);
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

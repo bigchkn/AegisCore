@@ -1,7 +1,14 @@
 import type { Agent } from '../types/Agent';
 import type { ChannelRecord } from '../types/ChannelRecord';
 import type { Task } from '../types/Task';
-import type { ProjectRecord, ProjectStatus, TaskflowIndex, TaskflowMilestone } from '../store/domain';
+import type { 
+  ProjectRecord, 
+  ProjectStatus, 
+  TaskflowIndex, 
+  TaskflowMilestone,
+  ClarificationRequest,
+  ClarifierSource
+} from '../store/domain';
 
 type CommandResponse = {
   status?: string;
@@ -49,4 +56,18 @@ export const api = {
     api.command(projectId, 'kill', { agent_id: agentId }),
   failover: (projectId: string, agentId: string) =>
     api.command(projectId, 'failover', { agent_id: agentId }),
+
+  clarifyList: (projectId: string) => 
+    request<ClarificationRequest[]>(`/projects/${projectId}/clarify/list`),
+  
+  clarifyAnswer: (projectId: string, requestId: string, answer: string, payload: unknown = {}, answeredBy: ClarifierSource = 'system') => 
+    request<void>(`/projects/${projectId}/clarify/answer`, {
+      method: 'POST',
+      body: JSON.stringify({
+        request_id: requestId,
+        answer,
+        payload,
+        answered_by: answeredBy
+      })
+    }),
 };

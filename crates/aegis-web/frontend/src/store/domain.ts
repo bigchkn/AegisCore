@@ -37,6 +37,33 @@ export type TaskflowMilestone = {
   }>;
 };
 
-export type ActiveView = 'agents' | 'pane' | 'logs' | 'tasks' | 'channels' | 'taskflow';
+export type ActiveView = 'agents' | 'pane' | 'logs' | 'tasks' | 'channels' | 'taskflow' | 'clarifications';
 
 export type ConnectionState = 'connecting' | 'connected' | 'disconnected';
+
+export type ClarificationStatus = 'open' | 'answered' | 'rejected' | 'expired';
+
+export type ClarifierSource = 'human_cli' | 'human_tui' | 'telegram' | 'system';
+
+export type ClarificationResponse = {
+  request_id: string;
+  answer: string;
+  payload: any;
+  answered_by: ClarifierSource;
+  created_at: string;
+};
+
+export type ClarificationRequest = {
+  request_id: string;
+  agent_id: string;
+  task_id: string | null;
+  question: string;
+  context: any;
+  priority: number;
+  status: ClarificationStatus;
+  created_at: string;
+  answered_at: string | null;
+  delivered_at: string | null;
+  delivery_error: string | null;
+  response: ClarificationResponse | null;
+};

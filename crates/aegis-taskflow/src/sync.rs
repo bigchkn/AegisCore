@@ -514,9 +514,9 @@ mod tests {
             project: ProjectMeta {
                 name: "Test".to_string(),
                 current_milestone: 1,
+                backlog: None,
             },
             milestones: HashMap::new(),
-            backlog: None,
         };
         std::fs::write(
             roadmap_dir.join("index.toml"),
