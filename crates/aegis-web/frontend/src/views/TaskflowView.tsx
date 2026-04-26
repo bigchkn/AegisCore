@@ -39,20 +39,9 @@ export function TaskflowView() {
       .finally(() => setLoading(false));
   }, [activeProjectId]);
 
-  const toggleMilestone = (milestoneId: string) => {
-    if (!activeProjectId) {
-      return;
-    }
-
-    const current = milestones[milestoneId];
-    if (current?.data) {
-      setMilestones((state) => ({
-        ...state,
-        [milestoneId]: { ...current, expanded: !current.expanded },
-      }));
-      return;
-    }
-
+  const loadMilestone = (milestoneId: string) => {
+    if (!activeProjectId) return;
+    
     setMilestones((state) => ({
       ...state,
       [milestoneId]: { expanded: true, loading: true, data: null, error: null },
@@ -73,6 +62,40 @@ export function TaskflowView() {
         })),
       );
   };
+
+  const toggleMilestone = (milestoneId: string) => {
+    const current = milestones[milestoneId];
+    if (current?.data) {
+      setMilestones((state) => ({
+        ...state,
+        [milestoneId]: { ...current, expanded: !current.expanded },
+      }));
+      return;
+    }
+
+    loadMilestone(milestoneId);
+  };
+
+  // Auto-expand milestones when switching to 'bugs' or 'all'
+  useEffect(() => {
+    if (filter === 'all' || filter === 'bugs') {
+      if (!index) return;
+      
+      const ids = Object.keys(index.milestones);
+      if (index.backlog) ids.push('backlog');
+      
+      for (const id of ids) {
+        if (!milestones[id]?.data && !milestones[id]?.loading) {
+          loadMilestone(id);
+        } else if (milestones[id]?.data && !milestones[id].expanded) {
+          setMilestones(state => ({
+            ...state,
+            [id]: { ...state[id], expanded: true }
+          }));
+        }
+      }
+    }
+  }, [filter, index]);
 
   if (!activeProjectId) {
     return <EmptyPanel title="Select a project" body="Taskflow status is loaded per project." />;
@@ -96,7 +119,7 @@ export function TaskflowView() {
       if (filter === 'incomplete') {
         return ref.status !== 'done';
       }
-      return true; // Show all for 'all' or 'bugs' (bugs might be in done milestones)
+      return true;
     });
 
   return (
