@@ -6,7 +6,7 @@ use aegis_core::{
     AegisError, Agent, AgentRegistry, LogQuery, Recorder, Result, TaskCreator, TaskQueue,
 };
 use aegis_design::RenderedTemplate;
-use aegis_taskflow::model::{Milestone, ProjectIndex};
+use aegis_taskflow::model::{Milestone, ProjectIndex, TaskDraft, TaskPatch};
 use aegis_taskflow::TaskflowEngine;
 use serde::Serialize;
 use uuid::Uuid;
@@ -244,6 +244,31 @@ impl ControllerCommands {
         tf.add_task(milestone_id, task_id, task, task_type)
     }
 
+    pub fn taskflow_create_task(
+        &self,
+        milestone_id: &str,
+        draft: TaskDraft,
+    ) -> Result<aegis_taskflow::model::ProjectTask> {
+        let tf = self.taskflow.as_ref().ok_or_else(|| AegisError::Config {
+            field: "taskflow".to_string(),
+            reason: "Taskflow engine is not initialized".to_string(),
+        })?;
+        tf.create_task(milestone_id, draft)
+    }
+
+    pub fn taskflow_update_task(
+        &self,
+        source_milestone_id: &str,
+        task_uid: Uuid,
+        patch: TaskPatch,
+    ) -> Result<aegis_taskflow::model::ProjectTask> {
+        let tf = self.taskflow.as_ref().ok_or_else(|| AegisError::Config {
+            field: "taskflow".to_string(),
+            reason: "Taskflow engine is not initialized".to_string(),
+        })?;
+        tf.update_task(source_milestone_id, task_uid, patch)
+    }
+
     pub fn taskflow_set_task_status(
         &self,
         milestone_id: &str,
@@ -263,6 +288,18 @@ impl ControllerCommands {
             reason: "Taskflow engine is not initialized".to_string(),
         })?;
         tf.next_milestone()
+    }
+
+    pub async fn worktree_create(&self, milestone_id: &str) -> Result<std::path::PathBuf> {
+        self.dispatcher.worktree_create(milestone_id).await
+    }
+
+    pub async fn worktree_merge(&self, milestone_id: &str) -> Result<()> {
+        self.dispatcher.worktree_merge(milestone_id).await
+    }
+
+    pub async fn worktree_list(&self) -> Result<Vec<(String, std::path::PathBuf)>> {
+        self.dispatcher.worktree_list().await
     }
 }
 

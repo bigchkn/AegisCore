@@ -51,7 +51,7 @@ status = "done"
 [milestones.M31]
 name = "Milestone Worktree Lifecycle"
 path = "milestones/M31.toml"
-status = "pending"
+status = "done"
 
 [milestones.M34]
 name = "Web Task Editing & Bug Logging"

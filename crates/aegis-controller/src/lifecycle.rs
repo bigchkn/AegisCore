@@ -23,6 +23,9 @@ pub struct AgentSpec {
     /// Fully rendered prompt string from a template. When set, bypasses PromptManager
     /// and the taskflow_snippet injection.
     pub inline_prompt: Option<String>,
+    /// When set, overrides the default per-agent worktree path. Used by milestone
+    /// splinters that all share a single per-milestone worktree.
+    pub worktree_override: Option<std::path::PathBuf>,
     pub sandbox: SandboxPolicy,
     pub auto_cleanup: bool,
     pub model_override: Option<String>,

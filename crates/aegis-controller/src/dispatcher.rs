@@ -2,8 +2,8 @@ use std::{path::PathBuf, sync::Arc};
 
 use aegis_core::{
     config::AgentEntry, AegisError, AegisEvent, Agent, AgentKind, AgentRegistry, AgentStatus,
-    FailoverContext, LogQuery, Recorder, Result, SandboxPolicy,
-    SandboxProfile, StorageBackend, Task, TaskRegistry, TaskStatus,
+    FailoverContext, LogQuery, Recorder, Result, SandboxPolicy, SandboxProfile, StorageBackend,
+    Task, TaskRegistry, TaskStatus,
 };
 use aegis_design::{RenderedTemplate, TemplateKind};
 use aegis_providers::ProviderRegistry;
@@ -13,6 +13,7 @@ use serde::Deserialize;
 use uuid::Uuid;
 
 use crate::{
+    daemon::projects::ProjectRegistry,
     events::EventBus,
     git::GitWorktree,
     lifecycle::{sandbox_policy_from_config, validate_transition, AgentSpec, SpawnPlan},
@@ -23,6 +24,8 @@ use crate::{
 
 pub struct Dispatcher {
     registry: Arc<FileRegistry>,
+    project_registry: Option<Arc<ProjectRegistry>>,
+    project_id: Option<Uuid>,
     tmux: Option<Arc<TmuxClient>>,
     sandbox: Option<Arc<dyn SandboxProfile>>,
     recorder: Option<Arc<dyn Recorder>>,
@@ -36,6 +39,8 @@ pub struct Dispatcher {
 impl Dispatcher {
     pub fn new(
         registry: Arc<FileRegistry>,
+        project_registry: Option<Arc<ProjectRegistry>>,
+        project_id: Option<Uuid>,
         tmux: Option<Arc<TmuxClient>>,
         sandbox: Option<Arc<dyn SandboxProfile>>,
         recorder: Option<Arc<dyn Recorder>>,
@@ -47,6 +52,8 @@ impl Dispatcher {
     ) -> Self {
         Self {
             registry,
+            project_registry,
+            project_id,
             tmux,
             sandbox,
             recorder,
@@ -95,6 +102,7 @@ impl Dispatcher {
             fallback_cascade: self.config.splinter_defaults.fallback_cascade.clone(),
             system_prompt: None,
             inline_prompt: None,
+            worktree_override: None,
             sandbox: sandbox_policy_from_config(&self.config.sandbox_defaults),
             auto_cleanup: self.config.splinter_defaults.auto_cleanup,
             model_override: self.config.splinter_defaults.model.clone(),
@@ -108,9 +116,13 @@ impl Dispatcher {
         tmux_window: u32,
         tmux_pane: impl Into<String>,
     ) -> Result<SpawnPlan> {
-        let worktree_path = match spec.kind {
-            AgentKind::Bastion => self.storage.project_root().to_path_buf(),
-            AgentKind::Splinter => self.storage.agent_worktree_path(agent_id),
+        let worktree_path = if let Some(override_path) = spec.worktree_override.take() {
+            override_path
+        } else {
+            match spec.kind {
+                AgentKind::Bastion => self.storage.project_root().to_path_buf(),
+                AgentKind::Splinter => self.storage.agent_worktree_path(agent_id),
+            }
         };
         let sandbox_profile = self.storage.sandbox_profile_path(agent_id);
         let log_path = self.storage.agent_log_path(agent_id);
@@ -265,6 +277,7 @@ impl Dispatcher {
             fallback_cascade: rendered.fallback_cascade.clone(),
             system_prompt: None,
             inline_prompt: Some(inline_prompt),
+            worktree_override: None,
             sandbox: SandboxPolicy {
                 network: rendered.sandbox_network.clone(),
                 ..SandboxPolicy::default()
@@ -274,7 +287,8 @@ impl Dispatcher {
         };
 
         if kind == AgentKind::Splinter {
-            self.prepare_splinter_worktree(agent_id, &rendered.role).await?;
+            self.prepare_splinter_worktree(agent_id, &rendered.role)
+                .await?;
         }
 
         let (window, pane) = self.prepare_tmux_window(agent_id, &rendered.role).await?;
@@ -425,6 +439,7 @@ impl Dispatcher {
 
     pub async fn kill_agent(&self, agent_id: Uuid) -> Result<()> {
         let agent = self.require_agent(agent_id)?;
+        self.maybe_clear_last_attached(agent_id)?;
         self.detach_and_archive(agent_id)?;
         if let Some(tmux) = &self.tmux {
             let target = TmuxTarget::parse(&agent.tmux_target())?;
@@ -432,6 +447,22 @@ impl Dispatcher {
         }
         AgentRegistry::update_status(self.registry.as_ref(), agent_id, AgentStatus::Terminated)?;
         AgentRegistry::archive(self.registry.as_ref(), agent_id)
+    }
+
+    fn maybe_clear_last_attached(&self, agent_id: Uuid) -> Result<()> {
+        let Some(project_registry) = &self.project_registry else {
+            return Ok(());
+        };
+        let Some(project_id) = self.project_id else {
+            return Ok(());
+        };
+
+        if let Some(project) = project_registry.find_by_id(project_id)? {
+            if project.last_attached_agent_id == Some(agent_id) {
+                project_registry.update_last_attached(project_id, None)?;
+            }
+        }
+        Ok(())
     }
 
     pub async fn failover_agent(&self, agent_id: Uuid) -> Result<Agent> {
@@ -554,6 +585,7 @@ impl Dispatcher {
                     task_id,
                     Some(receipt_path.clone()),
                 )?;
+                self.maybe_clear_last_attached(agent_id)?;
                 self.detach_and_archive(agent_id)?;
                 if let Some(tmux) = &self.tmux {
                     let target = TmuxTarget::parse(&agent.tmux_target())?;
@@ -669,6 +701,30 @@ impl Dispatcher {
             Err(error) => Err(error),
         }
     }
+
+    pub async fn worktree_create(&self, milestone_id: &str) -> Result<std::path::PathBuf> {
+        let git = GitWorktree::new(
+            self.storage.project_root().to_path_buf(),
+            self.storage.worktrees_dir(),
+        );
+        git.create_for_milestone(milestone_id).await
+    }
+
+    pub async fn worktree_merge(&self, milestone_id: &str) -> Result<()> {
+        let git = GitWorktree::new(
+            self.storage.project_root().to_path_buf(),
+            self.storage.worktrees_dir(),
+        );
+        git.merge_milestone_into_main(milestone_id).await
+    }
+
+    pub async fn worktree_list(&self) -> Result<Vec<(String, std::path::PathBuf)>> {
+        let git = GitWorktree::new(
+            self.storage.project_root().to_path_buf(),
+            self.storage.worktrees_dir(),
+        );
+        git.list_milestone_worktrees().await
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -694,6 +750,7 @@ fn spec_from_agent_entry(
         fallback_cascade: entry.fallback_cascade.clone(),
         system_prompt: entry.system_prompt.clone(),
         inline_prompt: None,
+        worktree_override: None,
         sandbox: sandbox_policy_from_config(&entry.sandbox),
         auto_cleanup: entry.auto_cleanup,
         model_override: entry.model.clone(),
@@ -803,6 +860,8 @@ mod tests {
         let prompts = Arc::new(PromptManager::new(dir.path().to_path_buf()));
         let dispatcher = Dispatcher::new(
             registry,
+            None,
+            None,
             None,
             None,
             None,
@@ -981,9 +1040,9 @@ mod tests {
     // and splinter works end-to-end using the M23 messaging infrastructure.
     #[tokio::test]
     async fn bastion_splinter_coordination_loop() {
+        use crate::messaging::MessageRouter;
         use aegis_core::{MessageType, SandboxNetworkPolicy};
         use aegis_design::{RenderedTemplate, TemplateKind};
-        use crate::messaging::MessageRouter;
 
         let (dispatcher, dir) = dispatcher();
         let storage = Arc::new(ProjectStorage::new(dir.path().to_path_buf()));
@@ -1003,7 +1062,10 @@ mod tests {
             system_prompt: "You are the coordinator.".into(),
             startup: Some("Begin driving the milestone.".into()),
         };
-        let bastion = dispatcher.spawn_from_template(&bastion_rendered).await.unwrap();
+        let bastion = dispatcher
+            .spawn_from_template(&bastion_rendered)
+            .await
+            .unwrap();
         assert_eq!(bastion.kind, AgentKind::Bastion);
 
         // 2. Spawn splinter from taskflow-splinter template (with bastion_agent_id known).
@@ -1019,7 +1081,10 @@ mod tests {
             system_prompt: format!("You implement task X. Report to {}.", bastion.agent_id),
             startup: Some("Check inbox then implement.".into()),
         };
-        let splinter = dispatcher.spawn_from_template(&splinter_rendered).await.unwrap();
+        let splinter = dispatcher
+            .spawn_from_template(&splinter_rendered)
+            .await
+            .unwrap();
         assert_eq!(splinter.kind, AgentKind::Splinter);
 
         // 3. Bastion sends a `task` message to the splinter.
@@ -1069,8 +1134,8 @@ mod tests {
 
     #[tokio::test]
     async fn spawn_from_template_creates_active_bastion() {
-        use aegis_design::{RenderedTemplate, TemplateKind};
         use aegis_core::SandboxNetworkPolicy;
+        use aegis_design::{RenderedTemplate, TemplateKind};
 
         let (dispatcher, _dir) = dispatcher();
 
@@ -1109,6 +1174,7 @@ mod tests {
             fallback_cascade: vec![],
             system_prompt: None,
             inline_prompt: Some("TEMPLATE PROMPT".into()),
+            worktree_override: None,
             sandbox: aegis_core::SandboxPolicy::default(),
             auto_cleanup: false,
             model_override: None,

@@ -144,6 +144,9 @@ pub enum AegisError {
     #[error("git worktree prune failed: {reason}")]
     GitWorktreePrune { reason: String },
 
+    #[error("git merge conflict on branch {branch}: {reason}")]
+    GitMergeConflict { branch: String, reason: String },
+
     // ── General ──────────────────────────────────────────────────────
     #[error(transparent)]
     Unexpected(Box<dyn std::error::Error + Send + Sync>),

@@ -1,6 +1,6 @@
 id = 31
 name = "Milestone Worktree Lifecycle"
-status = "pending"
+status = "done"
 lld = "lld/milestone-worktree-lifecycle.md"
 depends_on = ["M30"]
 
@@ -9,46 +9,46 @@ id = "31.1"
 uid = "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
 task = "Add create_for_milestone, merge_milestone_into_main, list_milestone_worktrees to git.rs"
 task_type = "feature"
-status = "pending"
+status = "done"
 
 [[tasks]]
 id = "31.2"
 uid = "b2c3d4e5-f6a7-8901-bcde-f01234567891"
 task = "Add AegisError::GitMergeConflict to aegis-core error types"
 task_type = "feature"
-status = "pending"
+status = "done"
 
 [[tasks]]
 id = "31.3"
 uid = "c3d4e5f6-a7b8-9012-cdef-012345678902"
 task = "Add worktree_override field to AgentSpec and wire into build_spawn_plan"
 task_type = "feature"
-status = "pending"
+status = "done"
 
 [[tasks]]
 id = "31.4"
 uid = "d4e5f6a7-b8c9-0123-defa-123456789013"
 task = "Add Commands::worktree_create, worktree_merge, worktree_list"
 task_type = "feature"
-status = "pending"
+status = "done"
 
 [[tasks]]
 id = "31.5"
 uid = "e5f6a7b8-c9d0-1234-efab-234567890124"
 task = "Add worktree.create, worktree.merge, worktree.list IPC handlers"
 task_type = "feature"
-status = "pending"
+status = "done"
 
 [[tasks]]
 id = "31.6"
 uid = "f6a7b8c9-d0e1-2345-fabc-345678901235"
 task = "Add aegis worktree CLI subcommand group (create, merge, list)"
 task_type = "feature"
-status = "pending"
+status = "done"
 
 [[tasks]]
 id = "31.7"
 uid = "a7b8c9d0-e1f2-3456-abcd-456789012346"
 task = "Write tests for create/merge/list milestone worktree paths and branch naming"
 task_type = "feature"
-status = "pending"
+status = "done"

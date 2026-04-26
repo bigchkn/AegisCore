@@ -163,20 +163,22 @@ async fn handle_connection(
         }
 
         // Logic to find project and dispatch command
-        let payload = match dispatch_command(&request, Arc::clone(&project_registry), &active_runtimes).await {
-            Ok(p) => p,
-            Err(e) => {
-                let response = UdsResponse {
-                    id: request.id,
-                    status: "error".to_string(),
-                    payload: serde_json::Value::Null,
-                    error: Some(e.to_string()),
-                };
-                let response_json = serde_json::to_string(&response).unwrap();
-                lines.send(response_json).await.ok();
-                continue;
-            }
-        };
+        let payload =
+            match dispatch_command(&request, Arc::clone(&project_registry), &active_runtimes).await
+            {
+                Ok(p) => p,
+                Err(e) => {
+                    let response = UdsResponse {
+                        id: request.id,
+                        status: "error".to_string(),
+                        payload: serde_json::Value::Null,
+                        error: Some(e.to_string()),
+                    };
+                    let response_json = serde_json::to_string(&response).unwrap();
+                    lines.send(response_json).await.ok();
+                    continue;
+                }
+            };
 
         let response = UdsResponse {
             id: request.id,
@@ -637,6 +639,64 @@ async fn dispatch_command(
             commands.taskflow_add_task(milestone_id, id, task, task_type)?;
             Ok(serde_json::json!({ "message": "Task added" }))
         }
+        "taskflow.create_task" => {
+            let milestone_id = request
+                .params
+                .get("milestone_id")
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| AegisError::IpcProtocol {
+                    reason: "Missing milestone_id".to_string(),
+                })?;
+            let draft = request
+                .params
+                .get("draft")
+                .cloned()
+                .ok_or_else(|| AegisError::IpcProtocol {
+                    reason: "Missing draft".to_string(),
+                })
+                .and_then(|value| {
+                    serde_json::from_value::<aegis_taskflow::model::TaskDraft>(value).map_err(|e| {
+                        AegisError::IpcProtocol {
+                            reason: format!("Invalid draft: {e}"),
+                        }
+                    })
+                })?;
+            let task = commands.taskflow_create_task(milestone_id, draft)?;
+            Ok(serde_json::to_value(task).unwrap())
+        }
+        "taskflow.update_task" => {
+            let source_milestone_id = request
+                .params
+                .get("source_milestone_id")
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| AegisError::IpcProtocol {
+                    reason: "Missing source_milestone_id".to_string(),
+                })?;
+            let task_uid = request
+                .params
+                .get("task_uid")
+                .and_then(|v| v.as_str())
+                .and_then(|v| Uuid::parse_str(v).ok())
+                .ok_or_else(|| AegisError::IpcProtocol {
+                    reason: "Missing or invalid task_uid".to_string(),
+                })?;
+            let patch = request
+                .params
+                .get("patch")
+                .cloned()
+                .ok_or_else(|| AegisError::IpcProtocol {
+                    reason: "Missing patch".to_string(),
+                })
+                .and_then(|value| {
+                    serde_json::from_value::<aegis_taskflow::model::TaskPatch>(value).map_err(|e| {
+                        AegisError::IpcProtocol {
+                            reason: format!("Invalid patch: {e}"),
+                        }
+                    })
+                })?;
+            let task = commands.taskflow_update_task(source_milestone_id, task_uid, patch)?;
+            Ok(serde_json::to_value(task).unwrap())
+        }
         "taskflow.set_task_status" => {
             let milestone_id = request
                 .params
@@ -662,8 +722,39 @@ async fn dispatch_command(
             commands.taskflow_set_task_status(milestone_id, task_id, status)?;
             Ok(serde_json::json!({ "message": "Task status updated" }))
         }
-        "taskflow.next" => {
-            Ok(serde_json::to_value(commands.taskflow_next()?).unwrap())
+        "taskflow.next" => Ok(serde_json::to_value(commands.taskflow_next()?).unwrap()),
+        "worktree.create" => {
+            let milestone_id = request
+                .params
+                .get("milestone_id")
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| AegisError::IpcProtocol {
+                    reason: "Missing milestone_id".to_string(),
+                })?;
+            let path = commands.worktree_create(milestone_id).await?;
+            Ok(serde_json::json!({
+                "path": path,
+                "branch": format!("aegis/milestone/{milestone_id}"),
+            }))
+        }
+        "worktree.merge" => {
+            let milestone_id = request
+                .params
+                .get("milestone_id")
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| AegisError::IpcProtocol {
+                    reason: "Missing milestone_id".to_string(),
+                })?;
+            commands.worktree_merge(milestone_id).await?;
+            Ok(serde_json::json!({}))
+        }
+        "worktree.list" => {
+            let entries = commands.worktree_list().await?;
+            let arr: Vec<_> = entries
+                .into_iter()
+                .map(|(id, path)| serde_json::json!({ "milestone_id": id, "path": path }))
+                .collect();
+            Ok(serde_json::Value::Array(arr))
         }
         _ => Err(AegisError::IpcProtocol {
             reason: format!("Unknown command: {}", request.command),
@@ -1025,7 +1116,7 @@ cli_provider = "claude-code"
         let project = tempdir().unwrap();
         write_minimal_config(project.path());
 
-        let registry = ProjectRegistry::new();
+        let registry = Arc::new(ProjectRegistry::new());
         registry.register(project.path().to_path_buf()).unwrap();
 
         let runtimes: Arc<AsyncMutex<HashMap<Uuid, AegisRuntime>>> =
@@ -1113,20 +1204,23 @@ cli_provider = "claude-code"
                 serde_json::Value::Null,
             ),
             request("clarify.wait", Some(project_path), serde_json::Value::Null),
+            request("design.spawn", Some(project_path), serde_json::Value::Null),
+            request("taskflow.next", Some(project_path), serde_json::Value::Null),
             request(
-                "design.spawn",
+                "worktree.create",
                 Some(project_path),
-                serde_json::Value::Null,
+                serde_json::json!({ "milestone_id": "M30" }),
             ),
             request(
-                "taskflow.next",
+                "worktree.merge",
                 Some(project_path),
-                serde_json::Value::Null,
+                serde_json::json!({ "milestone_id": "M30" }),
             ),
+            request("worktree.list", Some(project_path), serde_json::Value::Null),
         ];
 
         for case in cases {
-            let result = dispatch_command(&case, &registry, &runtimes).await;
+            let result = dispatch_command(&case, Arc::clone(&registry), &runtimes).await;
             if let Err(err) = &result {
                 assert!(
                     !err.to_string().contains("Unknown command"),

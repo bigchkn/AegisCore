@@ -159,8 +159,24 @@ enum Commands {
         subcommand: DesignCommands,
     },
 
+    /// Milestone worktree management
+    Worktree {
+        #[command(subcommand)]
+        subcommand: WorktreeCommands,
+    },
+
     /// Generate shell completions
     Completions { shell: Shell },
+}
+
+#[derive(Subcommand)]
+enum WorktreeCommands {
+    /// Create a git worktree for a milestone
+    Create { milestone_id: String },
+    /// Merge a milestone worktree into main
+    Merge { milestone_id: String },
+    /// List active milestone worktrees
+    List,
 }
 
 #[derive(Subcommand)]
@@ -652,9 +668,7 @@ async fn dispatch(cli: Cli, printer: &Printer, client: &DaemonClient) -> Result<
                     )
                     .await
                 }
-                TaskflowCommands::Next => {
-                    commands::taskflow::next(printer, client, &anchor).await
-                }
+                TaskflowCommands::Next => commands::taskflow::next(printer, client, &anchor).await,
             }
         }
 
@@ -664,13 +678,36 @@ async fn dispatch(cli: Cli, printer: &Printer, client: &DaemonClient) -> Result<
                 DesignCommands::List => commands::design::list(printer, &anchor),
                 DesignCommands::Show { name } => commands::design::show(&name, printer, &anchor),
                 DesignCommands::Spawn { name, model, vars } => {
-                    commands::design::spawn(&name, model.as_deref(), &vars, printer, client, &anchor).await
+                    commands::design::spawn(
+                        &name,
+                        model.as_deref(),
+                        &vars,
+                        printer,
+                        client,
+                        &anchor,
+                    )
+                    .await
                 }
                 DesignCommands::Apply { name, role, vars } => {
                     commands::design::apply(&name, role.as_deref(), &vars, printer, &anchor)
                 }
                 DesignCommands::New { name, kind } => {
                     commands::design::new(&name, &kind, printer, &anchor)
+                }
+            }
+        }
+
+        Commands::Worktree { subcommand } => {
+            let anchor = require_anchor()?;
+            match subcommand {
+                WorktreeCommands::Create { milestone_id } => {
+                    commands::worktree::create(&milestone_id, printer, client, &anchor).await
+                }
+                WorktreeCommands::Merge { milestone_id } => {
+                    commands::worktree::merge(&milestone_id, printer, client, &anchor).await
+                }
+                WorktreeCommands::List => {
+                    commands::worktree::list(printer, client, &anchor).await
                 }
             }
         }
