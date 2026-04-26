@@ -111,6 +111,7 @@ mod tests {
             network: NetworkPolicy::None,
             extra_reads: vec![PathBuf::from("/read")],
             extra_writes: vec![PathBuf::from("/write")],
+            extra_exec_paths: vec![PathBuf::from("/exec")],
         });
 
         assert_eq!(policy.network, SandboxNetworkPolicy::None);

@@ -1,8 +1,9 @@
-use crate::daemon::logs::{LogTailer, PaneRelay};
+use crate::commands::ControllerCommands;
+use crate::daemon::logs::PaneRelay;
 use crate::daemon::projects::ProjectRegistry;
 use crate::events::EventBus;
 use crate::runtime::AegisRuntime;
-use aegis_core::{AegisError, Result};
+use aegis_core::{AegisError, AgentKind, Result};
 use futures_util::{Sink, SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -139,10 +140,11 @@ async fn handle_connection(
                 runtimes.get(&project.id).unwrap()
             };
 
+            let commands = runtime.commands();
             if request.command == "logs.tail" {
-                handle_log_tail(lines, &request, runtime.log_tailer.clone()).await;
+                handle_log_tail(lines, &request, &commands).await;
             } else {
-                handle_pane_attach(lines, &request, runtime.pane_relay.clone()).await;
+                handle_pane_attach(lines, &request, &commands, runtime.pane_relay.clone()).await;
             }
             return Ok(());
         }
@@ -245,6 +247,56 @@ async fn dispatch_command(
     let commands = runtime.commands();
 
     match request.command.as_str() {
+        "session.start" => {
+            let role = request.params.get("role").and_then(|v| v.as_str());
+            let active_agents = commands.list_agents()?;
+
+            if active_agents.is_empty() {
+                runtime.start().await?;
+            } else if let Some(role) = role {
+                let already_running = active_agents
+                    .iter()
+                    .any(|agent| agent.kind == AgentKind::Bastion && agent.name == role);
+                if !already_running {
+                    let agent = runtime.dispatcher.spawn_bastion(role).await?;
+                    return Ok(serde_json::json!([agent]));
+                }
+            }
+
+            let agents = commands.list_agents()?;
+            let bastions: Vec<_> = agents
+                .into_iter()
+                .filter(|agent| agent.kind == AgentKind::Bastion)
+                .collect();
+            Ok(serde_json::to_value(bastions).unwrap())
+        }
+        "session.stop" => {
+            let force = request
+                .params
+                .get("force")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false);
+            let agents = commands.list_agents()?;
+
+            for agent in agents {
+                if force {
+                    commands.kill(agent.agent_id).await?;
+                } else {
+                    commands.pause(agent.agent_id).await?;
+                }
+            }
+
+            runtime.shutdown().await?;
+
+            Ok(serde_json::json!({
+                "force": force,
+                "message": if force {
+                    "All agents terminated."
+                } else {
+                    "Session stopped. Agent worktrees preserved."
+                }
+            }))
+        }
         "status" | "project.status" => {
             use aegis_core::{AgentStatus, TaskStatus};
             let agents = commands.list_agents()?;
@@ -286,22 +338,22 @@ async fn dispatch_command(
             Ok(serde_json::json!({ "task_id": task_id }))
         }
         "agents.pause" => {
-            let agent_id = parse_agent_id(&request.params)?;
+            let agent_id = parse_agent_id(&request.params, &commands)?;
             commands.pause(agent_id).await?;
             Ok(serde_json::json!({ "agent_id": agent_id, "status": "paused" }))
         }
         "agents.resume" => {
-            let agent_id = parse_agent_id(&request.params)?;
+            let agent_id = parse_agent_id(&request.params, &commands)?;
             commands.resume(agent_id).await?;
             Ok(serde_json::json!({ "agent_id": agent_id, "status": "active" }))
         }
         "agents.kill" => {
-            let agent_id = parse_agent_id(&request.params)?;
+            let agent_id = parse_agent_id(&request.params, &commands)?;
             commands.kill(agent_id).await?;
             Ok(serde_json::json!({ "agent_id": agent_id, "status": "terminated" }))
         }
         "agents.failover" => {
-            let agent_id = parse_agent_id(&request.params)?;
+            let agent_id = parse_agent_id(&request.params, &commands)?;
             let agent = commands.failover(agent_id).await?;
             Ok(serde_json::json!({
                 "agent_id": agent.agent_id,
@@ -414,14 +466,17 @@ async fn dispatch_command(
     }
 }
 
-fn parse_agent_id(params: &serde_json::Value) -> Result<Uuid> {
-    params
+fn parse_agent_id(params: &serde_json::Value, commands: &ControllerCommands) -> Result<Uuid> {
+    let raw = params
         .get("agent_id")
         .and_then(|v| v.as_str())
-        .and_then(|v| Uuid::parse_str(v).ok())
         .ok_or_else(|| AegisError::IpcProtocol {
-            reason: "Missing or invalid agent_id".to_string(),
-        })
+            reason: "Missing agent_id".to_string(),
+        })?;
+
+    commands.resolve_agent_id(raw).map_err(|e| AegisError::IpcProtocol {
+        reason: e.to_string(),
+    })
 }
 
 async fn handle_subscription(mut lines: Framed<UnixStream, LinesCodec>, event_bus: Arc<EventBus>) {
@@ -542,9 +597,9 @@ where
 async fn handle_log_tail(
     mut lines: Framed<UnixStream, LinesCodec>,
     request: &UdsRequest,
-    tailer: Arc<LogTailer>,
+    commands: &ControllerCommands,
 ) {
-    let agent_id = match parse_agent_id(&request.params) {
+    let agent_id = match parse_agent_id(&request.params, commands) {
         Ok(id) => id,
         Err(e) => {
             send_error(&mut lines, request.id, e).await;
@@ -558,21 +613,24 @@ async fn handle_log_tail(
         .and_then(|v| v.as_u64())
         .unwrap_or(100) as usize;
 
-    let mut log_sink = GenericSink {
-        inner: lines,
-        kind: "line".to_string(),
-    };
-    if let Err(e) = tailer.tail(agent_id, last_n, &mut log_sink).await {
-        error!("Log tail error for agent {}: {}", agent_id, e);
+    match commands.logs(agent_id, Some(last_n)) {
+        Ok(logs) => send_response(
+            &mut lines,
+            request.id,
+            serde_json::to_value(logs).unwrap_or(serde_json::Value::Null),
+        )
+        .await,
+        Err(e) => send_error(&mut lines, request.id, e).await,
     }
 }
 
 async fn handle_pane_attach(
     lines: Framed<UnixStream, LinesCodec>,
     request: &UdsRequest,
+    commands: &ControllerCommands,
     relay: Arc<PaneRelay>,
 ) {
-    let agent_id = match parse_agent_id(&request.params) {
+    let agent_id = match parse_agent_id(&request.params, commands) {
         Ok(id) => id,
         Err(e) => {
             let mut lines = lines;
@@ -621,6 +679,157 @@ async fn send_error(lines: &mut Framed<UnixStream, LinesCodec>, id: Uuid, error:
     };
     if let Ok(json) = serde_json::to_string(&response) {
         let _ = lines.send(json).await;
+    }
+}
+
+async fn send_response(
+    lines: &mut Framed<UnixStream, LinesCodec>,
+    id: Uuid,
+    payload: serde_json::Value,
+) {
+    let response = build_success_response(id, payload);
+    if let Ok(json) = serde_json::to_string(&response) {
+        let _ = lines.send(json).await;
+    }
+}
+
+fn build_success_response(id: Uuid, payload: serde_json::Value) -> UdsResponse {
+    UdsResponse {
+        id,
+        status: "success".to_string(),
+        payload,
+        error: None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::daemon::projects::ProjectRegistry;
+    use crate::runtime::AegisRuntime;
+    use std::collections::HashMap;
+    use std::fs;
+    use std::sync::{Mutex, OnceLock};
+    use tempfile::tempdir;
+    use tokio::sync::Mutex as AsyncMutex;
+
+    #[test]
+    fn build_success_response_preserves_id_and_payload() {
+        let id = Uuid::parse_str("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa").unwrap();
+        let payload = serde_json::json!(["line one", "line two"]);
+
+        let response = build_success_response(id, payload.clone());
+
+        assert_eq!(response.id, id);
+        assert_eq!(response.status, "success");
+        assert_eq!(response.payload, payload);
+        assert!(response.error.is_none());
+
+        let json = serde_json::to_value(response).unwrap();
+        assert_eq!(json.get("id").and_then(|v| v.as_str()), Some("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"));
+        assert_eq!(json.get("payload"), Some(&serde_json::json!(["line one", "line two"])));
+    }
+
+    fn home_lock() -> &'static Mutex<()> {
+        static HOME_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+        HOME_LOCK.get_or_init(|| Mutex::new(()))
+    }
+
+    fn write_minimal_config(project_root: &std::path::Path) {
+        let config = r#"
+[providers.claude-code]
+binary = "claude-code"
+
+[splinter_defaults]
+cli_provider = "claude-code"
+"#;
+        fs::write(project_root.join("aegis.toml"), config).unwrap();
+    }
+
+    fn request(
+        command: &str,
+        project_path: Option<&std::path::Path>,
+        params: serde_json::Value,
+    ) -> UdsRequest {
+        UdsRequest {
+            id: Uuid::new_v4(),
+            project_path: project_path.map(|p| p.to_path_buf()),
+            command: command.to_string(),
+            params,
+        }
+    }
+
+    #[tokio::test]
+    async fn known_ipc_commands_do_not_fall_through_to_unknown_command() {
+        let _guard = home_lock().lock().unwrap();
+
+        let home = tempdir().unwrap();
+        std::env::set_var("HOME", home.path());
+
+        let project = tempdir().unwrap();
+        write_minimal_config(project.path());
+
+        let registry = ProjectRegistry::new();
+        registry.register(project.path().to_path_buf()).unwrap();
+
+        let runtimes: Arc<AsyncMutex<HashMap<Uuid, AegisRuntime>>> =
+            Arc::new(AsyncMutex::new(HashMap::new()));
+        let project_path = project.path();
+
+        let cases = vec![
+            request("daemon.status", None, serde_json::Value::Null),
+            request("projects.list", None, serde_json::Value::Null),
+            request(
+                "projects.register",
+                None,
+                serde_json::json!({ "root_path": project_path.display().to_string() }),
+            ),
+            request("project.status", Some(project_path), serde_json::Value::Null),
+            request("agents.list", Some(project_path), serde_json::Value::Null),
+            request("tasks.list", Some(project_path), serde_json::Value::Null),
+            request("channels.list", Some(project_path), serde_json::Value::Null),
+            request("session.start", Some(project_path), serde_json::Value::Null),
+            request("session.stop", Some(project_path), serde_json::json!({ "force": true })),
+            request(
+                "agents.pause",
+                Some(project_path),
+                serde_json::json!({ "agent_id": Uuid::new_v4() }),
+            ),
+            request(
+                "agents.resume",
+                Some(project_path),
+                serde_json::json!({ "agent_id": Uuid::new_v4() }),
+            ),
+            request(
+                "agents.kill",
+                Some(project_path),
+                serde_json::json!({ "agent_id": Uuid::new_v4() }),
+            ),
+            request(
+                "agents.failover",
+                Some(project_path),
+                serde_json::json!({ "agent_id": Uuid::new_v4() }),
+            ),
+            request("taskflow.status", Some(project_path), serde_json::Value::Null),
+            request("taskflow.show", Some(project_path), serde_json::json!("M1")),
+            request(
+                "taskflow.assign",
+                Some(project_path),
+                serde_json::json!({ "roadmap_id": "M1", "task_id": Uuid::new_v4() }),
+            ),
+        ];
+
+        for case in cases {
+            let result = dispatch_command(&case, &registry, &runtimes).await;
+            if let Err(err) = &result {
+                assert!(
+                    !err.to_string().contains("Unknown command"),
+                    "command `{}` unexpectedly fell through: {}",
+                    case.command,
+                    err
+                );
+            }
+        }
     }
 }
 

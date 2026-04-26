@@ -161,17 +161,17 @@ async fn dispatch_command(
             Ok(Json(serde_json::json!({ "task_id": task_id })))
         }
         "pause" => {
-            let agent_id = parse_uuid_param(params, "agent_id")?;
+            let agent_id = resolve_agent_id_param(&commands, params, "agent_id")?;
             commands.pause(agent_id).await.map_err(|e| e.to_string())?;
             Ok(Json(serde_json::json!({ "status": "ok" })))
         }
         "resume" => {
-            let agent_id = parse_uuid_param(params, "agent_id")?;
+            let agent_id = resolve_agent_id_param(&commands, params, "agent_id")?;
             commands.resume(agent_id).await.map_err(|e| e.to_string())?;
             Ok(Json(serde_json::json!({ "status": "ok" })))
         }
         "kill" => {
-            let agent_id = parse_uuid_param(params, "agent_id")?;
+            let agent_id = resolve_agent_id_param(&commands, params, "agent_id")?;
             commands.kill(agent_id).await.map_err(|e| e.to_string())?;
             Ok(Json(serde_json::json!({ "status": "ok" })))
         }
@@ -179,12 +179,17 @@ async fn dispatch_command(
     }
 }
 
-fn parse_uuid_param(params: &serde_json::Value, name: &str) -> std::result::Result<Uuid, String> {
-    params
+fn resolve_agent_id_param(
+    commands: &crate::commands::ControllerCommands,
+    params: &serde_json::Value,
+    name: &str,
+) -> std::result::Result<Uuid, String> {
+    let raw = params
         .get(name)
         .and_then(|v| v.as_str())
-        .and_then(|v| Uuid::parse_str(v).ok())
-        .ok_or_else(|| format!("Missing or invalid {}", name))
+        .ok_or_else(|| format!("Missing {}", name))?;
+
+    commands.resolve_agent_id(raw).map_err(|e| e.to_string())
 }
 
 async fn taskflow_status(

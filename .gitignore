@@ -37,3 +37,8 @@ aegis.secrets.toml
 
 # Test artifacts
 /tmp/aegis-test-*
+
+# Specific script used during testing but not part of the project.
+clean_worktrees.sh
+
+
