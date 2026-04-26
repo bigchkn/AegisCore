@@ -6,9 +6,9 @@ current_milestone = 13
 path = "milestones/M15.toml"
 status = "done"
 
-[milestones.M14]
-path = "milestones/M14.toml"
-status = "pending"
+[milestones.M11]
+path = "milestones/M11.toml"
+status = "done"
 
 [milestones.M17]
 path = "milestones/M17.toml"
@@ -18,9 +18,13 @@ status = "done"
 path = "milestones/M13.toml"
 status = "in-progress"
 
-[milestones.M11]
-path = "milestones/M11.toml"
-status = "done"
+[milestones.M18]
+path = "milestones/M18.toml"
+status = "pending"
+
+[milestones.M14]
+path = "milestones/M14.toml"
+status = "pending"
 
 [milestones.M12]
 path = "milestones/M12.toml"

@@ -33,7 +33,7 @@ Tasks are categorized by type: **Feature** (default), **Bug**, or **Maintenance*
 
 **To a Milestone:**
 ```bash
-aegis taskflow add-task 14 14.1 "Setup React frontend project"
+aegis taskflow add-task 14.1 "Setup React frontend project" 14
 ```
 
 **To the Global Backlog:**
@@ -64,7 +64,7 @@ Here is how a task moves from "Intention" to "Verified Completion":
 ### Step 1: Define the Milestone and Task
 ```bash
 aegis taskflow create-milestone 15 "Security Audit"
-aegis taskflow add-task 15 15.1 "Review sandbox profiles"
+aegis taskflow add-task 15.1 "Review sandbox profiles" 15
 ```
 
 ### Step 2: User spawns an execution task
@@ -105,7 +105,7 @@ If you check the milestone now, task `15.1` will automatically have its status u
 | `aegis taskflow list` | Lists all milestones and their current statuses. |
 | `aegis taskflow show <ID>` | Shows detailed tasks for a milestone (e.g., `M13`) or the `backlog`. |
 | `aegis taskflow create-milestone <ID> <NAME>` | Create a new milestone fragment and register it. |
-| `aegis taskflow add-task <ID> <TASK> [M-ID]` | Add a task. Defaults to `backlog` if `M-ID` is omitted. |
+| `aegis taskflow add-task <TASK-ID> <TASK> [M-ID]` | Add a task. Defaults to `backlog` if `M-ID` is omitted. |
 | `aegis taskflow set-task-status <M-ID> <TASK-ID> <STATUS>` | Update a roadmap task status (use `backlog` as M-ID for global tasks). |
 | `aegis taskflow sync` | Synchronizes all roadmap TOMLs and the backlog with Agent Registry state. |
 | `aegis taskflow assign <roadmap_id> <task_id>` | Manually link a roadmap task to a specific agent task UUID. |

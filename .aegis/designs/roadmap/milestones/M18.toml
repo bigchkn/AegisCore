@@ -1,0 +1,46 @@
+id = 18
+name = "Per-Agent Model Override"
+status = "pending"
+lld = "lld/provider-model-override.md"
+
+[[tasks]]
+id = "18.1"
+uid = "7b27e912-2480-4163-8047-2ff2f24d4633"
+task = "Add model_flag to ProviderDefinition and builtin_providers.yaml"
+task_type = "feature"
+status = "pending"
+
+[[tasks]]
+id = "18.2"
+uid = "58e75e82-b3e9-48a4-a791-0ca1c65eaca9"
+task = "Apply extra_args and model in GenericProvider::spawn_command"
+task_type = "feature"
+status = "pending"
+
+[[tasks]]
+id = "18.3"
+uid = "95adff9e-0b98-4a77-873f-3db0a405b88a"
+task = "Add model_override param to Provider::spawn_command trait"
+task_type = "feature"
+status = "pending"
+
+[[tasks]]
+id = "18.4"
+uid = "eb47efe9-e02f-4d34-b190-2c03557cb64e"
+task = "Add model field to RawAgentConfig, AgentEntry, RawSplinterDefaults, SplinterDefaults"
+task_type = "feature"
+status = "pending"
+
+[[tasks]]
+id = "18.5"
+uid = "1bee1a13-9960-4b7c-a84d-28ae613badc2"
+task = "Add model_override to AgentSpec; thread through build_bastion_spec, build_splinter_spec, build_spawn_plan"
+task_type = "feature"
+status = "pending"
+
+[[tasks]]
+id = "18.6"
+uid = "09f82782-38b4-45e6-be08-8f88f1a00228"
+task = "Write tests: extra_args, model, override precedence, no-model-flag guard"
+task_type = "feature"
+status = "pending"
