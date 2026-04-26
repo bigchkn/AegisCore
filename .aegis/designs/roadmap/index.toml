@@ -87,3 +87,8 @@ status = "done"
 name = "Agent Design — Design Phase"
 path = "milestones/M19.toml"
 status = "in-progress"
+
+[milestones.M29]
+name = "Continuous Taskflow Workflow — Design Phase"
+path = "milestones/M29.toml"
+status = "in-progress"

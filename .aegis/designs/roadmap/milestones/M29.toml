@@ -1,0 +1,11 @@
+id = 29
+name = "Continuous Taskflow Workflow — Design Phase"
+status = "in-progress"
+lld = "hld/continuous-taskflow.md"
+
+[[tasks]]
+id = "29.1"
+uid = "a1f3c920-2d84-4e71-b8a3-7c5f91e6d014"
+task = "Write HLD: Continuous Bastion Milestone-Processing Workflow"
+task_type = "feature"
+status = "in-progress"
