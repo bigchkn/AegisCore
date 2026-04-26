@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use crate::messaging::{MessageDeliveryReceipt, MessageInbox, MessageInboxSummary, MessageRouter};
 use aegis_core::{
     AegisError, Agent, AgentRegistry, LogQuery, Recorder, Result, TaskCreator, TaskQueue,
 };
@@ -22,6 +23,7 @@ pub struct ProjectStatus {
 pub struct ControllerCommands {
     registry: Arc<FileRegistry>,
     dispatcher: Arc<Dispatcher>,
+    message_router: Arc<MessageRouter>,
     scheduler: Arc<Scheduler>,
     recorder: Option<Arc<dyn Recorder>>,
     taskflow: Option<Arc<TaskflowEngine>>,
@@ -31,6 +33,7 @@ impl ControllerCommands {
     pub fn new(
         registry: Arc<FileRegistry>,
         dispatcher: Arc<Dispatcher>,
+        message_router: Arc<MessageRouter>,
         scheduler: Arc<Scheduler>,
         recorder: Option<Arc<dyn Recorder>>,
         taskflow: Option<Arc<TaskflowEngine>>,
@@ -38,6 +41,7 @@ impl ControllerCommands {
         Self {
             registry,
             dispatcher,
+            message_router,
             scheduler,
             recorder,
             taskflow,
@@ -98,6 +102,26 @@ impl ControllerCommands {
     pub fn resolve_agent_id(&self, raw: &str) -> Result<Uuid> {
         let agents = self.list_all_agents()?;
         resolve_agent_id_from_agents(&agents, raw)
+    }
+
+    pub async fn send_message(
+        &self,
+        from_agent_id: Option<Uuid>,
+        to_agent_raw: &str,
+        kind: aegis_core::MessageType,
+        payload: serde_json::Value,
+    ) -> Result<MessageDeliveryReceipt> {
+        self.message_router
+            .send(from_agent_id, to_agent_raw, kind, payload)
+            .await
+    }
+
+    pub fn inbox(&self, agent_raw: &str) -> Result<MessageInbox> {
+        self.message_router.inbox(agent_raw)
+    }
+
+    pub fn list_inboxes(&self) -> Result<Vec<MessageInboxSummary>> {
+        self.message_router.list()
     }
 
     pub fn logs(&self, agent_id: Uuid, lines: Option<usize>) -> Result<Vec<String>> {

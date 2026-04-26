@@ -337,6 +337,52 @@ async fn dispatch_command(
         "agents.list" => Ok(serde_json::to_value(commands.list_agents()?).unwrap()),
         "tasks.list" => Ok(serde_json::to_value(commands.list_tasks()?).unwrap()),
         "channels.list" => Ok(serde_json::to_value(commands.list_channels()?).unwrap()),
+        "message.send" => {
+            let to_agent_raw = request
+                .params
+                .get("to_agent_id")
+                .or_else(|| request.params.get("agent_id"))
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| AegisError::IpcProtocol {
+                    reason: "Missing to_agent_id".to_string(),
+                })?;
+            let from_agent_id = request
+                .params
+                .get("from_agent_id")
+                .and_then(|v| v.as_str())
+                .map(parse_uuid)
+                .transpose()?;
+            let kind = parse_message_type(request.params.get("kind"))?;
+            let payload = request
+                .params
+                .get("payload")
+                .or_else(|| request.params.get("message"))
+                .cloned()
+                .ok_or_else(|| AegisError::IpcProtocol {
+                    reason: "Missing payload".to_string(),
+                })?;
+            let receipt = commands
+                .send_message(from_agent_id, to_agent_raw, kind, payload)
+                .await?;
+            Ok(serde_json::to_value(receipt).unwrap())
+        }
+        "message.inbox" => {
+            let agent_raw = request
+                .params
+                .get("agent_id")
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| AegisError::IpcProtocol {
+                    reason: "Missing agent_id".to_string(),
+                })?;
+            Ok(serde_json::to_value(commands.inbox(agent_raw)?).unwrap())
+        }
+        "message.list" => {
+            if let Some(agent_raw) = request.params.get("agent_id").and_then(|v| v.as_str()) {
+                Ok(serde_json::to_value(commands.inbox(agent_raw)?).unwrap())
+            } else {
+                Ok(serde_json::to_value(commands.list_inboxes()?).unwrap())
+            }
+        }
         "agents.spawn" => {
             let task = request
                 .params
@@ -493,6 +539,28 @@ fn parse_agent_id(params: &serde_json::Value, commands: &ControllerCommands) -> 
 
     commands.resolve_agent_id(raw).map_err(|e| AegisError::IpcProtocol {
         reason: e.to_string(),
+    })
+}
+
+fn parse_uuid(raw: &str) -> Result<Uuid> {
+    Uuid::parse_str(raw).map_err(|_| AegisError::IpcProtocol {
+        reason: format!("Missing or invalid UUID `{raw}`"),
+    })
+}
+
+fn parse_message_type(value: Option<&serde_json::Value>) -> Result<aegis_core::MessageType> {
+    let Some(value) = value else {
+        return Ok(aegis_core::MessageType::Notification);
+    };
+
+    let raw = value.as_str().ok_or_else(|| AegisError::IpcProtocol {
+        reason: "kind must be a string".to_string(),
+    })?;
+
+    serde_json::from_str::<aegis_core::MessageType>(&format!("{raw:?}")).map_err(|e| {
+        AegisError::IpcProtocol {
+            reason: format!("Invalid message kind `{raw}`: {e}"),
+        }
     })
 }
 
@@ -834,6 +902,21 @@ cli_provider = "claude-code"
                 Some(project_path),
                 serde_json::json!({ "roadmap_id": "M1", "task_id": Uuid::new_v4() }),
             ),
+            request(
+                "message.send",
+                Some(project_path),
+                serde_json::json!({
+                    "to_agent_id": Uuid::new_v4(),
+                    "message": "hello",
+                    "kind": "notification"
+                }),
+            ),
+            request(
+                "message.inbox",
+                Some(project_path),
+                serde_json::json!({ "agent_id": Uuid::new_v4() }),
+            ),
+            request("message.list", Some(project_path), serde_json::Value::Null),
         ];
 
         for case in cases {

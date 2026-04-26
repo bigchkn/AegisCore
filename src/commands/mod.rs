@@ -7,5 +7,6 @@ pub mod doctor;
 pub mod init;
 pub mod observe;
 pub mod session;
+pub mod messages;
 pub mod taskflow;
 pub mod ui;

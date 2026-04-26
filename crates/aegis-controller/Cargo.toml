@@ -8,6 +8,7 @@ license = "MIT"
 [dependencies]
 aegis-core = { workspace = true }
 aegis-tmux = { workspace = true }
+aegis-channels = { workspace = true }
 aegis-providers = { workspace = true }
 aegis-sandbox = { workspace = true }
 aegis-recorder = { workspace = true }

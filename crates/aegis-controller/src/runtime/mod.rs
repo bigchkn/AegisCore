@@ -13,6 +13,7 @@ use crate::{
     daemon::logs::{LogTailer, PaneRelay},
     dispatcher::Dispatcher,
     events::EventBus,
+    messaging::MessageRouter,
     prompts::PromptManager,
     registry::FileRegistry,
     scheduler::Scheduler,
@@ -157,9 +158,15 @@ impl AegisRuntime {
     }
 
     pub fn commands(&self) -> ControllerCommands {
+        let message_router = Arc::new(MessageRouter::new(
+            self.registry.clone(),
+            self.storage.clone(),
+            Some(self.tmux.clone()),
+        ));
         ControllerCommands::new(
             self.registry.clone(),
             self.dispatcher.clone(),
+            message_router,
             self.scheduler.clone(),
             Some(self.recorder.clone()),
             self.taskflow.clone(),

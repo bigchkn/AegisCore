@@ -129,6 +129,12 @@ enum Commands {
         follow: bool,
     },
 
+    /// Send or inspect agent-to-agent messages
+    Message {
+        #[command(subcommand)]
+        subcommand: MessageCommands,
+    },
+
     /// Config management
     Config {
         #[command(subcommand)]
@@ -243,6 +249,23 @@ enum TaskflowCommands {
         task_id: String,
         status: String,
     },
+}
+
+#[derive(Subcommand)]
+enum MessageCommands {
+    /// Send a message to an agent inbox
+    Send {
+        to_agent_id: String,
+        message: String,
+        #[arg(long)]
+        from_agent_id: Option<Uuid>,
+        #[arg(long, value_enum, default_value_t = commands::messages::MessageKindArg::Notification)]
+        kind: commands::messages::MessageKindArg,
+    },
+    /// Inspect one agent inbox
+    Inbox { agent_id: String },
+    /// List inbox summaries or a specific inbox when an agent ID is supplied
+    List { agent_id: Option<String> },
 }
 
 #[tokio::main]
@@ -375,6 +398,35 @@ async fn dispatch(cli: Cli, printer: &Printer, client: &DaemonClient) -> Result<
         } => {
             let anchor = require_anchor()?;
             commands::observe::logs(&agent_id, Some(lines), follow, printer, client, &anchor).await
+        }
+
+        Commands::Message { subcommand } => {
+            let anchor = require_anchor()?;
+            match subcommand {
+                MessageCommands::Send {
+                    to_agent_id,
+                    message,
+                    from_agent_id,
+                    kind,
+                } => {
+                    commands::messages::send(
+                        &to_agent_id,
+                        &message,
+                        from_agent_id,
+                        kind,
+                        printer,
+                        client,
+                        &anchor,
+                    )
+                    .await
+                }
+                MessageCommands::Inbox { agent_id } => {
+                    commands::messages::inbox(&agent_id, printer, client, &anchor).await
+                }
+                MessageCommands::List { agent_id } => {
+                    commands::messages::list(agent_id.as_deref(), printer, client, &anchor).await
+                }
+            }
         }
 
         Commands::Config { subcommand } => match subcommand {
