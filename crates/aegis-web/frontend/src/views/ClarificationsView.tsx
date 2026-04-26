@@ -18,12 +18,17 @@ export function ClarificationsView() {
       try {
         const data = await api.clarifyList(activeProjectId!);
         if (mounted) {
-          // Show open requests first, sorted by priority and date
-          setRequests(data.filter(r => r.status === 'open').sort((a, b) => {
-            if (b.priority !== a.priority) return b.priority - a.priority;
-            return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
-          }));
-          setError(null);
+          if (Array.isArray(data)) {
+            // Show open requests first, sorted by priority and date
+            setRequests(data.filter(r => r.status === 'open').sort((a, b) => {
+              if (b.priority !== a.priority) return b.priority - a.priority;
+              return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+            }));
+            setError(null);
+          } else {
+            console.error('Invalid clarifications data:', data);
+            setError('Received invalid data format from server');
+          }
         }
       } catch (err) {
         if (mounted) setError(err instanceof Error ? err.message : 'Failed to fetch clarifications');

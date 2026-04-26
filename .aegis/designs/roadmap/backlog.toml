@@ -11,3 +11,10 @@ uid = "ae798e95-0489-4005-a084-2839ccb0d9ae"
 task = "Persist Web UI state in URL paths to prevent state loss on reload"
 task_type = "bug"
 status = "done"
+
+[[tasks]]
+id = "B3"
+uid = "b0877187-c030-44c1-b0a1-fef39e254c2e"
+task = "Clarifications tab shows 'Error: The string did not match the expected pattern.' when empty"
+task_type = "bug"
+status = "done"

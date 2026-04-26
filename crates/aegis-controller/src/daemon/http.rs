@@ -38,6 +38,8 @@ impl HttpServer {
             .route("/projects/:id/agents", get(list_agents))
             .route("/projects/:id/tasks", get(list_tasks))
             .route("/projects/:id/channels", get(list_channels))
+            .route("/projects/:id/clarify/list", get(clarify_list))
+            .route("/projects/:id/clarify/answer", post(clarify_answer))
             .route("/projects/:id/commands", post(dispatch_command))
             .route("/projects/:id/taskflow/status", get(taskflow_status))
             .route(
@@ -87,7 +89,12 @@ async fn get_runtime(state: &HttpState, project_id: Uuid) -> Result<AegisRuntime
                 reason: "project not found".to_string(),
             })?;
 
-    let r = AegisRuntime::load(project.root_path.clone()).await?;
+    let r = AegisRuntime::load(
+        project.root_path.clone(),
+        Some(state.projects.clone()),
+        Some(project_id),
+    )
+    .await?;
     r.recover().await?;
     runtimes.insert(project_id, r.clone());
     Ok(r)
@@ -140,6 +147,56 @@ async fn list_channels(
     Ok(Json(serde_json::to_value(channels).unwrap()))
 }
 
+async fn clarify_list(
+    Path(id): Path<Uuid>,
+    State(state): State<HttpState>,
+) -> std::result::Result<Json<serde_json::Value>, String> {
+    let runtime = get_runtime(&state, id).await.map_err(|e| e.to_string())?;
+    let requests = runtime.commands().clarify_list().map_err(|e| e.to_string())?;
+    Ok(Json(serde_json::to_value(requests).unwrap()))
+}
+
+async fn clarify_answer(
+    Path(id): Path<Uuid>,
+    State(state): State<HttpState>,
+    Json(payload): Json<serde_json::Value>,
+) -> std::result::Result<Json<serde_json::Value>, String> {
+    let runtime = get_runtime(&state, id).await.map_err(|e| e.to_string())?;
+    let commands = runtime.commands();
+
+    let request_id = payload
+        .get("request_id")
+        .and_then(|v| v.as_str())
+        .and_then(|v| Uuid::parse_str(v).ok())
+        .ok_or("Missing or invalid request_id")?;
+    let answer = payload
+        .get("answer")
+        .and_then(|v| v.as_str())
+        .ok_or("Missing answer")?;
+    let payload_val = payload
+        .get("payload")
+        .cloned()
+        .unwrap_or_else(|| serde_json::json!({}));
+    let answered_by = payload
+        .get("answered_by")
+        .and_then(|v| v.as_str())
+        .unwrap_or("human_tui");
+
+    let answered_by = match answered_by {
+        "human_cli" => crate::clarification::ClarifierSource::HumanCli,
+        "human_tui" => crate::clarification::ClarifierSource::HumanTui,
+        "telegram" => crate::clarification::ClarifierSource::Telegram,
+        "system" => crate::clarification::ClarifierSource::System,
+        _ => crate::clarification::ClarifierSource::HumanTui,
+    };
+
+    let request = commands
+        .clarify_answer(request_id, answer, payload_val, answered_by)
+        .await
+        .map_err(|e| e.to_string())?;
+    Ok(Json(serde_json::to_value(request).unwrap()))
+}
+
 async fn dispatch_command(
     Path(id): Path<Uuid>,
     State(state): State<HttpState>,
@@ -174,6 +231,37 @@ async fn dispatch_command(
             let agent_id = resolve_agent_id_param(&commands, params, "agent_id")?;
             commands.kill(agent_id).await.map_err(|e| e.to_string())?;
             Ok(Json(serde_json::json!({ "status": "ok" })))
+        }
+        "taskflow.create_task" => {
+            let milestone_id = params
+                .get("milestone_id")
+                .and_then(|v| v.as_str())
+                .ok_or("Missing milestone_id")?;
+            let draft = params.get("draft").cloned().ok_or("Missing draft")?;
+            let draft = serde_json::from_value::<aegis_taskflow::model::TaskDraft>(draft)
+                .map_err(|e| e.to_string())?;
+            let task = commands
+                .taskflow_create_task(milestone_id, draft)
+                .map_err(|e| e.to_string())?;
+            Ok(Json(serde_json::to_value(task).unwrap()))
+        }
+        "taskflow.update_task" => {
+            let source_milestone_id = params
+                .get("source_milestone_id")
+                .and_then(|v| v.as_str())
+                .ok_or("Missing source_milestone_id")?;
+            let task_uid = params
+                .get("task_uid")
+                .and_then(|v| v.as_str())
+                .and_then(|v| Uuid::parse_str(v).ok())
+                .ok_or("Missing or invalid task_uid")?;
+            let patch = params.get("patch").cloned().ok_or("Missing patch")?;
+            let patch = serde_json::from_value::<aegis_taskflow::model::TaskPatch>(patch)
+                .map_err(|e| e.to_string())?;
+            let task = commands
+                .taskflow_update_task(source_milestone_id, task_uid, patch)
+                .map_err(|e| e.to_string())?;
+            Ok(Json(serde_json::to_value(task).unwrap()))
         }
         "clarify.request" => {
             let agent_raw = params
@@ -426,9 +514,29 @@ async fn ws_pane_handler(
     Path(agent_id): Path<Uuid>,
     State(state): State<HttpState>,
 ) -> impl IntoResponse {
-    let runtime = find_runtime_by_agent(&state.active_runtimes, agent_id).await;
+    let runtime_opt = find_runtime_by_agent(&state.active_runtimes, agent_id).await;
     ws.on_upgrade(move |socket| async move {
-        if let Some(runtime) = runtime {
+        if let Some(runtime) = runtime_opt {
+            // Find project ID for this runtime to persist attachment
+            let runtimes = state.active_runtimes.lock().await;
+            let project_id = runtimes.iter().find_map(|(id, r)| {
+                if Arc::ptr_eq(&r.registry, &runtime.registry) {
+                    Some(*id)
+                } else {
+                    None
+                }
+            });
+            drop(runtimes);
+
+            if let Some(id) = project_id {
+                if let Err(e) = state.projects.update_last_attached(id, Some(agent_id)) {
+                    tracing::error!(
+                        "Failed to persist last_attached_agent_id via WebSocket: {}",
+                        e
+                    );
+                }
+            }
+
             use base64::prelude::*;
             let (ws_sender, ws_receiver) = socket.split();
 

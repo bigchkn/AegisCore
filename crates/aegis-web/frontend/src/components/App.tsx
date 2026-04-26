@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 import { Routes, Route, Navigate, useLocation, useParams } from 'react-router-dom';
 
 import { fetchProjectData, fetchProjects } from '../api/thunks';
-import { setActiveProject } from '../store/uiSlice';
+import { setActiveProject, setSelectedAgent } from '../store/uiSlice';
 import { useAppDispatch, useAppSelector } from '../store/hooks';
 import { AgentsView } from '../views/AgentsView';
 import { ChannelsView } from '../views/ChannelsView';
@@ -87,13 +87,30 @@ function ProjectRedirect({ projects }: { projects: any[] }) {
 function ProjectRoutes() {
   const { projectId } = useParams();
   const dispatch = useAppDispatch();
+  const location = useLocation();
   const activeProjectId = useAppSelector((state) => state.ui.activeProjectId);
+  const projects = useAppSelector((state) => state.projects.items);
+  const activeProject = projects.find((p) => p.id === projectId);
 
   useEffect(() => {
     if (projectId && projectId !== activeProjectId) {
       dispatch(setActiveProject(projectId));
     }
   }, [projectId, activeProjectId, dispatch]);
+
+  // Handle auto-attach redirect on initial project load
+  if (
+    activeProject?.last_attached_agent_id &&
+    (location.pathname === `/projects/${projectId}` || location.pathname === `/projects/${projectId}/` || location.pathname === `/projects/${projectId}/agents`)
+  ) {
+    // We only want to do this once on initial landing, but simple redirect is usually fine
+    // if the user hasn't explicitly navigated elsewhere. 
+    // For now, if they land on agents list and have a last_attached, we send them to pane.
+    if (location.pathname.endsWith('/agents') || location.pathname === `/projects/${projectId}` || location.pathname === `/projects/${projectId}/`) {
+        dispatch(setSelectedAgent(activeProject.last_attached_agent_id));
+        return <Navigate to={`/projects/${projectId}/pane`} replace />;
+    }
+  }
 
   return (
     <Routes>
