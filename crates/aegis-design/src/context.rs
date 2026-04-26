@@ -61,11 +61,10 @@ impl BootstrapContext {
             reason: e.to_string(),
         })?;
 
-        let index: RawIndex =
-            toml::from_str(&index_str).map_err(|e| DesignError::Io {
-                path: index_path.to_string_lossy().into_owned(),
-                reason: e.to_string(),
-            })?;
+        let index: RawIndex = toml::from_str(&index_str).map_err(|e| DesignError::Io {
+            path: index_path.to_string_lossy().into_owned(),
+            reason: e.to_string(),
+        })?;
 
         let milestone_id = index.project.current_milestone;
         let milestone_key = format!("M{milestone_id}");
@@ -97,10 +96,7 @@ impl BootstrapContext {
         vars.insert("milestone_id".into(), milestone_id.to_string());
         vars.insert("milestone_name".into(), milestone.name.clone());
         if let Some(lld) = &milestone.lld {
-            let lld_abs = project_root
-                .join(".aegis")
-                .join("designs")
-                .join(lld);
+            let lld_abs = project_root.join(".aegis").join("designs").join(lld);
             vars.insert("lld_path".into(), lld_abs.to_string_lossy().into_owned());
         }
         Ok(vars)

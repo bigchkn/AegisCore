@@ -40,7 +40,12 @@ impl TemplateRegistry {
 
         // Layer 1: built-ins (lowest priority)
         for &(name, toml, system_prompt, startup) in builtin_template_sources() {
-            match Template::from_parts(name, toml, system_prompt.to_owned(), startup.map(str::to_owned)) {
+            match Template::from_parts(
+                name,
+                toml,
+                system_prompt.to_owned(),
+                startup.map(str::to_owned),
+            ) {
                 Ok(t) => {
                     templates.insert(
                         name.to_owned(),
@@ -71,7 +76,9 @@ impl TemplateRegistry {
     pub fn get(&self, name: &str) -> Result<&ResolvedTemplate> {
         self.templates
             .get(name)
-            .ok_or_else(|| DesignError::TemplateNotFound { name: name.to_owned() })
+            .ok_or_else(|| DesignError::TemplateNotFound {
+                name: name.to_owned(),
+            })
     }
 
     pub fn list(&self) -> Vec<&ResolvedTemplate> {
@@ -81,11 +88,7 @@ impl TemplateRegistry {
     }
 }
 
-fn load_from_dir(
-    dir: &Path,
-    layer: TemplateLayer,
-    out: &mut HashMap<String, ResolvedTemplate>,
-) {
+fn load_from_dir(dir: &Path, layer: TemplateLayer, out: &mut HashMap<String, ResolvedTemplate>) {
     if !dir.is_dir() {
         return;
     }
@@ -108,7 +111,10 @@ fn load_from_dir(
         let toml_path = path.join("template.toml");
         let prompt_path = path.join("system_prompt.md");
         if !toml_path.exists() || !prompt_path.exists() {
-            debug!("skipping {}: missing template.toml or system_prompt.md", path.display());
+            debug!(
+                "skipping {}: missing template.toml or system_prompt.md",
+                path.display()
+            );
             continue;
         }
         let toml_content = match std::fs::read_to_string(&toml_path) {
@@ -160,7 +166,12 @@ fn dirs_next(_project_root: &Path) -> Option<std::path::PathBuf> {
 }
 
 /// Built-in templates embedded at compile time.
-fn builtin_template_sources() -> &'static [(&'static str, &'static str, &'static str, Option<&'static str>)] {
+fn builtin_template_sources() -> &'static [(
+    &'static str,
+    &'static str,
+    &'static str,
+    Option<&'static str>,
+)] {
     &[
         (
             "taskflow-bastion",

@@ -15,12 +15,15 @@ vi.mock('../api/rest', () => ({
 }));
 
 const mockIndex = {
-  project: { name: 'Test Project', current_milestone: 1 },
+  project: { 
+    name: 'Test Project', 
+    current_milestone: 1,
+    backlog: 'backlog.toml' 
+  },
   milestones: {
     M1: { name: 'Milestone 1', path: 'milestones/M1.toml', status: 'in-progress' },
     M2: { name: 'Milestone 2', path: 'milestones/M2.toml', status: 'done' },
   },
-  backlog: 'backlog.toml',
 };
 
 const mockMilestone1 = {

@@ -84,7 +84,7 @@ export function TaskflowView() {
       if (!index) return;
       
       const ids = Object.keys(index.milestones);
-      if (index.backlog) ids.push('backlog');
+      if (index.project.backlog) ids.push('backlog');
       
       for (const id of ids) {
         if (!milestones[id]?.data && !milestones[id]?.loading) {
@@ -213,9 +213,8 @@ export function TaskflowView() {
         ) : (
           <>
             {/* Tree View: Global Backlog */}
-            {index.backlog ? (
-              <div className="milestone-node">
-                <button type="button" onClick={() => toggleMilestone('backlog')}>
+            {index.project.backlog ? (
+              <div className="milestone-node">                <button type="button" onClick={() => toggleMilestone('backlog')}>
                   <span>{milestones['backlog']?.expanded ? '▼' : '▶'}</span>
                   <strong>Backlog</strong>
                   <em>Global</em>

@@ -528,6 +528,30 @@ mod tests {
     }
 
     #[test]
+    fn test_index_contains_backlog() {
+        let (tmp, engine) = setup_engine();
+
+        // Manual override of index with backlog
+        let roadmap_dir = engine.storage().designs_dir().join("roadmap");
+        let index = ProjectIndex {
+            project: ProjectMeta {
+                name: "Test".to_string(),
+                current_milestone: 1,
+                backlog: Some("backlog.toml".to_string()),
+            },
+            milestones: HashMap::new(),
+        };
+        std::fs::write(
+            roadmap_dir.join("index.toml"),
+            toml::to_string(&index).unwrap(),
+        )
+        .unwrap();
+
+        let status = engine.get_status().unwrap();
+        assert_eq!(status.project.backlog, Some("backlog.toml".to_string()));
+    }
+
+    #[test]
     fn test_create_milestone() {
         let (_tmp, engine) = setup_engine();
         engine.create_milestone("10", "Initial", None).unwrap();

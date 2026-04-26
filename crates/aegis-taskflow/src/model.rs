@@ -56,13 +56,13 @@ impl Default for TaskType {
 pub struct ProjectIndex {
     pub project: ProjectMeta,
     pub milestones: HashMap<String, MilestoneRef>,
-    pub backlog: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProjectMeta {
     pub name: String,
     pub current_milestone: u32,
+    pub backlog: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

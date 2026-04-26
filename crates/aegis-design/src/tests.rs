@@ -14,9 +14,18 @@ fn simple_vars() -> HashMap<String, String> {
     m.insert("project_root".into(), "/tmp/project".into());
     m.insert("milestone_id".into(), "20".into());
     m.insert("milestone_name".into(), "Template Engine".into());
-    m.insert("lld_path".into(), "/tmp/project/.aegis/designs/lld/engine.md".into());
-    m.insert("bastion_agent_id".into(), "00000000-0000-0000-0000-000000000001".into());
-    m.insert("task_description".into(), "Implement TemplateRegistry".into());
+    m.insert(
+        "lld_path".into(),
+        "/tmp/project/.aegis/designs/lld/engine.md".into(),
+    );
+    m.insert(
+        "bastion_agent_id".into(),
+        "00000000-0000-0000-0000-000000000001".into(),
+    );
+    m.insert(
+        "task_description".into(),
+        "Implement TemplateRegistry".into(),
+    );
     m
 }
 
@@ -27,8 +36,14 @@ fn builtin_templates_load() {
     let dir = TempDir::new().unwrap();
     let reg = TemplateRegistry::load(dir.path());
     let names: Vec<_> = reg.list().iter().map(|t| t.name.as_str()).collect();
-    assert!(names.contains(&"taskflow-bastion"), "taskflow-bastion missing");
-    assert!(names.contains(&"taskflow-splinter"), "taskflow-splinter missing");
+    assert!(
+        names.contains(&"taskflow-bastion"),
+        "taskflow-bastion missing"
+    );
+    assert!(
+        names.contains(&"taskflow-splinter"),
+        "taskflow-splinter missing"
+    );
 }
 
 #[test]
