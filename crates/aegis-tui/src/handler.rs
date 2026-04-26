@@ -8,6 +8,7 @@ pub enum AppAction {
     Quit,
     SpawnAgent(String),
     KillAgent(Uuid),
+    AnswerClarification(Uuid, String),
     SwitchProject(std::path::PathBuf),
     None,
 }
@@ -34,6 +35,10 @@ fn handle_overlay(key_event: KeyEvent, app: &mut AppState) -> AppAction {
         } => handle_project_switcher(key_event, projects, selected_idx),
         Overlay::SpawnPrompt { input } => handle_spawn_prompt(key_event, input),
         Overlay::ConfirmKill { agent_id } => handle_confirm_kill(key_event, *agent_id),
+        Overlay::Clarification { request, input } => {
+            handle_clarification(key_event, request, input)
+        }
+        Overlay::AttachError { .. } => AppAction::None,
         Overlay::None => AppAction::None,
     };
 
@@ -97,6 +102,26 @@ fn handle_confirm_kill(key_event: KeyEvent, agent_id: Uuid) -> AppAction {
     }
 }
 
+fn handle_clarification(
+    key_event: KeyEvent,
+    request: &crate::client::ClarificationRequest,
+    input: &mut String,
+) -> AppAction {
+    match key_event.code {
+        KeyCode::Enter => AppAction::AnswerClarification(request.request_id, input.clone()),
+        KeyCode::Esc => AppAction::None,
+        KeyCode::Char(c) => {
+            input.push(c);
+            AppAction::None
+        }
+        KeyCode::Backspace => {
+            input.pop();
+            AppAction::None
+        }
+        _ => AppAction::None,
+    }
+}
+
 fn handle_normal_mode(key_event: KeyEvent, app: &mut AppState) -> AppAction {
     match key_event.code {
         KeyCode::Char('q') => AppAction::Quit,
@@ -123,8 +148,27 @@ fn handle_normal_mode(key_event: KeyEvent, app: &mut AppState) -> AppAction {
             }
             AppAction::None
         }
-        KeyCode::Char('i') => {
-            app.mode = PaneMode::Input;
+        KeyCode::Char('i') | KeyCode::Enter => {
+            if let Some(id) = app.selected_agent_id {
+                app.attached_agent_id = Some(id);
+                app.attached_interactive = true;
+                app.mode = PaneMode::Input;
+            }
+            AppAction::None
+        }
+        KeyCode::Char('r') => {
+            if let Some(id) = app.selected_agent_id {
+                if let Some(req) = app
+                    .pending_clarifications
+                    .iter()
+                    .find(|r| r.agent_id == id && r.status == "open")
+                {
+                    app.overlay = Overlay::Clarification {
+                        request: req.clone(),
+                        input: String::new(),
+                    };
+                }
+            }
             AppAction::None
         }
         KeyCode::Char(':') => {
@@ -163,6 +207,7 @@ fn handle_input_mode(key_event: KeyEvent, app: &mut AppState) -> AppAction {
     match key_event.code {
         KeyCode::Esc => {
             app.mode = PaneMode::Normal;
+            app.attached_interactive = false;
             AppAction::None
         }
         _ => AppAction::None,
@@ -226,15 +271,33 @@ mod tests {
     #[test]
     fn test_mode_switching() {
         let mut app = AppState::new(std::path::PathBuf::from("/tmp"));
+        let agent_id = Uuid::new_v4();
+        app.selected_agent_id = Some(agent_id);
 
         handle_key_events(key(KeyCode::Char('i')), &mut app);
         assert_eq!(app.mode, PaneMode::Input);
+        assert!(app.attached_interactive);
+        assert_eq!(app.attached_agent_id, Some(agent_id));
 
         handle_key_events(key(KeyCode::Esc), &mut app);
         assert_eq!(app.mode, PaneMode::Normal);
+        assert!(!app.attached_interactive);
 
         handle_key_events(key(KeyCode::Char(':')), &mut app);
         assert_eq!(app.mode, PaneMode::Command);
+    }
+
+    #[test]
+    fn test_attach_selection_marks_target() {
+        let mut app = AppState::new(std::path::PathBuf::from("/tmp"));
+        let agent_id = Uuid::new_v4();
+        app.selected_agent_id = Some(agent_id);
+
+        handle_key_events(key(KeyCode::Enter), &mut app);
+
+        assert_eq!(app.mode, PaneMode::Input);
+        assert_eq!(app.attached_agent_id, Some(agent_id));
+        assert!(app.attached_interactive);
     }
 
     #[test]

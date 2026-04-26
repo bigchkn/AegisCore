@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from 'react';
+import { useNavigate } from 'react-router-dom';
 
 import { failoverAgent, killAgent, pauseAgent, resumeAgent, spawnTask } from '../api/thunks';
 import { StatusBadge } from '../components/StatusBadge';
@@ -7,12 +8,23 @@ import { useAppDispatch, useAppSelector } from '../store/hooks';
 
 export function AgentsView() {
   const dispatch = useAppDispatch();
+  const navigate = useNavigate();
   const agents = useAppSelector((state) => state.agents.items);
   const loading = useAppSelector((state) => state.agents.loading);
   const activeProjectId = useAppSelector((state) => state.ui.activeProjectId);
   const [taskPrompt, setTaskPrompt] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [spawnError, setSpawnError] = useState<string | null>(null);
+
+  function attachAgent(agentId: string) {
+    if (!activeProjectId) {
+      return;
+    }
+
+    dispatch(setSelectedAgent(agentId));
+    dispatch(setActiveView('pane'));
+    navigate(`/projects/${activeProjectId}/pane`);
+  }
 
   async function handleSpawn(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -85,10 +97,7 @@ export function AgentsView() {
               {agents.map((agent) => (
                 <tr
                   key={agent.agent_id}
-                  onClick={() => {
-                    dispatch(setSelectedAgent(agent.agent_id));
-                    dispatch(setActiveView('pane'));
-                  }}
+                  onClick={() => attachAgent(agent.agent_id)}
                 >
                   <td>
                     <strong>{agent.name}</strong>
@@ -102,6 +111,12 @@ export function AgentsView() {
                   <td>{agent.task_id ?? 'none'}</td>
                   <td>
                     <div className="row-actions" onClick={(event) => event.stopPropagation()}>
+                      <button
+                        type="button"
+                        onClick={() => attachAgent(agent.agent_id)}
+                      >
+                        Attach
+                      </button>
                       <button
                         type="button"
                         onClick={() =>

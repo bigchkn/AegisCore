@@ -1,0 +1,46 @@
+id = 27
+name = "Agent Attach & Live Inspection"
+status = "done"
+lld = "hld/attach.md"
+
+[[tasks]]
+id = "27.6"
+uid = "92946be8-4e16-4c82-9a97-a7247c3a429e"
+task = "Implement web detach and reconnect handling for agent attach"
+task_type = "feature"
+status = "done"
+
+[[tasks]]
+id = "27.2"
+uid = "2afa8f2f-959c-4b36-8667-0cf0b7122def"
+task = "Wire TUI agent selection into interactive attach entry"
+task_type = "feature"
+status = "done"
+
+[[tasks]]
+id = "27.3"
+uid = "a741eacb-d78a-4e4d-8db7-4186b22615e0"
+task = "Implement TUI detach and recoverable attach failure handling"
+task_type = "feature"
+status = "done"
+
+[[tasks]]
+id = "27.4"
+uid = "b620e8ac-40bc-4066-b011-fba76ce2a487"
+task = "Define web attach state and route behavior"
+task_type = "feature"
+status = "done"
+
+[[tasks]]
+id = "27.1"
+uid = "bda24830-0b0a-46b7-9f0c-739041a8bc7a"
+task = "Define TUI attach state and interactive pane lifecycle"
+task_type = "feature"
+status = "done"
+
+[[tasks]]
+id = "27.5"
+uid = "e47eed39-1e52-4f8d-bd30-ab72e6f29cab"
+task = "Wire web agent selection into interactive pane attach"
+task_type = "feature"
+status = "done"

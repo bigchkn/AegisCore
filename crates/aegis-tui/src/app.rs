@@ -25,6 +25,14 @@ pub enum Overlay {
     ConfirmKill {
         agent_id: Uuid,
     },
+    Clarification {
+        request: crate::client::ClarificationRequest,
+        input: String,
+    },
+    AttachError {
+        agent_id: Uuid,
+        message: String,
+    },
 }
 
 pub struct AppState {
@@ -34,9 +42,13 @@ pub struct AppState {
     pub tasks: Vec<Task>,
     pub channels: Vec<ChannelRecord>,
     pub selected_agent_id: Option<Uuid>,
+    pub attached_agent_id: Option<Uuid>,
+    pub attached_interactive: bool,
+    pub attached_output: Vec<String>,
     pub mode: PaneMode,
     pub overlay: Overlay,
     pub logs: HashMap<Uuid, Vec<String>>,
+    pub pending_clarifications: Vec<crate::client::ClarificationRequest>,
     pub connection_status: ConnectionStatus,
 }
 
@@ -57,9 +69,13 @@ impl AppState {
             tasks: Vec::new(),
             channels: Vec::new(),
             selected_agent_id: None,
+            attached_agent_id: None,
+            attached_interactive: false,
+            attached_output: Vec::new(),
             mode: PaneMode::Normal,
             overlay: Overlay::None,
             logs: HashMap::new(),
+            pending_clarifications: Vec::new(),
             connection_status: ConnectionStatus::Disconnected,
         }
     }
@@ -84,6 +100,11 @@ impl AppState {
             AegisEvent::AgentTerminated { agent_id, .. } => {
                 if let Some(agent) = self.agents.get_mut(&agent_id) {
                     agent.status = AgentStatus::Terminated;
+                }
+                if self.attached_agent_id == Some(agent_id) {
+                    self.attached_agent_id = None;
+                    self.attached_interactive = false;
+                    self.mode = PaneMode::Normal;
                 }
             }
             AegisEvent::TaskAssigned { task_id, agent_id } => {

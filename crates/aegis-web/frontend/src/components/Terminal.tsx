@@ -7,9 +7,18 @@ type PaneMessage =
   | { type: 'output'; data: string }
   | { type: 'resize'; cols: number; rows: number };
 
-export function Terminal({ agentId }: { agentId: string }) {
+export type TerminalStatus = 'connecting' | 'connected' | 'reconnecting' | 'disconnected';
+
+export function Terminal({
+  agentId,
+  onStatusChange,
+}: {
+  agentId: string;
+  onStatusChange?: (status: TerminalStatus) => void;
+}) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const socketRef = useRef<WebSocket | null>(null);
+  const reconnectTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
     if (!containerRef.current) {
@@ -31,22 +40,54 @@ export function Terminal({ agentId }: { agentId: string }) {
     terminal.open(containerRef.current);
     fitAddon.fit();
 
-    const socket = new WebSocket(wsUrl(`/ws/pane/${agentId}`));
-    socketRef.current = socket;
+    let active = true;
 
-    socket.onopen = () => {
-      sendResize(socket, terminal.cols, terminal.rows);
-    };
-
-    socket.onmessage = (event) => {
-      const message = JSON.parse(event.data) as PaneMessage;
-      if (message.type === 'output') {
-        terminal.write(base64ToBytes(message.data));
+    const connect = () => {
+      if (!active) {
+        return;
       }
+
+      onStatusChange?.(socketRef.current ? 'reconnecting' : 'connecting');
+      const socket = new WebSocket(wsUrl(`/ws/pane/${agentId}`));
+      socketRef.current = socket;
+
+      socket.onopen = () => {
+        if (!active) {
+          socket.close();
+          return;
+        }
+        onStatusChange?.('connected');
+        sendResize(socket, terminal.cols, terminal.rows);
+      };
+
+      socket.onmessage = (event) => {
+        const message = JSON.parse(event.data) as PaneMessage;
+        if (message.type === 'output') {
+          terminal.write(base64ToBytes(message.data));
+        }
+      };
+
+      socket.onclose = () => {
+        if (!active) {
+          return;
+        }
+        onStatusChange?.('reconnecting');
+        reconnectTimerRef.current = window.setTimeout(connect, 1000);
+      };
+
+      socket.onerror = () => {
+        if (!active) {
+          return;
+        }
+        onStatusChange?.('disconnected');
+      };
     };
+
+    connect();
 
     const dataSubscription = terminal.onData((data) => {
-      if (socket.readyState === WebSocket.OPEN) {
+      const socket = socketRef.current;
+      if (socket && socket.readyState === WebSocket.OPEN) {
         socket.send(
           JSON.stringify({
             type: 'input',
@@ -58,7 +99,8 @@ export function Terminal({ agentId }: { agentId: string }) {
 
     const onResize = () => {
       fitAddon.fit();
-      if (socket.readyState === WebSocket.OPEN) {
+      const socket = socketRef.current;
+      if (socket && socket.readyState === WebSocket.OPEN) {
         sendResize(socket, terminal.cols, terminal.rows);
       }
     };
@@ -66,13 +108,18 @@ export function Terminal({ agentId }: { agentId: string }) {
     window.addEventListener('resize', onResize);
 
     return () => {
+      active = false;
       window.removeEventListener('resize', onResize);
       dataSubscription.dispose();
-      socket.close();
+      if (reconnectTimerRef.current !== null) {
+        window.clearTimeout(reconnectTimerRef.current);
+      }
+      socketRef.current?.close();
       terminal.dispose();
       socketRef.current = null;
+      onStatusChange?.('disconnected');
     };
-  }, [agentId]);
+  }, [agentId, onStatusChange]);
 
   return <div ref={containerRef} className="terminal-root" />;
 }

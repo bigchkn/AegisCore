@@ -4,6 +4,7 @@ use ratatui::{
     widgets::{Block, Borders, Clear, List, ListItem, Paragraph, Wrap},
     Frame,
 };
+use uuid::Uuid;
 
 use crate::app::{AppState, ConnectionStatus, Overlay, PaneMode};
 use crate::client::ProjectRecord;
@@ -83,14 +84,37 @@ fn render_left_sidebar(app: &AppState, frame: &mut Frame, area: Rect) {
     let agents: Vec<ListItem> = agents_vec
         .iter()
         .map(|a| {
-            let style = if Some(a.agent_id) == app.selected_agent_id {
+            let style = if Some(a.agent_id) == app.attached_agent_id {
+                Style::default()
+                    .fg(Color::LightGreen)
+                    .add_modifier(Modifier::BOLD)
+            } else if Some(a.agent_id) == app.selected_agent_id {
                 Style::default()
                     .fg(Color::Yellow)
                     .add_modifier(Modifier::BOLD)
             } else {
                 Style::default().fg(Color::White)
             };
-            ListItem::new(format!("[{:?}] {}", a.status, a.name)).style(style)
+
+            let mut label = format!("[{:?}] {}", a.status, a.name);
+            if Some(a.agent_id) == app.attached_agent_id {
+                label.push_str(" [ATTACHED]");
+            }
+            if app
+                .pending_clarifications
+                .iter()
+                .any(|r| r.agent_id == a.agent_id && r.status == "open")
+            {
+                label.push_str(" [?]");
+                if Some(a.agent_id) == app.selected_agent_id {
+                    // Make it stand out if selected
+                    ListItem::new(label).style(style.fg(Color::LightRed))
+                } else {
+                    ListItem::new(label).style(style.fg(Color::Yellow))
+                }
+            } else {
+                ListItem::new(label).style(style)
+            }
         })
         .collect();
 
@@ -113,9 +137,24 @@ fn render_left_sidebar(app: &AppState, frame: &mut Frame, area: Rect) {
 fn render_center_panel(app: &mut AppState, frame: &mut Frame, area: Rect) {
     match app.mode {
         PaneMode::Input => {
-            let terminal = Block::default()
-                .borders(Borders::ALL)
-                .title(" Terminal (INTERACTIVE) ");
+            let terminal_text = if let Some(agent_id) = app.attached_agent_id {
+                let transcript = if app.attached_output.is_empty() {
+                    "Waiting for live pane output...".to_string()
+                } else {
+                    app.attached_output.join("")
+                };
+                format!(" Attached to {}\n\n{}", agent_id, transcript)
+            } else {
+                " Interactive attach requested, waiting for target... ".to_string()
+            };
+
+            let terminal = Paragraph::new(terminal_text)
+                .block(
+                    Block::default()
+                        .borders(Borders::ALL)
+                        .title(" Terminal (INTERACTIVE) "),
+                )
+                .wrap(Wrap { trim: false });
             frame.render_widget(terminal, area);
         }
         _ => {
@@ -179,6 +218,12 @@ fn render_overlay(app: &AppState, frame: &mut Frame) {
         } => render_project_switcher_overlay(frame, area, projects, *selected_idx),
         Overlay::SpawnPrompt { input } => render_spawn_overlay(frame, area, input),
         Overlay::ConfirmKill { agent_id } => render_kill_overlay(frame, area, *agent_id, app),
+        Overlay::Clarification { request, input } => {
+            render_clarification_overlay(frame, area, request, input)
+        }
+        Overlay::AttachError { agent_id, message } => {
+            render_attach_error_overlay(frame, area, *agent_id, message)
+        }
         Overlay::None => {}
     }
 }
@@ -220,7 +265,7 @@ fn render_help_overlay(frame: &mut Frame, area: Rect) {
   [p]       Project Switcher
   [s]       Spawn new Splinter agent
   [x]       Kill selected agent
-  [i]       Enter interactive terminal mode
+  [i]/[Enter] Enter interactive terminal mode
   [j/k]     Navigate agent list
   [:]       Enter command mode
   [?]       This help screen
@@ -313,6 +358,72 @@ fn render_kill_overlay(frame: &mut Frame, area: Rect, agent_id: uuid::Uuid, app:
             Block::default()
                 .borders(Borders::ALL)
                 .title(" Confirm Kill "),
+        )
+        .style(Style::default().fg(Color::Red));
+    frame.render_widget(para, area);
+}
+
+fn render_clarification_overlay(
+    frame: &mut Frame,
+    area: Rect,
+    request: &crate::client::ClarificationRequest,
+    input: &str,
+) {
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(1), // Title
+            Constraint::Min(3),    // Question
+            Constraint::Length(1), // Prompt
+            Constraint::Min(3),    // Input
+            Constraint::Length(1), // Footer
+        ])
+        .split(area);
+
+    let title = Paragraph::new(format!(" CLARIFICATION REQUEST [P{}] ", request.priority)).style(
+        Style::default()
+            .fg(Color::Yellow)
+            .add_modifier(Modifier::BOLD),
+    );
+    frame.render_widget(title, chunks[0]);
+
+    let question = Paragraph::new(format!("\n{}", request.question))
+        .block(Block::default().borders(Borders::NONE))
+        .wrap(Wrap { trim: false })
+        .style(Style::default().fg(Color::White));
+    frame.render_widget(question, chunks[1]);
+
+    let prompt = Paragraph::new(" Your Answer: ").style(
+        Style::default()
+            .fg(Color::Cyan)
+            .add_modifier(Modifier::BOLD),
+    );
+    frame.render_widget(prompt, chunks[2]);
+
+    let input_field = Paragraph::new(input)
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(Color::Cyan)),
+        )
+        .wrap(Wrap { trim: false });
+    frame.render_widget(input_field, chunks[3]);
+
+    let footer = Paragraph::new(" [Enter] Submit | [Esc] Cancel ")
+        .style(Style::default().fg(Color::DarkGray));
+    frame.render_widget(footer, chunks[4]);
+}
+
+fn render_attach_error_overlay(frame: &mut Frame, area: Rect, agent_id: Uuid, message: &str) {
+    let text = format!(
+        "\n  Attach failed for {}\n\n  {}\n\n  [Esc] Dismiss",
+        agent_id, message
+    );
+    let para = Paragraph::new(text)
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .title(" Attach Error "),
         )
         .style(Style::default().fg(Color::Red));
     frame.render_widget(para, area);
