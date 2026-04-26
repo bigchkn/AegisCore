@@ -1,6 +1,6 @@
 id = 22
 name = "Agent Design — Taskflow Template Suite"
-status = "in-progress"
+status = "done"
 
 [[tasks]]
 id = "22.1"
@@ -42,4 +42,4 @@ id = "22.6"
 uid = "671a82fc-e40a-4bc6-ac0f-d77ff2ca33c8"
 task = "Integration tests for full bastion-splinter coordination loop (requires M23)"
 task_type = "feature"
-status = "pending"
+status = "done"

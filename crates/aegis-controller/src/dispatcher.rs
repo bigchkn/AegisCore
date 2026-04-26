@@ -976,6 +976,97 @@ mod tests {
         assert!(agent.worktree_path.exists());
     }
 
+    // M22.6: bastion-splinter coordination loop integration test.
+    // Verifies that the full messaging protocol between a template-spawned bastion
+    // and splinter works end-to-end using the M23 messaging infrastructure.
+    #[tokio::test]
+    async fn bastion_splinter_coordination_loop() {
+        use aegis_core::{MessageType, SandboxNetworkPolicy};
+        use aegis_design::{RenderedTemplate, TemplateKind};
+        use crate::messaging::MessageRouter;
+
+        let (dispatcher, dir) = dispatcher();
+        let storage = Arc::new(ProjectStorage::new(dir.path().to_path_buf()));
+        let registry = Arc::clone(&dispatcher.registry);
+        let router = MessageRouter::new(registry.clone(), storage, None);
+
+        // 1. Spawn bastion from taskflow-bastion template.
+        let bastion_rendered = RenderedTemplate {
+            name: "taskflow-bastion".into(),
+            kind: TemplateKind::Bastion,
+            role: "taskflow-coordinator".into(),
+            cli_provider: "claude-code".into(),
+            model: None,
+            auto_cleanup: false,
+            fallback_cascade: vec![],
+            sandbox_network: SandboxNetworkPolicy::OutboundOnly,
+            system_prompt: "You are the coordinator.".into(),
+            startup: Some("Begin driving the milestone.".into()),
+        };
+        let bastion = dispatcher.spawn_from_template(&bastion_rendered).await.unwrap();
+        assert_eq!(bastion.kind, AgentKind::Bastion);
+
+        // 2. Spawn splinter from taskflow-splinter template (with bastion_agent_id known).
+        let splinter_rendered = RenderedTemplate {
+            name: "taskflow-splinter".into(),
+            kind: TemplateKind::Splinter,
+            role: "taskflow-implementer".into(),
+            cli_provider: "claude-code".into(),
+            model: None,
+            auto_cleanup: true,
+            fallback_cascade: vec![],
+            sandbox_network: SandboxNetworkPolicy::OutboundOnly,
+            system_prompt: format!("You implement task X. Report to {}.", bastion.agent_id),
+            startup: Some("Check inbox then implement.".into()),
+        };
+        let splinter = dispatcher.spawn_from_template(&splinter_rendered).await.unwrap();
+        assert_eq!(splinter.kind, AgentKind::Splinter);
+
+        // 3. Bastion sends a `task` message to the splinter.
+        let receipt = router
+            .send(
+                Some(bastion.agent_id),
+                &splinter.agent_id.to_string(),
+                MessageType::Task,
+                serde_json::json!({
+                    "lld_path": "/tmp/project/.aegis/designs/lld/engine.md",
+                    "task_id": "20.1",
+                    "acceptance_criteria": "Scaffold the aegis-design crate"
+                }),
+            )
+            .await
+            .unwrap();
+        assert_eq!(receipt.to_agent_id, splinter.agent_id);
+
+        // 4. Splinter reads its inbox and sees the task message.
+        let splinter_inbox = router.inbox(&splinter.agent_id.to_string()).unwrap();
+        assert_eq!(splinter_inbox.messages.len(), 1);
+        assert_eq!(splinter_inbox.messages[0].kind, MessageType::Task);
+
+        // 5. Splinter sends a `notification` (done) back to the bastion.
+        router
+            .send(
+                Some(splinter.agent_id),
+                &bastion.agent_id.to_string(),
+                MessageType::Notification,
+                serde_json::json!({
+                    "status": "done",
+                    "task_id": "20.1",
+                    "summary": "Scaffolded aegis-design crate with template engine"
+                }),
+            )
+            .await
+            .unwrap();
+
+        // 6. Bastion reads its inbox and sees the completion notification.
+        let bastion_inbox = router.inbox(&bastion.agent_id.to_string()).unwrap();
+        assert_eq!(bastion_inbox.messages.len(), 1);
+        assert_eq!(bastion_inbox.messages[0].kind, MessageType::Notification);
+        let payload = &bastion_inbox.messages[0].payload;
+        assert_eq!(payload["status"].as_str().unwrap(), "done");
+        assert_eq!(payload["task_id"].as_str().unwrap(), "20.1");
+    }
+
     #[tokio::test]
     async fn spawn_from_template_creates_active_bastion() {
         use aegis_design::{RenderedTemplate, TemplateKind};
