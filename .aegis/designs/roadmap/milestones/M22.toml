@@ -1,4 +1,45 @@
 id = 22
 name = "Agent Design — Taskflow Template Suite"
 status = "pending"
-tasks = []
+
+[[tasks]]
+id = "22.1"
+uid = "c174545c-00c2-4f88-80cb-6323387884d9"
+task = "Write taskflow-bastion template.toml and system_prompt.md"
+task_type = "feature"
+status = "pending"
+
+[[tasks]]
+id = "22.2"
+uid = "cd026692-d783-4388-8484-b39a7cee21ae"
+task = "Write taskflow-bastion startup.md (coordinator loop with messaging)"
+task_type = "feature"
+status = "pending"
+
+[[tasks]]
+id = "22.3"
+uid = "d2a9b639-78e0-411a-bf37-48f6fb959656"
+task = "Write taskflow-splinter template.toml and system_prompt.md"
+task_type = "feature"
+status = "pending"
+
+[[tasks]]
+id = "22.4"
+uid = "fa4741d1-6f8b-48db-9e7d-8641e065bbce"
+task = "Write taskflow-splinter startup.md (inbox check + completion notification)"
+task_type = "feature"
+status = "pending"
+
+[[tasks]]
+id = "22.5"
+uid = "223c29e3-f3ae-419c-832d-a795ba0dd779"
+task = "Implement bastion_agent_id dynamic resolution in BootstrapContext at splinter spawn time"
+task_type = "feature"
+status = "pending"
+
+[[tasks]]
+id = "22.6"
+uid = "671a82fc-e40a-4bc6-ac0f-d77ff2ca33c8"
+task = "Integration tests for full bastion-splinter coordination loop (requires M23)"
+task_type = "feature"
+status = "pending"
