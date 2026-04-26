@@ -1,4 +1,52 @@
 id = 21
 name = "Agent Design — Bootstrap Integration"
 status = "pending"
-tasks = []
+
+[[tasks]]
+id = "21.1"
+uid = "cd1a5709-d271-49a3-99fd-bce4f3b93502"
+task = "Add Dispatcher::spawn_from_template and RenderedTemplate-to-AgentSpec conversion"
+task_type = "feature"
+status = "pending"
+
+[[tasks]]
+id = "21.2"
+uid = "23038e99-1f36-4573-9422-ba296ff9ed12"
+task = "Implement aegis design list and aegis design show commands"
+task_type = "feature"
+status = "pending"
+
+[[tasks]]
+id = "21.3"
+uid = "1f3dcb32-3be4-493e-9377-d6d952755ab8"
+task = "Implement aegis design spawn command with --milestone, --model, --var flags"
+task_type = "feature"
+status = "pending"
+
+[[tasks]]
+id = "21.4"
+uid = "843d0f09-9520-477f-a154-6c5886b32f6d"
+task = "Implement aegis design apply command (render template to aegis.toml agent block)"
+task_type = "feature"
+status = "pending"
+
+[[tasks]]
+id = "21.5"
+uid = "29339bfa-de27-4b5f-932a-4b91a92b0ad7"
+task = "Implement aegis design new scaffold command"
+task_type = "feature"
+status = "pending"
+
+[[tasks]]
+id = "21.6"
+uid = "ff13e422-f301-4ace-b7aa-2d178cc188e6"
+task = "Remove hardcoded taskflow_snippet from Dispatcher::build_spawn_plan"
+task_type = "feature"
+status = "pending"
+
+[[tasks]]
+id = "21.7"
+uid = "fdc17992-4d13-471c-9d3f-362b45f41946"
+task = "Tests: spawn_from_template, apply TOML output, list/show output"
+task_type = "feature"
+status = "pending"

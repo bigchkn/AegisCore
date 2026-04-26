@@ -66,16 +66,16 @@ impl TaskflowEngine {
         }
 
         let index = self.get_status()?;
-        let full_id = if milestone_id.starts_with('M') || milestone_id.chars().all(|c| c.is_numeric())
-        {
-            if milestone_id.starts_with('M') {
-                milestone_id.to_string()
+        let full_id =
+            if milestone_id.starts_with('M') || milestone_id.chars().all(|c| c.is_numeric()) {
+                if milestone_id.starts_with('M') {
+                    milestone_id.to_string()
+                } else {
+                    format!("M{}", milestone_id)
+                }
             } else {
-                format!("M{}", milestone_id)
-            }
-        } else {
-            milestone_id.to_string()
-        };
+                milestone_id.to_string()
+            };
 
         let m_ref = index.milestones.get(&full_id).ok_or_else(|| {
             aegis_core::error::AegisError::ConfigValidation {
@@ -339,12 +339,14 @@ impl TaskflowEngine {
                 .designs_dir()
                 .join("roadmap")
                 .join("backlog.toml");
-            
+
             // Create directory if it doesn't exist
             if let Some(parent) = backlog_path.parent() {
-                std::fs::create_dir_all(parent).map_err(|e| aegis_core::error::AegisError::StorageIo {
-                    path: parent.to_path_buf(),
-                    source: e,
+                std::fs::create_dir_all(parent).map_err(|e| {
+                    aegis_core::error::AegisError::StorageIo {
+                        path: parent.to_path_buf(),
+                        source: e,
+                    }
                 })?;
             }
 
@@ -512,7 +514,8 @@ mod tests {
                 name: "Test".to_string(),
                 current_milestone: 1,
             },
-            milestones: HashMap::new(), backlog: None,
+            milestones: HashMap::new(),
+            backlog: None,
         };
         std::fs::write(
             roadmap_dir.join("index.toml"),
@@ -540,7 +543,9 @@ mod tests {
     fn test_add_task() {
         let (_tmp, engine) = setup_engine();
         engine.create_milestone("10", "Initial", None).unwrap();
-        engine.add_task("M10", "10.1", "First task", crate::model::TaskType::Feature).unwrap();
+        engine
+            .add_task("M10", "10.1", "First task", crate::model::TaskType::Feature)
+            .unwrap();
 
         let m = engine.get_milestone("M10").unwrap();
         assert_eq!(m.tasks.len(), 1);
@@ -552,7 +557,9 @@ mod tests {
     fn test_sync_updates_status() {
         let (_tmp, engine) = setup_engine();
         engine.create_milestone("1", "M1", None).unwrap();
-        engine.add_task("M1", "1.1", "Task 1", crate::model::TaskType::Feature).unwrap();
+        engine
+            .add_task("M1", "1.1", "Task 1", crate::model::TaskType::Feature)
+            .unwrap();
 
         let task_uuid = Uuid::new_v4();
         engine
@@ -584,7 +591,14 @@ mod tests {
     fn test_set_task_status_updates_milestone_and_index() {
         let (_tmp, engine) = setup_engine();
         engine.create_milestone("15", "Web", None).unwrap();
-        engine.add_task("M15", "15.1", "Spawn agent", crate::model::TaskType::Feature).unwrap();
+        engine
+            .add_task(
+                "M15",
+                "15.1",
+                "Spawn agent",
+                crate::model::TaskType::Feature,
+            )
+            .unwrap();
 
         engine.set_task_status("15", "15.1", "done").unwrap();
 

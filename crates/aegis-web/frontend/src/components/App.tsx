@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { Routes, Route, Navigate, useLocation, useParams } from 'react-router-dom';
 
 import { fetchProjectData, fetchProjects } from '../api/thunks';
 import { setActiveProject } from '../store/uiSlice';
@@ -13,12 +14,18 @@ import { Sidebar } from './Sidebar';
 
 export function App() {
   const dispatch = useAppDispatch();
+  const location = useLocation();
   const activeProjectId = useAppSelector((state) => state.ui.activeProjectId);
-  const activeView = useAppSelector((state) => state.ui.activeView);
   const connectionState = useAppSelector((state) => state.ui.connectionState);
   const error = useAppSelector((state) => state.ui.error);
   const projects = useAppSelector((state) => state.projects.items);
   const activeProject = projects.find((project) => project.id === activeProjectId);
+
+  // Derive active view from path for the title
+  const pathParts = location.pathname.split('/').filter(Boolean);
+  // /projects/:id/:view -> parts are ["projects", ":id", ":view"]
+  // /:view -> parts are [":view"]
+  const activeViewPath = pathParts.includes('projects') ? pathParts[2] : pathParts[0] || 'agents';
 
   useEffect(() => {
     void dispatch(fetchProjects());
@@ -31,10 +38,10 @@ export function App() {
   }, [activeProjectId, dispatch]);
 
   useEffect(() => {
-    if (!activeProjectId && projects.length > 0) {
+    if (!activeProjectId && projects.length > 0 && !location.pathname.includes('/projects/')) {
       dispatch(setActiveProject(projects[0].id));
     }
-  }, [activeProjectId, dispatch, projects]);
+  }, [activeProjectId, dispatch, projects, location.pathname]);
 
   return (
     <main className="app-shell">
@@ -42,20 +49,60 @@ export function App() {
       <section className="workspace">
         <header className="topbar">
           <div>
-            <h1>{titleForView(activeView)}</h1>
+            <h1>{titleForView(activeViewPath)}</h1>
             <p>{activeProject ? activeProject.root_path : 'No active project'}</p>
           </div>
           <span className="connection-pill">{connectionState}</span>
         </header>
         {error ? <div className="banner">{error}</div> : null}
-        {activeView === 'pane' ? <PaneView /> : null}
-        {activeView === 'logs' ? <LogView /> : null}
-        {activeView === 'tasks' ? <TasksView /> : null}
-        {activeView === 'channels' ? <ChannelsView /> : null}
-        {activeView === 'taskflow' ? <TaskflowView /> : null}
-        {activeView === 'agents' ? <AgentsView /> : null}
+        
+        <Routes>
+          <Route path="/" element={<ProjectRedirect projects={projects} />} />
+          <Route path="/projects/:projectId/*" element={<ProjectRoutes />} />
+          
+          {/* Legacy/Direct routes */}
+          <Route path="/agents" element={<AgentsView />} />
+          <Route path="/pane" element={<PaneView />} />
+          <Route path="/logs" element={<LogView />} />
+          <Route path="/tasks" element={<TasksView />} />
+          <Route path="/channels" element={<ChannelsView />} />
+          <Route path="/taskflow" element={<TaskflowView />} />
+          
+          <Route path="*" element={<Navigate to="/agents" replace />} />
+        </Routes>
       </section>
     </main>
+  );
+}
+
+function ProjectRedirect({ projects }: { projects: any[] }) {
+  if (projects.length > 0) {
+    return <Navigate to={`/projects/${projects[0].id}/agents`} replace />;
+  }
+  return <Navigate to="/agents" replace />;
+}
+
+function ProjectRoutes() {
+  const { projectId } = useParams();
+  const dispatch = useAppDispatch();
+  const activeProjectId = useAppSelector((state) => state.ui.activeProjectId);
+
+  useEffect(() => {
+    if (projectId && projectId !== activeProjectId) {
+      dispatch(setActiveProject(projectId));
+    }
+  }, [projectId, activeProjectId, dispatch]);
+
+  return (
+    <Routes>
+      <Route path="agents" element={<AgentsView />} />
+      <Route path="pane" element={<PaneView />} />
+      <Route path="logs" element={<LogView />} />
+      <Route path="tasks" element={<TasksView />} />
+      <Route path="channels" element={<ChannelsView />} />
+      <Route path="taskflow" element={<TaskflowView />} />
+      <Route path="*" element={<Navigate to="agents" replace />} />
+    </Routes>
   );
 }
 
@@ -71,6 +118,7 @@ function titleForView(view: string) {
       return 'Channels';
     case 'taskflow':
       return 'Taskflow';
+    case 'agents':
     default:
       return 'Agents';
   }

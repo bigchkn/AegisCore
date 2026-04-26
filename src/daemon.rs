@@ -48,21 +48,19 @@ async fn main() -> Result<()> {
 
     let file_layer = log_file.map(|f| {
         let writer = std::sync::Arc::new(f);
-        fmt::layer()
-            .with_ansi(false)
-            .with_writer(move || {
-                use std::io::Write;
-                struct MutexWriter(std::sync::Arc<std::sync::Mutex<std::fs::File>>);
-                impl Write for MutexWriter {
-                    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-                        self.0.lock().unwrap().write(buf)
-                    }
-                    fn flush(&mut self) -> std::io::Result<()> {
-                        self.0.lock().unwrap().flush()
-                    }
+        fmt::layer().with_ansi(false).with_writer(move || {
+            use std::io::Write;
+            struct MutexWriter(std::sync::Arc<std::sync::Mutex<std::fs::File>>);
+            impl Write for MutexWriter {
+                fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+                    self.0.lock().unwrap().write(buf)
                 }
-                MutexWriter(std::sync::Arc::clone(&writer))
-            })
+                fn flush(&mut self) -> std::io::Result<()> {
+                    self.0.lock().unwrap().flush()
+                }
+            }
+            MutexWriter(std::sync::Arc::clone(&writer))
+        })
     });
 
     tracing_subscriber::registry()

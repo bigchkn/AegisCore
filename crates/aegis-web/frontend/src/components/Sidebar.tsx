@@ -1,5 +1,5 @@
-import { setActiveProject, setActiveView } from '../store/uiSlice';
-import { useAppDispatch, useAppSelector } from '../store/hooks';
+import { NavLink } from 'react-router-dom';
+import { useAppSelector } from '../store/hooks';
 import type { ActiveView } from '../store/domain';
 
 const navItems: Array<{ id: ActiveView; label: string }> = [
@@ -12,15 +12,15 @@ const navItems: Array<{ id: ActiveView; label: string }> = [
 ];
 
 export function Sidebar() {
-  const dispatch = useAppDispatch();
   const projects = useAppSelector((state) => state.projects.items);
   const projectsLoading = useAppSelector((state) => state.projects.loading);
   const activeProjectId = useAppSelector((state) => state.ui.activeProjectId);
-  const activeView = useAppSelector((state) => state.ui.activeView);
-
-  const selectProject = (projectId: string) => {
-    dispatch(setActiveProject(projectId));
-  };
+  const activeView = useAppSelector((state) => {
+    // We still use the location in App, but for sidebar highlighting 
+    // it's easier to keep the pattern consistent if we had one.
+    // For now, we'll let NavLink handle its own active state.
+    return state.ui.activeView;
+  });
 
   return (
     <aside className="sidebar">
@@ -34,14 +34,15 @@ export function Sidebar() {
         <div className="project-list">
           {projectsLoading ? <span className="muted">Loading projects</span> : null}
           {projects.map((project) => (
-            <button
+            <NavLink
               key={project.id}
-              type="button"
-              className={project.id === activeProjectId ? 'nav-button is-active' : 'nav-button'}
-              onClick={() => selectProject(project.id)}
+              to={`/projects/${project.id}/agents`}
+              className={({ isActive }) => 
+                isActive || project.id === activeProjectId ? 'nav-button is-active' : 'nav-button'
+              }
             >
               <span>{projectName(project.root_path)}</span>
-            </button>
+            </NavLink>
           ))}
           {!projectsLoading && projects.length === 0 ? (
             <span className="muted">No registered projects</span>
@@ -52,14 +53,13 @@ export function Sidebar() {
       <nav className="sidebar-section">
         <h2>Views</h2>
         {navItems.map((item) => (
-          <button
+          <NavLink
             key={item.id}
-            type="button"
-            className={item.id === activeView ? 'nav-button is-active' : 'nav-button'}
-            onClick={() => dispatch(setActiveView(item.id))}
+            to={activeProjectId ? `/projects/${activeProjectId}/${item.id}` : `/${item.id}`}
+            className={({ isActive }) => isActive ? 'nav-button is-active' : 'nav-button'}
           >
             <span>{item.label}</span>
-          </button>
+          </NavLink>
         ))}
       </nav>
     </aside>

@@ -27,7 +27,12 @@ impl Provider for GenericProvider {
         &self.user_config
     }
 
-    fn spawn_command(&self, worktree: &Path, session: Option<&SessionRef>, model_override: Option<&str>) -> Command {
+    fn spawn_command(
+        &self,
+        worktree: &Path,
+        session: Option<&SessionRef>,
+        model_override: Option<&str>,
+    ) -> Command {
         let mut cmd = Command::new(&self.user_config.binary);
         cmd.current_dir(worktree);
 

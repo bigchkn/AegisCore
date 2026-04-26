@@ -114,7 +114,8 @@ impl Dispatcher {
         let log_path = self.storage.agent_log_path(agent_id);
 
         let provider = self.providers.get(&spec.cli_provider)?;
-        let provider_command = provider.spawn_command(&worktree_path, None, spec.model_override.as_deref());
+        let provider_command =
+            provider.spawn_command(&worktree_path, None, spec.model_override.as_deref());
 
         // Auto-add the provider binary's parent directory to sandbox exec paths so the
         // binary can be launched regardless of where the user installed it.

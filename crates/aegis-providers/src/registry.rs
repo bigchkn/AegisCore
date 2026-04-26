@@ -220,7 +220,10 @@ mod tests {
         // extra_args must appear before auto_approve_flags
         let verbose_pos = args.iter().position(|a| *a == "--verbose").unwrap();
         let yolo_pos = args.iter().position(|a| *a == "--yolo").unwrap();
-        assert!(verbose_pos < yolo_pos, "extra_args must precede auto_approve_flags");
+        assert!(
+            verbose_pos < yolo_pos,
+            "extra_args must precede auto_approve_flags"
+        );
         assert!(args.contains(&"--debug"));
     }
 
@@ -241,7 +244,11 @@ mod tests {
         let args: Vec<_> = cmd.get_args().map(|a| a.to_str().unwrap()).collect();
 
         let flag_pos = args.iter().position(|a| *a == "--model").unwrap();
-        assert_eq!(args[flag_pos + 1], "claude-opus-4-7", "override must win over provider config");
+        assert_eq!(
+            args[flag_pos + 1],
+            "claude-opus-4-7",
+            "override must win over provider config"
+        );
         // ensure --model appears only once
         assert_eq!(args.iter().filter(|a| **a == "--model").count(), 1);
     }
@@ -252,6 +259,9 @@ mod tests {
         let cmd = provider.spawn_command(&PathBuf::from("/tmp"), None, None);
         let args: Vec<_> = cmd.get_args().map(|a| a.to_str().unwrap()).collect();
 
-        assert!(!args.contains(&"--model"), "no --model flag when no model is set");
+        assert!(
+            !args.contains(&"--model"),
+            "no --model flag when no model is set"
+        );
     }
 }
