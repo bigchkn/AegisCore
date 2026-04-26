@@ -2,17 +2,13 @@
 name = "AegisCore"
 current_milestone = 13
 
-[milestones.M20]
-path = "milestones/M20.toml"
-status = "pending"
-
-[milestones.M14]
-path = "milestones/M14.toml"
-status = "pending"
-
 [milestones.M19]
 path = "milestones/M19.toml"
 status = "in-progress"
+
+[milestones.M18]
+path = "milestones/M18.toml"
+status = "done"
 
 [milestones.M22]
 path = "milestones/M22.toml"
@@ -26,17 +22,25 @@ status = "in-progress"
 path = "milestones/M12.toml"
 status = "in-progress"
 
-[milestones.M18]
-path = "milestones/M18.toml"
-status = "done"
-
 [milestones.M23]
 path = "milestones/M23.toml"
+status = "done"
+
+[milestones.M20]
+path = "milestones/M20.toml"
 status = "pending"
 
 [milestones.M11]
 path = "milestones/M11.toml"
 status = "done"
+
+[milestones.M17]
+path = "milestones/M17.toml"
+status = "done"
+
+[milestones.M14]
+path = "milestones/M14.toml"
+status = "pending"
 
 [milestones.M21]
 path = "milestones/M21.toml"
@@ -44,8 +48,4 @@ status = "pending"
 
 [milestones.M15]
 path = "milestones/M15.toml"
-status = "done"
-
-[milestones.M17]
-path = "milestones/M17.toml"
 status = "done"

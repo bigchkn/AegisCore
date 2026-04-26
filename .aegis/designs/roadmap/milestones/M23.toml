@@ -1,6 +1,6 @@
 id = 23
 name = "Agent-to-Agent Messaging"
-status = "pending"
+status = "done"
 lld = "lld/messaging.md"
 
 [[tasks]]
@@ -8,4 +8,4 @@ id = "23.1"
 uid = "1941daa3-79a5-4466-ae69-c44e243d50a3"
 task = "Write lld/messaging.md for agent-to-agent messaging path"
 task_type = "feature"
-status = "pending"
+status = "done"
