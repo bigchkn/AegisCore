@@ -79,6 +79,8 @@ pub struct Milestone {
     pub name: String,
     pub status: String,
     pub lld: Option<String>,
+    #[serde(default)]
+    pub depends_on: Vec<String>,
     pub tasks: Vec<ProjectTask>,
 }
 

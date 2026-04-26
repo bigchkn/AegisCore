@@ -296,6 +296,8 @@ enum TaskflowCommands {
         task_id: String,
         status: String,
     },
+    /// Show the next milestone to work on (greedy topological order)
+    Next,
 }
 
 #[derive(Subcommand)]
@@ -649,6 +651,9 @@ async fn dispatch(cli: Cli, printer: &Printer, client: &DaemonClient) -> Result<
                         &anchor,
                     )
                     .await
+                }
+                TaskflowCommands::Next => {
+                    commands::taskflow::next(printer, client, &anchor).await
                 }
             }
         }

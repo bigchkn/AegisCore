@@ -251,3 +251,43 @@ pub async fn set_task_status(
     ));
     Ok(())
 }
+
+pub async fn next(
+    printer: &Printer,
+    client: &DaemonClient,
+    anchor: &ProjectAnchor,
+) -> Result<(), AegisCliError> {
+    let payload = client
+        .request(
+            Some(&anchor.project_root),
+            "taskflow.next",
+            serde_json::json!({}),
+        )
+        .await?;
+
+    if printer.format == crate::output::OutputFormat::Json {
+        printer.json(&payload);
+        return Ok(());
+    }
+
+    let outcome = payload.get("outcome").and_then(|v| v.as_str()).unwrap_or("");
+    match outcome {
+        "ready" => {
+            let id = payload.get("milestone_id").and_then(|v| v.as_str()).unwrap_or("?");
+            let name = payload.get("name").and_then(|v| v.as_str()).unwrap_or("?");
+            let count = payload.get("task_count").and_then(|v| v.as_u64()).unwrap_or(0);
+            printer.line(&format!("Next milestone: {id} — {name} ({count} tasks pending)"));
+        }
+        "exhausted" => printer.line("No pending milestones — backlog is exhausted."),
+        "blocked" => {
+            let deps: Vec<&str> = payload
+                .get("waiting_on")
+                .and_then(|v| v.as_array())
+                .map(|a| a.iter().filter_map(|v| v.as_str()).collect())
+                .unwrap_or_default();
+            printer.line(&format!("Blocked — waiting on: {}", deps.join(", ")));
+        }
+        _ => printer.line(&format!("Unexpected response: {payload}")),
+    }
+    Ok(())
+}

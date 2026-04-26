@@ -7,7 +7,7 @@ pub mod view;
 use crate::state::TaskflowLinkRegistry;
 use aegis_core::{StorageBackend, TaskRegistry};
 use std::sync::Arc;
-pub use sync::SyncReport;
+pub use sync::{NextMilestoneOutcome, SyncReport};
 
 pub struct TaskflowEngine {
     storage: Arc<dyn StorageBackend>,

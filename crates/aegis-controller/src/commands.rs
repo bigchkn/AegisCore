@@ -256,6 +256,14 @@ impl ControllerCommands {
         })?;
         tf.set_task_status(milestone_id, task_id, status)
     }
+
+    pub fn taskflow_next(&self) -> Result<aegis_taskflow::NextMilestoneOutcome> {
+        let tf = self.taskflow.as_ref().ok_or_else(|| AegisError::Config {
+            field: "taskflow".to_string(),
+            reason: "Taskflow engine is not initialized".to_string(),
+        })?;
+        tf.next_milestone()
+    }
 }
 
 fn resolve_agent_id_from_agents(agents: &[Agent], raw: &str) -> Result<Uuid> {

@@ -14,6 +14,20 @@ pub struct Backlog {
     pub tasks: Vec<crate::model::ProjectTask>,
 }
 
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(tag = "outcome", rename_all = "snake_case")]
+pub enum NextMilestoneOutcome {
+    Ready {
+        milestone_id: String,
+        name: String,
+        task_count: usize,
+    },
+    Exhausted,
+    Blocked {
+        waiting_on: Vec<String>,
+    },
+}
+
 impl TaskflowEngine {
     fn resolve_taskflow_status(value: &str) -> Result<TaskflowStatus> {
         TaskflowStatus::parse(value).ok_or_else(|| {
@@ -61,6 +75,7 @@ impl TaskflowEngine {
                 name: "Global Backlog".to_string(),
                 status: "n/a".to_string(),
                 lld: None,
+                depends_on: Vec::new(),
                 tasks: backlog.tasks,
             });
         }
@@ -106,6 +121,87 @@ impl TaskflowEngine {
 
         let mut lock = LockedFile::open_shared(&backlog_path)?;
         lock.read_toml()
+    }
+
+    /// Returns the next milestone the bastion should work on using greedy
+    /// topological ordering: lowest-ID ready milestone whose dependencies are
+    /// all done.
+    pub fn next_milestone(&self) -> Result<NextMilestoneOutcome> {
+        let index = self.get_status()?;
+
+        // Build a status lookup from the index (cheap, no file I/O per entry).
+        let status_map: std::collections::HashMap<String, String> = index
+            .milestones
+            .iter()
+            .map(|(k, v)| (k.clone(), v.status.clone()))
+            .collect();
+
+        // Collect pending milestone IDs and load their depends_on.
+        let mut pending: Vec<(u32, String, String)> = Vec::new(); // (numeric_id, key, name)
+        let mut blocked_by: Vec<String> = Vec::new();
+
+        let roadmap_dir = self.storage().designs_dir().join("roadmap");
+
+        for (key, m_ref) in &index.milestones {
+            if m_ref.status != "pending" {
+                continue;
+            }
+
+            let m_path = roadmap_dir.join(&m_ref.path);
+            let mut lock = LockedFile::open_shared(&m_path)?;
+            let milestone: Milestone = lock.read_toml()?;
+
+            let all_deps_done = milestone.depends_on.iter().all(|dep| {
+                status_map
+                    .get(dep)
+                    .map(|s| s == "done")
+                    .unwrap_or(false)
+            });
+
+            if all_deps_done {
+                pending.push((milestone.id, key.clone(), m_ref.name.clone()));
+            } else {
+                for dep in &milestone.depends_on {
+                    if status_map.get(dep).map(|s| s != "done").unwrap_or(true) {
+                        if !blocked_by.contains(dep) {
+                            blocked_by.push(dep.clone());
+                        }
+                    }
+                }
+            }
+        }
+
+        if pending.is_empty() {
+            if blocked_by.is_empty() {
+                return Ok(NextMilestoneOutcome::Exhausted);
+            } else {
+                blocked_by.sort();
+                return Ok(NextMilestoneOutcome::Blocked {
+                    waiting_on: blocked_by,
+                });
+            }
+        }
+
+        // Greedy: lowest numeric ID among ready milestones.
+        pending.sort_by_key(|(id, _, _)| *id);
+        let (_, key, name) = pending.remove(0);
+
+        // Load task count from the milestone file.
+        let m_ref = &index.milestones[&key];
+        let m_path = roadmap_dir.join(&m_ref.path);
+        let mut lock = LockedFile::open_shared(&m_path)?;
+        let milestone: Milestone = lock.read_toml()?;
+        let task_count = milestone
+            .tasks
+            .iter()
+            .filter(|t| t.status != TaskflowStatus::Done)
+            .count();
+
+        Ok(NextMilestoneOutcome::Ready {
+            milestone_id: key,
+            name,
+            task_count,
+        })
     }
 
     pub fn sync(&self) -> Result<SyncReport> {
@@ -305,6 +401,7 @@ impl TaskflowEngine {
             name: name.to_string(),
             status: "pending".to_string(),
             lld: lld.map(|s| s.to_string()),
+            depends_on: Vec::new(),
             tasks: Vec::new(),
         };
 
@@ -633,5 +730,167 @@ mod tests {
 
         let index = engine.get_status().unwrap();
         assert_eq!(index.milestones.get("M15").unwrap().status, "done");
+    }
+
+    fn make_milestone_file(dir: &std::path::Path, id: u32, status: &str, depends_on: &[&str]) {
+        let m = crate::model::Milestone {
+            id,
+            name: format!("Milestone {id}"),
+            status: status.to_string(),
+            lld: None,
+            depends_on: depends_on.iter().map(|s| s.to_string()).collect(),
+            tasks: vec![crate::model::ProjectTask {
+                id: format!("{id}.1"),
+                uid: Uuid::new_v4(),
+                task: "a task".to_string(),
+                task_type: crate::model::TaskType::Feature,
+                status: if status == "done" {
+                    TaskflowStatus::Done
+                } else {
+                    TaskflowStatus::Pending
+                },
+                crate_name: None,
+                notes: None,
+                registry_task_id: None,
+            }],
+        };
+        let path = dir.join(format!("M{id}.toml"));
+        std::fs::write(&path, toml::to_string(&m).unwrap()).unwrap();
+    }
+
+    fn add_milestone_ref(
+        index: &mut ProjectIndex,
+        id: u32,
+        status: &str,
+    ) {
+        index.milestones.insert(
+            format!("M{id}"),
+            crate::model::MilestoneRef {
+                name: format!("Milestone {id}"),
+                path: format!("milestones/M{id}.toml"),
+                status: status.to_string(),
+            },
+        );
+    }
+
+    #[test]
+    fn next_returns_lowest_ready_milestone() {
+        let (tmp, engine) = setup_engine();
+        let roadmap_dir = engine.storage().designs_dir().join("roadmap");
+        let m_dir = roadmap_dir.join("milestones");
+
+        make_milestone_file(&m_dir, 5, "pending", &[]);
+        make_milestone_file(&m_dir, 3, "pending", &[]);
+
+        let mut index: ProjectIndex = toml::from_str(
+            &std::fs::read_to_string(roadmap_dir.join("index.toml")).unwrap(),
+        )
+        .unwrap();
+        add_milestone_ref(&mut index, 5, "pending");
+        add_milestone_ref(&mut index, 3, "pending");
+        std::fs::write(
+            roadmap_dir.join("index.toml"),
+            toml::to_string(&index).unwrap(),
+        )
+        .unwrap();
+
+        let outcome = engine.next_milestone().unwrap();
+        assert!(matches!(outcome, NextMilestoneOutcome::Ready { milestone_id, .. } if milestone_id == "M3"));
+        drop(tmp);
+    }
+
+    #[test]
+    fn next_skips_milestone_with_unmet_dep() {
+        let (tmp, engine) = setup_engine();
+        let roadmap_dir = engine.storage().designs_dir().join("roadmap");
+        let m_dir = roadmap_dir.join("milestones");
+
+        // M10 is pending with no deps — should be returned.
+        // M11 depends on M12 which is pending — should be skipped.
+        make_milestone_file(&m_dir, 10, "pending", &[]);
+        make_milestone_file(&m_dir, 11, "pending", &["M12"]);
+        make_milestone_file(&m_dir, 12, "pending", &[]);
+
+        let mut index: ProjectIndex = toml::from_str(
+            &std::fs::read_to_string(roadmap_dir.join("index.toml")).unwrap(),
+        )
+        .unwrap();
+        add_milestone_ref(&mut index, 10, "pending");
+        add_milestone_ref(&mut index, 11, "pending");
+        add_milestone_ref(&mut index, 12, "pending");
+        std::fs::write(
+            roadmap_dir.join("index.toml"),
+            toml::to_string(&index).unwrap(),
+        )
+        .unwrap();
+
+        let outcome = engine.next_milestone().unwrap();
+        // M10 has no deps, M12 has no deps — both ready; M10 is lower.
+        assert!(matches!(outcome, NextMilestoneOutcome::Ready { milestone_id, .. } if milestone_id == "M10"));
+        drop(tmp);
+    }
+
+    #[test]
+    fn next_returns_exhausted_when_all_done() {
+        let (tmp, engine) = setup_engine();
+        let roadmap_dir = engine.storage().designs_dir().join("roadmap");
+        let m_dir = roadmap_dir.join("milestones");
+
+        make_milestone_file(&m_dir, 1, "done", &[]);
+        make_milestone_file(&m_dir, 2, "done", &[]);
+
+        let mut index: ProjectIndex = toml::from_str(
+            &std::fs::read_to_string(roadmap_dir.join("index.toml")).unwrap(),
+        )
+        .unwrap();
+        add_milestone_ref(&mut index, 1, "done");
+        add_milestone_ref(&mut index, 2, "done");
+        std::fs::write(
+            roadmap_dir.join("index.toml"),
+            toml::to_string(&index).unwrap(),
+        )
+        .unwrap();
+
+        let outcome = engine.next_milestone().unwrap();
+        assert!(matches!(outcome, NextMilestoneOutcome::Exhausted));
+        drop(tmp);
+    }
+
+    #[test]
+    fn next_returns_blocked_when_only_unmet_deps_remain() {
+        let (tmp, engine) = setup_engine();
+        let roadmap_dir = engine.storage().designs_dir().join("roadmap");
+        let m_dir = roadmap_dir.join("milestones");
+
+        // M20 is pending but depends on M19 which is also pending.
+        // No other ready milestones exist.
+        make_milestone_file(&m_dir, 20, "pending", &["M19"]);
+        make_milestone_file(&m_dir, 19, "pending", &[]);
+
+        let mut index: ProjectIndex = toml::from_str(
+            &std::fs::read_to_string(roadmap_dir.join("index.toml")).unwrap(),
+        )
+        .unwrap();
+        add_milestone_ref(&mut index, 20, "pending");
+        // M19 is marked done in the index but pending on disk — use done in index to block M20,
+        // keep M19 itself not returned.
+        // Actually: let's make M19 done in the index (already merged) but M20 still pending.
+        // Then the only pending is M20, which depends on a done M19.
+        // That would make M20 ready. Instead: mark M19 as pending in the index too, and
+        // remove M19's TOML entry — so M20 depends on something that doesn't exist (unknown).
+        // depends_on check: status_map.get("M19") returns None → unknown → not done → blocked.
+        index.milestones.remove("M19");
+        add_milestone_ref(&mut index, 20, "pending");
+        std::fs::write(
+            roadmap_dir.join("index.toml"),
+            toml::to_string(&index).unwrap(),
+        )
+        .unwrap();
+
+        let outcome = engine.next_milestone().unwrap();
+        assert!(
+            matches!(&outcome, NextMilestoneOutcome::Blocked { waiting_on } if waiting_on.contains(&"M19".to_string()))
+        );
+        drop(tmp);
     }
 }

@@ -133,7 +133,12 @@ async fn handle_connection(
             let runtime = if let Some(r) = runtimes.get(&project.id) {
                 r
             } else {
-                let r = AegisRuntime::load(project.root_path.clone()).await?;
+                let r = AegisRuntime::load(
+                    project.root_path.clone(),
+                    Some(Arc::clone(&project_registry)),
+                    Some(project.id),
+                )
+                .await?;
                 r.recover().await?;
                 r.start().await?;
                 runtimes.insert(project.id, r);
@@ -144,13 +149,21 @@ async fn handle_connection(
             if request.command == "logs.tail" {
                 handle_log_tail(lines, &request, &commands).await;
             } else {
-                handle_pane_attach(lines, &request, &commands, runtime.pane_relay.clone()).await;
+                handle_pane_attach(
+                    lines,
+                    &request,
+                    &commands,
+                    runtime.pane_relay.clone(),
+                    &project_registry,
+                    project.id,
+                )
+                .await;
             }
             return Ok(());
         }
 
         // Logic to find project and dispatch command
-        let payload = match dispatch_command(&request, &project_registry, &active_runtimes).await {
+        let payload = match dispatch_command(&request, Arc::clone(&project_registry), &active_runtimes).await {
             Ok(p) => p,
             Err(e) => {
                 let response = UdsResponse {
@@ -190,7 +203,7 @@ async fn handle_connection(
 
 async fn dispatch_command(
     request: &UdsRequest,
-    project_registry: &ProjectRegistry,
+    project_registry: Arc<ProjectRegistry>,
     active_runtimes: &Arc<Mutex<HashMap<Uuid, AegisRuntime>>>,
 ) -> Result<serde_json::Value> {
     // 1. Handle Global Commands (no project context required)
@@ -249,7 +262,12 @@ async fn dispatch_command(
     let runtime = if let Some(r) = runtimes.get(&project.id) {
         r
     } else {
-        let r = AegisRuntime::load(project.root_path.clone()).await?;
+        let r = AegisRuntime::load(
+            project.root_path.clone(),
+            Some(Arc::clone(&project_registry)),
+            Some(project.id),
+        )
+        .await?;
         r.recover().await?;
         runtimes.insert(project.id, r);
         runtimes.get(&project.id).unwrap()
@@ -338,6 +356,7 @@ async fn dispatch_command(
                     "interval_ms": runtime.config.watchdog.poll_interval_ms,
                 },
                 "providers": providers,
+                "last_attached_agent_id": project.last_attached_agent_id,
             }))
         }
         "agents.list" => Ok(serde_json::to_value(commands.list_agents()?).unwrap()),
@@ -643,6 +662,9 @@ async fn dispatch_command(
             commands.taskflow_set_task_status(milestone_id, task_id, status)?;
             Ok(serde_json::json!({ "message": "Task status updated" }))
         }
+        "taskflow.next" => {
+            Ok(serde_json::to_value(commands.taskflow_next()?).unwrap())
+        }
         _ => Err(AegisError::IpcProtocol {
             reason: format!("Unknown command: {}", request.command),
         }),
@@ -850,6 +872,8 @@ async fn handle_pane_attach(
     request: &UdsRequest,
     commands: &ControllerCommands,
     relay: Arc<PaneRelay>,
+    project_registry: &ProjectRegistry,
+    project_id: Uuid,
 ) {
     let agent_id = match parse_agent_id(&request.params, commands) {
         Ok(id) => id,
@@ -859,6 +883,11 @@ async fn handle_pane_attach(
             return;
         }
     };
+
+    // Persist attachment target
+    if let Err(e) = project_registry.update_last_attached(project_id, Some(agent_id)) {
+        tracing::error!("Failed to persist last_attached_agent_id: {}", e);
+    }
 
     use base64::prelude::*;
     let (uds_sink, uds_stream) = lines.split();
@@ -1086,6 +1115,11 @@ cli_provider = "claude-code"
             request("clarify.wait", Some(project_path), serde_json::Value::Null),
             request(
                 "design.spawn",
+                Some(project_path),
+                serde_json::Value::Null,
+            ),
+            request(
+                "taskflow.next",
                 Some(project_path),
                 serde_json::Value::Null,
             ),
