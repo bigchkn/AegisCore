@@ -77,12 +77,12 @@ function renderWithStore() {
   );
 }
 
-describe('TaskflowView Enhanced Filters', () => {
+describe('TaskflowView Refactored Filters', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  it('filters by View Mode and Status Toggle', async () => {
+  it('separates Milestone Tree from Flat Bugs View', async () => {
     (api.taskflowStatus as any).mockResolvedValue(mockIndex);
     (api.taskflowMilestone as any).mockImplementation((_pid: string, id: string) => {
       if (id === 'M1') return Promise.resolve(mockMilestone1);
@@ -97,25 +97,26 @@ describe('TaskflowView Enhanced Filters', () => {
     await waitFor(() => expect(screen.getByText('Milestone 1')).toBeDefined());
     expect(screen.queryByText('Milestone 2')).toBeNull(); // Completed milestone hidden
 
-    // 2. Switch to All (Still in Milestones view)
-    fireEvent.click(screen.getByText('All'));
-    await waitFor(() => expect(screen.getByText('Milestone 2')).toBeDefined());
-
-    // 3. Switch to Bugs view (Should auto-expand and show bugs)
+    // 2. Switch to Bugs view
     fireEvent.click(screen.getByText('Bugs'));
     
-    // Should see bugs from M1, M2 and Backlog
+    // Should see flat list of bugs (Active + Completed because default state was Active, but Bugs shows ALL loaded until Active is clicked?)
+    // Actually, showAll defaults to false. So "Completed Bug" should be hidden.
     await waitFor(() => expect(screen.getByText('Active Bug')).toBeDefined());
-    await waitFor(() => expect(screen.getByText('Completed Bug')).toBeDefined());
     await waitFor(() => expect(screen.getByText('Backlog Bug')).toBeDefined());
+    expect(screen.queryByText('Completed Bug')).toBeNull(); 
     
-    // Should NOT see feature
-    expect(screen.queryByText('Active Feature')).toBeNull();
+    // Milestones should NOT be headers anymore (they are context labels now)
+    // In our implementation, context labels have class 'task-context-label'
+    expect(screen.getByText('Milestone 1', { selector: '.task-context-label' })).toBeDefined();
 
-    // 4. Switch Bugs to Active (Should hide Completed Bug)
-    fireEvent.click(screen.getByText('Active'));
-    await waitFor(() => expect(screen.queryByText('Completed Bug')).toBeNull());
-    expect(screen.getByText('Active Bug')).toBeDefined();
-    expect(screen.getByText('Backlog Bug')).toBeDefined();
+    // 3. Switch to 'All' status
+    fireEvent.click(screen.getByText('All'));
+    await waitFor(() => expect(screen.getByText('Completed Bug')).toBeDefined());
+
+    // 4. Switch back to Milestones view
+    fireEvent.click(screen.getByText('Milestones'));
+    await waitFor(() => expect(screen.getByText('Milestone 1', { selector: '.milestone-name' })).toBeDefined());
+    await waitFor(() => expect(screen.getByText('Milestone 2', { selector: '.milestone-name' })).toBeDefined());
   });
 });

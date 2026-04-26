@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 
 import { api } from '../api/rest';
 import type { TaskflowIndex, TaskflowMilestone, TaskType } from '../store/domain';
@@ -78,7 +78,7 @@ export function TaskflowView() {
     loadMilestone(milestoneId);
   };
 
-  // Auto-expand milestones when in Bugs view
+  // Auto-expand and load all milestones when in Bugs view
   useEffect(() => {
     if (viewMode === 'bugs') {
       if (!index) return;
@@ -89,15 +89,41 @@ export function TaskflowView() {
       for (const id of ids) {
         if (!milestones[id]?.data && !milestones[id]?.loading) {
           loadMilestone(id);
-        } else if (milestones[id]?.data && !milestones[id].expanded) {
-          setMilestones(state => ({
-            ...state,
-            [id]: { ...state[id], expanded: true }
-          }));
         }
       }
     }
   }, [viewMode, index]);
+
+  // Aggregate all tasks for flat views
+  const allLoadedTasks = useMemo(() => {
+    const tasks: Array<{ task: TaskflowMilestone['tasks'][0]; milestoneId: string; milestoneName: string }> = [];
+    
+    // Check backlog
+    const backlog = milestones['backlog']?.data;
+    if (backlog) {
+      for (const t of backlog.tasks) {
+        tasks.push({ task: t, milestoneId: 'backlog', milestoneName: 'Backlog' });
+      }
+    }
+
+    // Check milestones
+    for (const [id, mState] of Object.entries(milestones)) {
+      if (id === 'backlog' || !mState.data) continue;
+      for (const t of mState.data.tasks) {
+        tasks.push({ task: t, milestoneId: id, milestoneName: mState.data.name });
+      }
+    }
+
+    return tasks;
+  }, [milestones]);
+
+  const filteredTasks = useMemo(() => {
+    return allLoadedTasks.filter(({ task }) => {
+      if (viewMode === 'bugs' && task.task_type !== 'bug') return false;
+      if (!showAll && task.status === 'done') return false;
+      return true;
+    });
+  }, [allLoadedTasks, viewMode, showAll]);
 
   if (!activeProjectId) {
     return <EmptyPanel title="Select a project" body="Taskflow status is loaded per project." />;
@@ -118,7 +144,6 @@ export function TaskflowView() {
   const milestoneEntries = Object.entries(index.milestones)
     .sort(([left], [right]) => left.localeCompare(right, undefined, { numeric: true }))
     .filter(([_, ref]) => {
-      // In Milestone view, hide completed milestones if showAll is false
       if (viewMode === 'milestones' && !showAll) {
         return ref.status !== 'done';
       }
@@ -167,105 +192,117 @@ export function TaskflowView() {
       </header>
 
       <div className="taskflow-tree">
-        {/* Global Backlog */}
-        {index.backlog ? (
-          <div className="milestone-node">
-            <button type="button" onClick={() => toggleMilestone('backlog')}>
-              <span>{milestones['backlog']?.expanded ? '▼' : '▶'}</span>
-              <strong>Backlog</strong>
-              <em>Global</em>
-            </button>
-            {milestones['backlog']?.expanded ? (
-              <div className="milestone-detail">
-                {milestones['backlog'].loading ? <p className="muted">Loading backlog...</p> : null}
-                {milestones['backlog'].error ? <p className="error">{milestones['backlog'].error}</p> : null}
-                {milestones['backlog'].data ? (
-                  <MilestoneDetail 
-                    milestone={milestones['backlog'].data} 
-                    viewMode={viewMode}
-                    showAll={showAll}
+        {viewMode === 'bugs' ? (
+          <div className="taskflow-flat-list">
+            {loadingAnyMilestone(milestones) && filteredTasks.length === 0 ? (
+              <p className="muted padding-14">Loading bugs...</p>
+            ) : filteredTasks.length === 0 ? (
+              <p className="muted padding-14">No {showAll ? '' : 'active '}bugs found.</p>
+            ) : (
+              <div className="taskflow-task-list padding-14">
+                {filteredTasks.map(({ task, milestoneId, milestoneName }) => (
+                  <TaskItem 
+                    key={`${milestoneId}-${task.id}`} 
+                    task={task} 
+                    context={milestoneName} 
                   />
+                ))}
+              </div>
+            )}
+          </div>
+        ) : (
+          <>
+            {/* Tree View: Global Backlog */}
+            {index.backlog ? (
+              <div className="milestone-node">
+                <button type="button" onClick={() => toggleMilestone('backlog')}>
+                  <span>{milestones['backlog']?.expanded ? '▼' : '▶'}</span>
+                  <strong>Backlog</strong>
+                  <em>Global</em>
+                </button>
+                {milestones['backlog']?.expanded ? (
+                  <div className="milestone-detail">
+                    {milestones['backlog'].loading ? <p className="muted">Loading backlog...</p> : null}
+                    {milestones['backlog'].error ? <p className="error">{milestones['backlog'].error}</p> : null}
+                    {milestones['backlog'].data ? (
+                      <MilestoneDetail 
+                        milestone={milestones['backlog'].data} 
+                        showAll={showAll}
+                      />
+                    ) : null}
+                  </div>
                 ) : null}
               </div>
             ) : null}
-          </div>
-        ) : null}
 
-        {/* Milestones */}
-        {milestoneEntries.map(([milestoneId, ref]) => {
-          const state = milestones[milestoneId];
-          return (
-            <div key={milestoneId} className="milestone-node">
-              <button type="button" onClick={() => toggleMilestone(milestoneId)}>
-                <span>{state?.expanded ? '▼' : '▶'}</span>
-                <div className="milestone-ref-info">
-                  <strong>{milestoneId}</strong>
-                  <span className="milestone-name">{ref.name}</span>
-                </div>
-                <em className={`status-pill status-${ref.status}`}>{ref.status}</em>
-              </button>
-              {state?.expanded ? (
-                <div className="milestone-detail">
-                  {state.loading ? <p className="muted">Loading milestone...</p> : null}
-                  {state.error ? <p className="error">{state.error}</p> : null}
-                  {state.data ? (
-                    <MilestoneDetail 
-                      milestone={state.data} 
-                      viewMode={viewMode}
-                      showAll={showAll}
-                    />
+            {/* Tree View: Milestones */}
+            {milestoneEntries.map(([milestoneId, ref]) => {
+              const state = milestones[milestoneId];
+              return (
+                <div key={milestoneId} className="milestone-node">
+                  <button type="button" onClick={() => toggleMilestone(milestoneId)}>
+                    <span>{state?.expanded ? '▼' : '▶'}</span>
+                    <div className="milestone-ref-info">
+                      <strong>{milestoneId}</strong>
+                      <span className="milestone-name">{ref.name}</span>
+                    </div>
+                    <em className={`status-pill status-${ref.status}`}>{ref.status}</em>
+                  </button>
+                  {state?.expanded ? (
+                    <div className="milestone-detail">
+                      {state.loading ? <p className="muted">Loading milestone...</p> : null}
+                      {state.error ? <p className="error">{state.error}</p> : null}
+                      {state.data ? (
+                        <MilestoneDetail 
+                          milestone={state.data} 
+                          showAll={showAll}
+                        />
+                      ) : null}
+                    </div>
                   ) : null}
                 </div>
-              ) : null}
-            </div>
-          );
-        })}
+              );
+            })}
+          </>
+        )}
       </div>
     </section>
   );
 }
 
-interface MilestoneDetailProps {
-  milestone: TaskflowMilestone;
-  viewMode: ViewMode;
-  showAll: boolean;
+function loadingAnyMilestone(milestones: Record<string, MilestoneState>) {
+  return Object.values(milestones).some(m => m.loading);
 }
 
-function MilestoneDetail({ milestone, viewMode, showAll }: MilestoneDetailProps) {
-  const tasks = milestone.tasks.filter(t => {
-    // 1. Filter by View Mode
-    if (viewMode === 'bugs' && t.task_type !== 'bug') {
-      return false;
-    }
-    
-    // 2. Filter by Status
-    if (!showAll && t.status === 'done') {
-      return false;
-    }
-    
-    return true;
-  });
+function MilestoneDetail({ milestone, showAll }: { milestone: TaskflowMilestone; showAll: boolean }) {
+  const tasks = milestone.tasks.filter(t => showAll || t.status !== 'done');
 
   if (tasks.length === 0) {
-    if (viewMode === 'bugs') return null; // Hide milestone detail entirely if no matching bugs
     return <p className="muted">No {!showAll ? 'active ' : ''}tasks found.</p>;
   }
 
   return (
     <div className="taskflow-task-list">
       {tasks.map((task) => (
-        <div key={task.id} className="taskflow-task">
-          <span className={`task-icon task-${task.status}`}>{symbolForStatus(task.status)}</span>
-          <div className="task-content">
-            <div className="task-row">
-              <TaskTypeBadge type={task.task_type} />
-              <strong>{task.id}</strong>
-              <p>{task.task}</p>
-            </div>
-            {task.notes ? <small className="task-notes">{task.notes}</small> : null}
-          </div>
-        </div>
+        <TaskItem key={task.id} task={task} />
       ))}
+    </div>
+  );
+}
+
+function TaskItem({ task, context }: { task: TaskflowMilestone['tasks'][0]; context?: string }) {
+  return (
+    <div className="taskflow-task">
+      <span className={`task-icon task-${task.status}`}>{symbolForStatus(task.status)}</span>
+      <div className="task-content">
+        <div className="task-row">
+          <TaskTypeBadge type={task.task_type} />
+          <strong>{task.id}</strong>
+          <p>{task.task}</p>
+          {context ? <span className="task-context-label">{context}</span> : null}
+        </div>
+        {task.notes ? <small className="task-notes">{task.notes}</small> : null}
+      </div>
     </div>
   );
 }
@@ -285,14 +322,8 @@ function EmptyPanel({ title, body }: { title: string; body: string }) {
 }
 
 function symbolForStatus(status: string) {
-  if (status === 'done') {
-    return '✓';
-  }
-  if (status === 'in-progress' || status === 'lld-in-progress') {
-    return '●';
-  }
-  if (status === 'blocked') {
-    return '!';
-  }
+  if (status === 'done') return '✓';
+  if (status === 'in-progress' || status === 'lld-in-progress') return '●';
+  if (status === 'blocked') return '!';
   return '○';
 }

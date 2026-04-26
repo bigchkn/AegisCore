@@ -743,6 +743,20 @@ tbody tr:hover {
   font-size: 0.75rem;
 }
 
+.task-context-label {
+  margin-left: auto;
+  padding: 1px 6px;
+  border: 1px solid #3b4652;
+  border-radius: 4px;
+  color: #8e99a6;
+  font-size: 0.72rem;
+  font-weight: 500;
+}
+
+.padding-14 {
+  padding: 14px;
+}
+
 @media (max-width: 760px) {
   .app-shell {
     grid-template-columns: 1fr;
