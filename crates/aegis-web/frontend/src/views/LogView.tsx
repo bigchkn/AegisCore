@@ -47,7 +47,7 @@ export function LogView() {
 
   useEffect(() => {
     if (follow) {
-      listRef.current?.scrollTo({ top: listRef.current.scrollHeight });
+      listRef.current?.scrollTo?.({ top: listRef.current.scrollHeight });
     }
   }, [follow, lines]);
 
@@ -73,7 +73,7 @@ export function LogView() {
         <AgentTargetPicker
           agents={agents}
           selectedAgentId={routeAgentId ?? null}
-          label="Attachable agents"
+          label="Agent"
           onSelect={(agentId) => {
             if (!agentId) {
               return;

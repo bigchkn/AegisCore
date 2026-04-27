@@ -46,7 +46,7 @@ export function PaneView() {
         <AgentTargetPicker
           agents={agents}
           selectedAgentId={routeAgentId ?? null}
-          label="Attachable agents"
+          label="Agent"
           onSelect={(agentId) => {
             if (!agentId) {
               return;

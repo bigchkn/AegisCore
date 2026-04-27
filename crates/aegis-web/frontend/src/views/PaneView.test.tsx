@@ -16,6 +16,60 @@ vi.mock('../components/Terminal', () => ({
 }));
 
 describe('PaneView', () => {
+  it('shows an agent dropdown when no agent is selected', () => {
+    const store = configureStore({
+      reducer: {
+        agents: agentsReducer,
+        channels: channelsReducer,
+        projects: projectsReducer,
+        tasks: tasksReducer,
+        ui: uiReducer,
+      },
+    });
+
+    store.dispatch(setActiveProject('project-1'));
+    store.dispatch(setAgents([makeAgent('agent-1', 'Alpha')]));
+
+    render(
+      <Provider store={store}>
+        <MemoryRouter initialEntries={['/projects/project-1/pane']}>
+          <Routes>
+            <Route path="/projects/:projectId/pane/:agentId?" element={<PaneView />} />
+          </Routes>
+        </MemoryRouter>
+      </Provider>,
+    );
+
+    expect(screen.getByLabelText('Agent')).toBeTruthy();
+  });
+
+  it('shows an agent dropdown when attached', () => {
+    const store = configureStore({
+      reducer: {
+        agents: agentsReducer,
+        channels: channelsReducer,
+        projects: projectsReducer,
+        tasks: tasksReducer,
+        ui: uiReducer,
+      },
+    });
+
+    store.dispatch(setActiveProject('project-1'));
+    store.dispatch(setAgents([makeAgent('agent-1', 'Alpha')]));
+
+    render(
+      <Provider store={store}>
+        <MemoryRouter initialEntries={['/projects/project-1/pane/agent-1']}>
+          <Routes>
+            <Route path="/projects/:projectId/pane/:agentId?" element={<PaneView />} />
+          </Routes>
+        </MemoryRouter>
+      </Provider>,
+    );
+
+    expect(screen.getByLabelText('Agent')).toBeTruthy();
+  });
+
   it('returns to the agent list when detached', async () => {
     const store = configureStore({
       reducer: {
