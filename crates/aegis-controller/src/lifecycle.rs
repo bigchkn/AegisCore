@@ -5,7 +5,7 @@ use std::{
 
 use aegis_core::{
     config::{NetworkPolicy, SandboxPolicyConfig},
-    Agent, AgentKind, AgentStatus, SandboxNetworkPolicy, SandboxPolicy,
+    Agent, AgentKind, AgentStatus, SandboxNetworkPolicy, SandboxPolicy, SessionRef,
 };
 use uuid::Uuid;
 
@@ -29,6 +29,9 @@ pub struct AgentSpec {
     pub sandbox: SandboxPolicy,
     pub auto_cleanup: bool,
     pub model_override: Option<String>,
+    /// When set, the provider is launched with its resume mechanism so the agent picks up its
+    /// previous session. `session_id = None` resumes the most recent session.
+    pub resume_session: Option<SessionRef>,
 }
 
 #[derive(Debug)]
@@ -39,6 +42,7 @@ pub struct SpawnPlan {
     pub initial_prompt: String,
     pub sandbox_policy: SandboxPolicy,
     pub startup_delay_ms: u64,
+    pub is_resume: bool,
 }
 
 #[derive(Debug, Clone)]

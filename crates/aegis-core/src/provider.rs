@@ -17,7 +17,9 @@ pub struct ProviderConfig {
 #[derive(Debug, Clone)]
 pub struct SessionRef {
     pub provider: String,
-    pub session_id: String,
+    /// Specific session ID to resume. `None` resumes the most recent session for the provider
+    /// (passed as the flag alone, without an argument — e.g. `--resume` with no session ID).
+    pub session_id: Option<String>,
     pub checkpoint: Option<String>,
 }
 

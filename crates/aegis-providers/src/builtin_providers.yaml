@@ -13,7 +13,7 @@ providers:
 
   gemini-cli:
     binary: "gemini"
-    auto_approve_flags: ["--yes"]
+    auto_approve_flags: ["--yolo"]
     resume_mechanism: "injection"
     resume_command: "/resume {session_id}"
     export_command: "/checkpoint save aegis-handoff"

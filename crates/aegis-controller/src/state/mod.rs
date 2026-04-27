@@ -153,15 +153,12 @@ impl StateManager {
                 | AgentStatus::Active
                 | AgentStatus::Cooling
                 | AgentStatus::Reporting => {
-                    if agent.kind == aegis_core::agent::AgentKind::Bastion {
-                        // Bastions are persistent across daemon restarts.
-                        // We keep them Active here and let the Dispatcher verify tmux liveness.
-                        result.agents_recovered += 1;
-                    } else {
-                        agent.status = AgentStatus::Failed;
-                        agent.updated_at = Utc::now();
-                        result.agents_marked_failed += 1;
-                    }
+                    // All in-flight agents are failed on restart — their processes died with the
+                    // daemon. Bastions are re-launched by AegisRuntime::start(); splinters whose
+                    // tasks are still Queued/Active will be retried by the scheduler drain loop.
+                    agent.status = AgentStatus::Failed;
+                    agent.updated_at = Utc::now();
+                    result.agents_marked_failed += 1;
                 }
                 AgentStatus::Queued | AgentStatus::Paused => {
                     result.agents_recovered += 1;

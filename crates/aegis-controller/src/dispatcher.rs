@@ -112,6 +112,7 @@ impl Dispatcher {
             sandbox: sandbox_policy_from_config(&self.config.sandbox_defaults),
             auto_cleanup: self.config.splinter_defaults.auto_cleanup,
             model_override: self.config.splinter_defaults.model.clone(),
+            resume_session: None,
         }
     }
 
@@ -135,8 +136,11 @@ impl Dispatcher {
         let log_path = self.storage.agent_log_path(agent_id);
 
         let provider = self.providers.get(&spec.cli_provider)?;
-        let provider_command =
-            provider.spawn_command(&worktree_path, None, spec.model_override.as_deref());
+        let provider_command = provider.spawn_command(
+            &worktree_path,
+            spec.resume_session.as_ref(),
+            spec.model_override.as_deref(),
+        );
 
         // Auto-add the provider binary's parent directory to sandbox exec paths so the
         // binary can be launched regardless of where the user installed it.
@@ -214,6 +218,7 @@ impl Dispatcher {
             initial_prompt,
             sandbox_policy: spec.sandbox,
             startup_delay_ms: provider.config().startup_delay_ms,
+            is_resume: spec.resume_session.is_some(),
         })
     }
 
@@ -225,14 +230,38 @@ impl Dispatcher {
         {
             if let Some(tmux) = &self.tmux {
                 let target = TmuxTarget::parse(&existing.tmux_target())?;
-                if tmux.pane_is_alive(&target).await.unwrap_or(false) {
+                if tmux.pane_has_agent(&target).await.unwrap_or(false) {
                     tracing::info!(agent_id = %existing.agent_id, role = %name, "re-using existing active bastion");
                     return Ok(existing);
                 }
+                tracing::info!(agent_id = %existing.agent_id, role = %name, "bastion pane is at shell prompt — relaunching");
             }
         }
 
-        let spec = self.build_bastion_spec(name)?;
+        // Check for a recently-failed bastion with the same role — if one exists, resume its
+        // session rather than starting from scratch.
+        let resume_session = {
+            let all = AgentRegistry::list_all(self.registry.as_ref())?;
+            all.into_iter()
+                .filter(|a| {
+                    a.kind == AgentKind::Bastion
+                        && a.role == name
+                        && a.status == AgentStatus::Failed
+                })
+                .max_by_key(|a| a.updated_at)
+                .map(|prev| aegis_core::SessionRef {
+                    provider: prev.cli_provider.clone(),
+                    session_id: None, // resume most recent session
+                    checkpoint: None,
+                })
+        };
+
+        if resume_session.is_some() {
+            tracing::info!(role = %name, "resuming previous bastion session after daemon restart");
+        }
+
+        let mut spec = self.build_bastion_spec(name)?;
+        spec.resume_session = resume_session;
         let agent_id = Uuid::new_v4();
         let (session, window, pane) = self
             .prepare_tmux_window(agent_id, AgentKind::Bastion, name)
@@ -295,10 +324,11 @@ impl Dispatcher {
             {
                 if let Some(tmux) = &self.tmux {
                     let target = TmuxTarget::parse(&existing.tmux_target())?;
-                    if tmux.pane_is_alive(&target).await.unwrap_or(false) {
+                    if tmux.pane_has_agent(&target).await.unwrap_or(false) {
                         tracing::info!(agent_id = %existing.agent_id, role = %rendered.role, "re-using existing active bastion from template");
                         return Ok(existing);
                     }
+                    tracing::info!(agent_id = %existing.agent_id, role = %rendered.role, "bastion pane is at shell prompt — relaunching from template");
                 }
             }
         }
@@ -329,6 +359,7 @@ impl Dispatcher {
             },
             auto_cleanup: rendered.auto_cleanup,
             model_override: rendered.model.clone(),
+            resume_session: None,
         };
 
         if kind == AgentKind::Splinter {
@@ -444,7 +475,12 @@ impl Dispatcher {
             if plan.startup_delay_ms > 0 {
                 tokio::time::sleep(std::time::Duration::from_millis(plan.startup_delay_ms)).await;
             }
-            let trigger = normalize_tui_prompt("Begin.");
+            let trigger_text = if plan.is_resume {
+                "Continue where you left off."
+            } else {
+                "Begin."
+            };
+            let trigger = normalize_tui_prompt(trigger_text);
             tmux.send_raw_input(&target, trigger.as_bytes()).await?;
             tmux.send_key(&target, "Enter").await?;
             append_tmux_send(&agent.log_path, &trigger)?;
@@ -1050,6 +1086,7 @@ fn spec_from_agent_entry(
         sandbox: sandbox_policy_from_config(&entry.sandbox),
         auto_cleanup: entry.auto_cleanup,
         model_override: entry.model.clone(),
+        resume_session: None,
     }
 }
 
@@ -1713,6 +1750,7 @@ mod tests {
             sandbox: aegis_core::SandboxPolicy::default(),
             auto_cleanup: false,
             model_override: None,
+            resume_session: None,
         };
         let plan = dispatcher
             .build_spawn_plan(spec, Uuid::nil(), "aegis".to_string(), 1, "%1".to_string())

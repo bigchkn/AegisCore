@@ -293,6 +293,40 @@ impl TmuxClient {
     pub async fn pane_is_alive(&self, target: &TmuxTarget) -> Result<bool, TmuxError> {
         Ok(self.pane_exit_status(target).await?.is_none())
     }
+
+    /// Returns the name of the current foreground command in the pane
+    /// (e.g. `"claude"`, `"gemini"`, `"zsh"`).
+    pub async fn pane_current_command(
+        &self,
+        target: &TmuxTarget,
+    ) -> Result<String, TmuxError> {
+        let out = self
+            .run_tmux(&[
+                "display-message",
+                "-t",
+                target.as_str(),
+                "-p",
+                "#{pane_current_command}",
+            ])
+            .await?;
+        Ok(out.trim().to_string())
+    }
+
+    /// Returns true if the pane exists and the foreground command is NOT a login shell.
+    ///
+    /// This is used to distinguish a pane that still has an agent CLI running from one
+    /// where the CLI has exited and dropped back to the shell prompt.
+    pub async fn pane_has_agent(&self, target: &TmuxTarget) -> Result<bool, TmuxError> {
+        if !self.pane_is_alive(target).await? {
+            return Ok(false);
+        }
+        let cmd = self.pane_current_command(target).await?;
+        let is_shell = matches!(
+            cmd.as_str(),
+            "bash" | "zsh" | "sh" | "fish" | "dash" | "csh" | "tcsh"
+        );
+        Ok(!is_shell)
+    }
 }
 
 impl Default for TmuxClient {

@@ -1,6 +1,6 @@
 use std::{path::PathBuf, sync::Arc};
 
-use aegis_core::{EffectiveConfig, Recorder, Result, SandboxProfile, StorageBackend};
+use aegis_core::{AgentRegistry, EffectiveConfig, Recorder, Result, SandboxProfile, StorageBackend};
 use aegis_providers::ProviderRegistry;
 use aegis_recorder::FlightRecorder;
 use aegis_sandbox::SeatbeltSandbox;
@@ -221,7 +221,23 @@ impl AegisRuntime {
     pub async fn shutdown(&self) -> Result<()> {
         let _ = self.watchdog_shutdown.send(true);
         self.state.snapshot_now()?;
+        self.kill_all_agent_sessions().await;
         Ok(())
+    }
+
+    async fn kill_all_agent_sessions(&self) {
+        let agents = match self.registry.list_active() {
+            Ok(a) => a,
+            Err(e) => {
+                tracing::warn!(%e, "could not list agents during shutdown");
+                return;
+            }
+        };
+        for agent in agents {
+            if let Err(e) = self.tmux.kill_session(&agent.tmux_session).await {
+                tracing::debug!(session = %agent.tmux_session, %e, "tmux kill_session during shutdown");
+            }
+        }
     }
 
     pub fn commands(&self) -> ControllerCommands {

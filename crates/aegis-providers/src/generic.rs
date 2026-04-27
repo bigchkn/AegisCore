@@ -52,7 +52,10 @@ impl Provider for GenericProvider {
         if let Some(s) = session {
             if self.definition.resume_mechanism == ResumeMechanism::CliFlag {
                 if let Some(flag) = &self.definition.resume_flag {
-                    cmd.arg(flag).arg(&s.session_id);
+                    cmd.arg(flag);
+                    if let Some(id) = &s.session_id {
+                        cmd.arg(id);
+                    }
                 }
             }
         }
@@ -71,13 +74,16 @@ impl Provider for GenericProvider {
         if self.definition.resume_mechanism == ResumeMechanism::CliFlag {
             if let Some(flag) = &self.definition.resume_flag {
                 args.push(flag.clone());
-                args.push(session.session_id.clone());
+                if let Some(id) = &session.session_id {
+                    args.push(id.clone());
+                }
             }
         } else if self.definition.resume_mechanism == ResumeMechanism::Subcommand {
             if let Some(command) = &self.definition.resume_command {
+                let id = session.session_id.as_deref().unwrap_or("");
                 args.extend(
                     command
-                        .replace("{session_id}", &session.session_id)
+                        .replace("{session_id}", id)
                         .split_whitespace()
                         .map(str::to_owned),
                 );

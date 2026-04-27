@@ -126,7 +126,7 @@ mod tests {
         let cmd = gemini.spawn_command(&PathBuf::from("/tmp"), None, None);
         let args: Vec<_> = cmd.get_args().map(|a| a.to_str().unwrap()).collect();
 
-        assert!(args.contains(&"--yes"));
+        assert!(args.contains(&"--yolo"));
         assert!(!args.contains(&"--non-interactive"));
     }
 
@@ -150,7 +150,7 @@ mod tests {
         let codex = registry.get("codex").unwrap();
         let session = aegis_core::provider::SessionRef {
             provider: "codex".into(),
-            session_id: "00000000-0000-0000-0000-000000000001".into(),
+            session_id: Some("00000000-0000-0000-0000-000000000001".into()),
             checkpoint: None,
         };
 
