@@ -130,9 +130,10 @@ fn test_snapshot_and_recovery() {
     // 4. Recover
     let result = state_manager.recover().unwrap();
     assert!(result.registry_restored);
-    assert_eq!(result.agents_marked_failed, 1);
+    assert_eq!(result.agents_recovered, 1);
+    assert_eq!(result.agents_marked_failed, 0);
 
-    // 5. Verify agent status changed to Failed
+    // 5. Verify persistent bastion status is preserved for daemon adoption.
     let recovered = AgentRegistry::get(&registry, agent_id).unwrap().unwrap();
-    assert_eq!(recovered.status, AgentStatus::Failed);
+    assert_eq!(recovered.status, AgentStatus::Active);
 }

@@ -13,6 +13,7 @@ aegis-channels = { workspace = true }
 aegis-providers = { workspace = true }
 aegis-sandbox = { workspace = true }
 aegis-recorder = { workspace = true }
+aegis-watchdog = { workspace = true }
 aegis-taskflow = { path = "../aegis-taskflow" }
 aegis-web = { workspace = true }
 tracing    = { workspace = true }

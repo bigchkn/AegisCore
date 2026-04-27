@@ -312,6 +312,7 @@ impl EffectiveConfig {
                             "quota exceeded".into(),
                             "credit balance exhausted".into(),
                             "too many requests".into(),
+                            "hit your limit".into(),
                         ]
                     }),
                 auth_failure: project

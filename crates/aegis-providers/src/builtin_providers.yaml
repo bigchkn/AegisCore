@@ -8,7 +8,7 @@ providers:
     export_command: "/export"
     model_flag: "--model"
     error_patterns:
-      rate_limit: ["rate limit", "429", "usage limit reached"]
+      rate_limit: ["rate limit", "429", "usage limit reached", "hit your limit"]
       auth: ["401", "authentication failed"]
 
   gemini-cli:

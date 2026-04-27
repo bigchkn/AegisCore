@@ -8,6 +8,8 @@ use aegis_core::{
 use aegis_design::{RenderedTemplate, TemplateKind};
 use aegis_providers::ProviderRegistry;
 use aegis_tmux::{TmuxClient, TmuxTarget};
+use aegis_watchdog::FailoverExecutor;
+use async_trait::async_trait;
 use chrono::Utc;
 use serde::Deserialize;
 use uuid::Uuid;
@@ -610,7 +612,10 @@ impl Dispatcher {
         let recovery_prompt = provider.failover_handoff_prompt(&context);
 
         if let Some(tmux) = &self.tmux {
-            let target = TmuxTarget::parse(&agent.tmux_target())?;
+            let mut launch_agent = agent.clone();
+            launch_agent.cli_provider = next_provider.clone();
+            let launch_agent = self.replace_tmux_session_for_relaunch(launch_agent).await?;
+            let target = TmuxTarget::parse(&launch_agent.tmux_target())?;
 
             let sys_prompt_path =
                 std::env::temp_dir().join(format!("aegis_failover_{}.txt", agent_id));
@@ -625,12 +630,13 @@ impl Dispatcher {
             launch_cmd_with_prompt.push(sys_prompt_path.to_string_lossy().into_owned());
 
             let launch_shell = launch_shell_command(&agent.worktree_path, &launch_cmd_with_prompt);
-            let launch_script = write_launch_script("failover", agent.agent_id, &launch_shell)?;
+            let launch_script =
+                write_launch_script("failover", launch_agent.agent_id, &launch_shell)?;
             let launch_script_cmd = shell_command(&[
                 "/bin/sh".to_string(),
                 launch_script.to_string_lossy().into_owned(),
             ]);
-            append_tmux_send(&agent.log_path, &launch_script_cmd)?;
+            append_tmux_send(&launch_agent.log_path, &launch_script_cmd)?;
             tmux.send_key(&target, "C-u").await?;
             let launch_script_input = format!("{launch_script_cmd}\n");
             tmux.send_raw_input(&target, launch_script_input.as_bytes())
@@ -642,7 +648,7 @@ impl Dispatcher {
             let trigger = normalize_tui_prompt("Continue.");
             tmux.send_raw_input(&target, trigger.as_bytes()).await?;
             tmux.send_key(&target, "Enter").await?;
-            append_tmux_send(&agent.log_path, &trigger)?;
+            append_tmux_send(&launch_agent.log_path, &trigger)?;
         }
 
         let mut updated = self.require_agent(agent_id)?;
@@ -851,6 +857,169 @@ impl Dispatcher {
             self.storage.worktrees_dir(),
         );
         git.list_milestone_worktrees().await
+    }
+
+    async fn replace_tmux_session_for_relaunch(&self, mut agent: Agent) -> Result<Agent> {
+        let Some(tmux) = &self.tmux else {
+            return Ok(agent);
+        };
+
+        if let Some(current) = AgentRegistry::get(self.registry.as_ref(), agent.agent_id)? {
+            agent.status = current.status;
+        }
+
+        if tmux.session_exists(&agent.tmux_session).await? {
+            tmux.kill_session(&agent.tmux_session).await?;
+        }
+        tmux.new_session(&agent.tmux_session).await?;
+
+        let window_target = TmuxTarget::parse(&format!("{}:", agent.tmux_session))?;
+        let pane = tmux
+            .list_panes(&window_target)
+            .await?
+            .into_iter()
+            .next()
+            .ok_or_else(|| AegisError::TmuxPaneNotFound {
+                target: agent.tmux_session.clone(),
+            })?;
+
+        agent.tmux_window = 0;
+        agent.tmux_pane = pane;
+        agent.updated_at = Utc::now();
+        AgentRegistry::update(self.registry.as_ref(), &agent)?;
+        self.attach_recorder(&agent)?;
+        Ok(agent)
+    }
+}
+
+#[async_trait]
+impl FailoverExecutor for Dispatcher {
+    async fn pause_current(&self, agent: &Agent) -> Result<()> {
+        if let Some(tmux) = &self.tmux {
+            let target = TmuxTarget::parse(&agent.tmux_target())?;
+            tmux.interrupt(&target).await?;
+        }
+        Ok(())
+    }
+
+    async fn relaunch_with_provider(&self, agent: &Agent, provider_name: &str) -> Result<Agent> {
+        let provider = self.providers.get(provider_name)?;
+        let provider_command = provider.spawn_command(&agent.worktree_path, None, None);
+        let mut relaunched_agent = agent.clone();
+        relaunched_agent.cli_provider = provider_name.to_string();
+        let relaunched_agent = self
+            .replace_tmux_session_for_relaunch(relaunched_agent)
+            .await?;
+
+        let mut launch_command = Vec::new();
+        if !DISABLE_AGENT_SANDBOX {
+            if let Some(sandbox) = &self.sandbox {
+                launch_command.extend(sandbox.exec_prefix(&relaunched_agent.sandbox_profile));
+            }
+        }
+        launch_command.extend(resolved_command_parts(
+            &provider_command,
+            &provider.config().binary,
+        ));
+
+        if let Some(tmux) = &self.tmux {
+            let target = TmuxTarget::parse(&relaunched_agent.tmux_target())?;
+            let launch_shell =
+                launch_shell_command(&relaunched_agent.worktree_path, &launch_command);
+            let launch_script =
+                write_launch_script("failover", relaunched_agent.agent_id, &launch_shell)?;
+            let launch_script_cmd = shell_command(&[
+                "/bin/sh".to_string(),
+                launch_script.to_string_lossy().into_owned(),
+            ]);
+            append_tmux_send(&relaunched_agent.log_path, &launch_script_cmd)?;
+            tmux.send_key(&target, "C-u").await?;
+            let launch_script_input = format!("{launch_script_cmd}\n");
+            tmux.send_raw_input(&target, launch_script_input.as_bytes())
+                .await?;
+        }
+
+        AgentRegistry::update_provider(
+            self.registry.as_ref(),
+            relaunched_agent.agent_id,
+            provider_name,
+        )?;
+        let mut updated = self.require_agent(relaunched_agent.agent_id)?;
+        updated.cli_provider = provider_name.to_string();
+        updated.updated_at = Utc::now();
+        self.events.publish(AegisEvent::FailoverInitiated {
+            agent_id: relaunched_agent.agent_id,
+            from_provider: agent.cli_provider.clone(),
+            to_provider: provider_name.to_string(),
+        });
+        Ok(updated)
+    }
+
+    async fn inject_recovery(&self, agent: &Agent, prompt: &str) -> Result<()> {
+        let Some(tmux) = &self.tmux else {
+            return Ok(());
+        };
+
+        let provider = self.providers.get(&agent.cli_provider)?;
+        let startup_delay = provider.config().startup_delay_ms;
+        if startup_delay > 0 {
+            tokio::time::sleep(std::time::Duration::from_millis(startup_delay)).await;
+        }
+
+        let target = TmuxTarget::parse(&agent.tmux_target())?;
+        let trigger = normalize_tui_prompt(prompt);
+        tmux.send_raw_input(&target, trigger.as_bytes()).await?;
+        tmux.send_key(&target, "Enter").await?;
+        append_tmux_send(&agent.log_path, &trigger)?;
+        Ok(())
+    }
+
+    async fn mark_failed(&self, agent_id: Uuid, reason: &str) -> Result<()> {
+        let old_status = self
+            .require_agent(agent_id)
+            .map(|agent| agent.status)
+            .unwrap_or(AgentStatus::Active);
+        AgentRegistry::update_status(self.registry.as_ref(), agent_id, AgentStatus::Failed)?;
+        self.events.publish(AegisEvent::AgentStatusChanged {
+            agent_id,
+            old_status,
+            new_status: AgentStatus::Failed,
+        });
+        self.events.publish(AegisEvent::AgentTerminated {
+            agent_id,
+            reason: reason.to_string(),
+        });
+        Ok(())
+    }
+
+    async fn mark_cooling(&self, agent_id: Uuid) -> Result<()> {
+        let old_status = self.require_agent(agent_id)?.status;
+        AgentRegistry::update_status(self.registry.as_ref(), agent_id, AgentStatus::Cooling)?;
+        self.events.publish(AegisEvent::AgentStatusChanged {
+            agent_id,
+            old_status,
+            new_status: AgentStatus::Cooling,
+        });
+        Ok(())
+    }
+
+    async fn mark_active(&self, agent_id: Uuid, provider_name: &str) -> Result<()> {
+        let mut agent = self.require_agent(agent_id)?;
+        let old_status = agent.status.clone();
+        agent.status = AgentStatus::Active;
+        agent.cli_provider = provider_name.to_string();
+        agent.updated_at = Utc::now();
+        AgentRegistry::update(self.registry.as_ref(), &agent)?;
+        self.events.publish(AegisEvent::AgentStatusChanged {
+            agent_id,
+            old_status,
+            new_status: AgentStatus::Active,
+        });
+        Ok(())
+    }
+
+    async fn process_receipt(&self, agent_id: Uuid) -> Result<()> {
+        Dispatcher::process_receipt(self, agent_id).await
     }
 }
 

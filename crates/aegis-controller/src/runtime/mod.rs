@@ -6,6 +6,8 @@ use aegis_recorder::FlightRecorder;
 use aegis_sandbox::SeatbeltSandbox;
 use aegis_taskflow::TaskflowEngine;
 use aegis_tmux::TmuxClient;
+use aegis_watchdog::{FailoverExecutor, Watchdog};
+use tokio::sync::watch;
 use uuid::Uuid;
 
 use crate::{
@@ -42,6 +44,7 @@ pub struct AegisRuntime {
     pub scheduler: Arc<Scheduler>,
     pub state: Arc<StateManager>,
     pub watchdog_sink: Arc<ControllerWatchdogSink>,
+    pub watchdog_shutdown: watch::Sender<bool>,
     pub taskflow: Option<Arc<TaskflowEngine>>,
     pub log_tailer: Arc<LogTailer>,
     pub pane_relay: Arc<PaneRelay>,
@@ -121,6 +124,7 @@ impl AegisRuntime {
             events.clone(),
             config.watchdog.failover_enabled,
         ));
+        let (watchdog_shutdown, _) = watch::channel(false);
 
         let dispatcher = Arc::new(Dispatcher::new(
             registry.clone(),
@@ -158,6 +162,7 @@ impl AegisRuntime {
             scheduler,
             state,
             watchdog_sink,
+            watchdog_shutdown,
             taskflow: Some(taskflow),
             log_tailer,
             pane_relay,
@@ -186,9 +191,35 @@ impl AegisRuntime {
     pub fn start_background_tasks(&self) {
         let scheduler = Arc::clone(&self.scheduler);
         tokio::spawn(async move { scheduler.run_drain_loop("splinter").await });
+
+        let executor: Arc<dyn FailoverExecutor> = self.dispatcher.clone();
+        match Watchdog::new(
+            self.tmux.clone(),
+            self.registry.clone(),
+            self.registry.clone(),
+            self.recorder.clone(),
+            self.providers.clone(),
+            self.watchdog_sink.clone(),
+            self.config.watchdog.clone(),
+            self.config.recorder.clone(),
+            executor,
+        ) {
+            Ok(watchdog) => {
+                let shutdown = self.watchdog_shutdown.subscribe();
+                tokio::spawn(async move {
+                    if let Err(error) = watchdog.run(shutdown).await {
+                        tracing::error!(%error, "watchdog task stopped");
+                    }
+                });
+            }
+            Err(error) => {
+                tracing::error!(%error, "failed to start watchdog");
+            }
+        }
     }
 
     pub async fn shutdown(&self) -> Result<()> {
+        let _ = self.watchdog_shutdown.send(true);
         self.state.snapshot_now()?;
         Ok(())
     }
