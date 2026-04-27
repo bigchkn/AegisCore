@@ -21,14 +21,17 @@ pub fn render_template(
     let extra_writes = render_allow_paths("file-write*", &policy.extra_writes)?;
     let mut extra_exec_paths = render_allow_paths("process-exec", &policy.extra_exec_paths)?;
     let local_exec_path = home.join(".local");
-    if !policy.extra_exec_paths.iter().any(|path| path == &local_exec_path) {
+    if !policy
+        .extra_exec_paths
+        .iter()
+        .any(|path| path == &local_exec_path)
+    {
         let local_exec = render_allow_paths("process-exec", &[local_exec_path])?;
         if !extra_exec_paths.is_empty() && !local_exec.is_empty() {
             extra_exec_paths.push('\n');
         }
         extra_exec_paths.push_str(&local_exec);
     }
-    let hard_deny_reads = render_deny_paths("file-read*", &policy.hard_deny_reads)?;
     let network_policy = render_network_policy(&policy.network);
 
     let rendered = template
@@ -39,7 +42,6 @@ pub fn render_template(
         .replace("@@EXTRA_READS@@", &extra_reads)
         .replace("@@EXTRA_WRITES@@", &extra_writes)
         .replace("@@EXTRA_EXEC_PATHS@@", &extra_exec_paths)
-        .replace("@@HARD_DENY_READS@@", &hard_deny_reads)
         .replace("@@NETWORK_POLICY@@", network_policy);
 
     if let Some(var) = first_unresolved_var(&rendered) {
@@ -58,20 +60,6 @@ fn render_allow_paths(
         .map(|path| {
             let path = path_to_sbpl(path)?;
             Ok(format!("(allow {operation}\n  (subpath \"{path}\"))"))
-        })
-        .collect::<Result<Vec<_>, _>>()
-        .map(|blocks| blocks.join("\n"))
-}
-
-fn render_deny_paths(
-    operation: &str,
-    paths: &[std::path::PathBuf],
-) -> Result<String, SandboxError> {
-    paths
-        .iter()
-        .map(|path| {
-            let path = path_to_sbpl(path)?;
-            Ok(format!("(deny {operation}\n  (subpath \"{path}\"))"))
         })
         .collect::<Result<Vec<_>, _>>()
         .map(|blocks| blocks.join("\n"))

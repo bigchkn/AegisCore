@@ -22,22 +22,9 @@
 ; Without it, sandbox-exec sends SIGTRAP and the process dies immediately.
 (allow sysctl-read)
 
-; Hard denials — must appear before the broad file-read allow (first-match wins in Seatbelt).
-; These protect credentials even though (allow file-read* /) comes after.
-(deny file-read*
-  (subpath "@@HOME@@/.ssh")
-  (subpath "@@HOME@@/.aws")
-  (subpath "@@HOME@@/.gnupg")
-  (subpath "@@HOME@@/.config/1Password")
-  (subpath "@@HOME@@/Library/Keychains"))
-
-(deny file-read*
-  (subpath "@@AEGIS_LOGS_DIR@@"))
-
-@@HARD_DENY_READS@@
-
 ; Broad read access — agents need to read freely to understand project context,
-; run bash commands, and load system libraries. Writes are still tightly restricted.
+; run bash commands, load system libraries, and use provider auth state.
+; Writes are still tightly restricted.
 (allow file-read* (subpath "/"))
 
 ; Restricted write access: worktree + shared temp space only

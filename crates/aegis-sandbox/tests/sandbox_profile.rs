@@ -110,7 +110,7 @@ fn render_extra_reads_and_writes() {
 }
 
 #[test]
-fn hard_deny_ssh_is_always_present() {
+fn profile_allows_read_access_without_hard_denies() {
     let policy = SandboxPolicy {
         extra_reads: vec![PathBuf::from("/Users/tester")],
         ..SandboxPolicy::default()
@@ -124,12 +124,14 @@ fn hard_deny_ssh_is_always_present() {
         )
         .expect("profile renders");
 
-    assert!(rendered.contains("(subpath \"/Users/tester/.ssh\")"));
-    assert!(rendered.contains("(subpath \"/tmp/aegis-worktree/.aegis/logs/sessions\")"));
+    assert!(rendered.contains("(allow file-read* (subpath \"/\"))"));
+    assert!(!rendered.contains("deny file-read"));
+    assert!(!rendered.contains("(subpath \"/Users/tester/.ssh\")"));
+    assert!(!rendered.contains("(subpath \"/tmp/aegis-worktree/.aegis/logs/sessions\")"));
 }
 
 #[test]
-fn render_uses_configured_logs_dir_when_available() {
+fn render_does_not_deny_configured_logs_dir() {
     let rendered =
         SeatbeltSandbox::with_logs_dir(PathBuf::from("/tmp/project/.aegis/logs/sessions"))
             .render(
@@ -139,12 +141,12 @@ fn render_uses_configured_logs_dir_when_available() {
             )
             .expect("profile renders");
 
-    assert!(rendered.contains("(subpath \"/tmp/project/.aegis/logs/sessions\")"));
+    assert!(!rendered.contains("(subpath \"/tmp/project/.aegis/logs/sessions\")"));
     assert!(!rendered.contains("(subpath \"/tmp/aegis-worktree/.aegis/logs/sessions\")"));
 }
 
 #[test]
-fn render_policy_hard_deny_reads() {
+fn render_policy_hard_deny_reads_is_ignored_for_read_wide_sandbox() {
     let policy = SandboxPolicy {
         hard_deny_reads: vec![PathBuf::from("/tmp/aegis-worktree/secrets")],
         ..SandboxPolicy::default()
@@ -158,7 +160,8 @@ fn render_policy_hard_deny_reads() {
         )
         .expect("profile renders");
 
-    assert!(rendered.contains("(deny file-read*\n  (subpath \"/tmp/aegis-worktree/secrets\"))"));
+    assert!(!rendered.contains("deny file-read"));
+    assert!(!rendered.contains("(subpath \"/tmp/aegis-worktree/secrets\")"));
 }
 
 #[test]

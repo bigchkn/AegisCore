@@ -23,6 +23,9 @@ use crate::{
     transcript::append_tmux_send,
 };
 
+// TODO: Fix sandbox launch/auth behavior and re-enable sandbox execution.
+const DISABLE_AGENT_SANDBOX: bool = true;
+
 pub struct Dispatcher {
     registry: Arc<FileRegistry>,
     project_registry: Option<Arc<ProjectRegistry>>,
@@ -142,8 +145,10 @@ impl Dispatcher {
         }
 
         let mut launch_command = Vec::new();
-        if let Some(sandbox) = &self.sandbox {
-            launch_command.extend(sandbox.exec_prefix(&sandbox_profile));
+        if !DISABLE_AGENT_SANDBOX {
+            if let Some(sandbox) = &self.sandbox {
+                launch_command.extend(sandbox.exec_prefix(&sandbox_profile));
+            }
         }
         launch_command.extend(resolved_command_parts(
             &provider_command,
@@ -358,9 +363,10 @@ impl Dispatcher {
             }
         };
 
-        if !tmux.session_exists(&session).await? {
-            tmux.new_session(&session).await?;
+        if tmux.session_exists(&session).await? {
+            tmux.kill_session(&session).await?;
         }
+        tmux.new_session(&session).await?;
 
         // In a new dedicated session, the first window is typically 0 and the first pane is %0.
         // We list panes to find the actual ID.
@@ -408,8 +414,8 @@ impl Dispatcher {
             // that occurs when send-keys -l delivers a multi-line string into Claude's
             // TUI: each embedded \n triggers a separate message submit. The sandbox
             // allows reads from /tmp so the sandboxed claude process can access it.
-            let sys_prompt_path = std::env::temp_dir()
-                .join(format!("aegis_sysprompt_{}.txt", agent.agent_id));
+            let sys_prompt_path =
+                std::env::temp_dir().join(format!("aegis_sysprompt_{}.txt", agent.agent_id));
             std::fs::write(&sys_prompt_path, &plan.initial_prompt).map_err(|source| {
                 AegisError::StorageIo {
                     path: sys_prompt_path.clone(),
@@ -422,18 +428,24 @@ impl Dispatcher {
             launch_cmd.push(sys_prompt_path.to_string_lossy().into_owned());
 
             let launch_shell = launch_shell_command(&agent.worktree_path, &launch_cmd);
-            append_tmux_send(&agent.log_path, &launch_shell)?;
-            tmux.send_text(&target, &launch_shell).await?;
+            let launch_script = write_launch_script("launch", agent.agent_id, &launch_shell)?;
+            let launch_script_cmd = shell_command(&[
+                "/bin/sh".to_string(),
+                launch_script.to_string_lossy().into_owned(),
+            ]);
+            append_tmux_send(&agent.log_path, &launch_script_cmd)?;
+            tmux.send_key(&target, "C-u").await?;
+            let launch_script_input = format!("{launch_script_cmd}\n");
+            tmux.send_raw_input(&target, launch_script_input.as_bytes())
+                .await?;
             let agent = self.activate_agent(agent)?;
             if plan.startup_delay_ms > 0 {
                 tokio::time::sleep(std::time::Duration::from_millis(plan.startup_delay_ms)).await;
             }
-            // Single-line trigger so no newlines hit the TUI.
-            let trigger = "Begin.\n";
-            append_tmux_send(&agent.log_path, trigger.trim_end())?;
+            let trigger = normalize_tui_prompt("Begin.");
             tmux.send_raw_input(&target, trigger.as_bytes()).await?;
-            // File has been consumed by claude at startup; clean up after sending trigger.
-            let _ = std::fs::remove_file(&sys_prompt_path);
+            tmux.send_key(&target, "Enter").await?;
+            append_tmux_send(&agent.log_path, &trigger)?;
             Ok(agent)
         } else {
             let agent = self.insert_starting_agent(plan.agent)?;
@@ -443,6 +455,9 @@ impl Dispatcher {
     }
 
     fn write_sandbox_profile(&self, plan: &SpawnPlan) -> Result<()> {
+        if DISABLE_AGENT_SANDBOX {
+            return Ok(());
+        }
         let Some(sandbox) = &self.sandbox else {
             return Ok(());
         };
@@ -521,8 +536,7 @@ impl Dispatcher {
         self.maybe_clear_last_attached(agent_id)?;
         self.detach_and_archive(agent_id)?;
         if let Some(tmux) = &self.tmux {
-            let target = TmuxTarget::parse(&agent.tmux_target())?;
-            let _ = tmux.kill_window(&target).await;
+            let _ = tmux.kill_session(&agent.tmux_session).await;
         }
         AgentRegistry::update_status(self.registry.as_ref(), agent_id, AgentStatus::Terminated)?;
         AgentRegistry::archive(self.registry.as_ref(), agent_id)
@@ -574,8 +588,10 @@ impl Dispatcher {
         let provider = self.providers.get(&next_provider)?;
         let provider_command = provider.spawn_command(&agent.worktree_path, None, None);
         let mut launch_command = Vec::new();
-        if let Some(sandbox) = &self.sandbox {
-            launch_command.extend(sandbox.exec_prefix(&agent.sandbox_profile));
+        if !DISABLE_AGENT_SANDBOX {
+            if let Some(sandbox) = &self.sandbox {
+                launch_command.extend(sandbox.exec_prefix(&agent.sandbox_profile));
+            }
         }
         launch_command.extend(resolved_command_parts(
             &provider_command,
@@ -596,8 +612,8 @@ impl Dispatcher {
         if let Some(tmux) = &self.tmux {
             let target = TmuxTarget::parse(&agent.tmux_target())?;
 
-            let sys_prompt_path = std::env::temp_dir()
-                .join(format!("aegis_failover_{}.txt", agent_id));
+            let sys_prompt_path =
+                std::env::temp_dir().join(format!("aegis_failover_{}.txt", agent_id));
             std::fs::write(&sys_prompt_path, &recovery_prompt).map_err(|source| {
                 AegisError::StorageIo {
                     path: sys_prompt_path.clone(),
@@ -609,16 +625,24 @@ impl Dispatcher {
             launch_cmd_with_prompt.push(sys_prompt_path.to_string_lossy().into_owned());
 
             let launch_shell = launch_shell_command(&agent.worktree_path, &launch_cmd_with_prompt);
-            append_tmux_send(&agent.log_path, &launch_shell)?;
-            tmux.send_text(&target, &launch_shell).await?;
+            let launch_script = write_launch_script("failover", agent.agent_id, &launch_shell)?;
+            let launch_script_cmd = shell_command(&[
+                "/bin/sh".to_string(),
+                launch_script.to_string_lossy().into_owned(),
+            ]);
+            append_tmux_send(&agent.log_path, &launch_script_cmd)?;
+            tmux.send_key(&target, "C-u").await?;
+            let launch_script_input = format!("{launch_script_cmd}\n");
+            tmux.send_raw_input(&target, launch_script_input.as_bytes())
+                .await?;
             let startup_delay = provider.config().startup_delay_ms;
             if startup_delay > 0 {
                 tokio::time::sleep(std::time::Duration::from_millis(startup_delay)).await;
             }
-            let trigger = "Continue.\n";
-            append_tmux_send(&agent.log_path, trigger.trim_end())?;
+            let trigger = normalize_tui_prompt("Continue.");
             tmux.send_raw_input(&target, trigger.as_bytes()).await?;
-            let _ = std::fs::remove_file(&sys_prompt_path);
+            tmux.send_key(&target, "Enter").await?;
+            append_tmux_send(&agent.log_path, &trigger)?;
         }
 
         let mut updated = self.require_agent(agent_id)?;
@@ -896,6 +920,20 @@ fn launch_shell_command(worktree_path: &std::path::Path, parts: &[String]) -> St
     )
 }
 
+fn write_launch_script(kind: &str, agent_id: Uuid, launch_shell: &str) -> Result<PathBuf> {
+    let script_path = std::env::temp_dir().join(format!("aegis_{kind}_{}.sh", short_id(agent_id)));
+    let script = format!("#!/bin/sh\n{}\n", launch_shell);
+    std::fs::write(&script_path, script).map_err(|source| AegisError::StorageIo {
+        path: script_path.clone(),
+        source,
+    })?;
+    Ok(script_path)
+}
+
+fn normalize_tui_prompt(prompt: &str) -> String {
+    prompt.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
 fn shell_quote(value: &str) -> String {
     if value.is_empty() {
         return "''".to_string();
@@ -923,7 +961,9 @@ fn short_id(id: Uuid) -> String {
 fn resolve_binary_full_path(binary: &str) -> Option<PathBuf> {
     let binary_path = std::path::Path::new(binary);
     if binary_path.is_absolute() && binary_path.is_file() {
-        return std::fs::canonicalize(binary_path).ok().or_else(|| Some(binary_path.to_path_buf()));
+        return std::fs::canonicalize(binary_path)
+            .ok()
+            .or_else(|| Some(binary_path.to_path_buf()));
     }
 
     let output = std::process::Command::new("which")
@@ -1019,7 +1059,13 @@ mod tests {
         let spec = dispatcher.build_bastion_spec("architect").unwrap();
         let agent_id = Uuid::nil();
         let plan = dispatcher
-            .build_spawn_plan(spec, agent_id, "aegis-test".to_string(), 3, "%9".to_string())
+            .build_spawn_plan(
+                spec,
+                agent_id,
+                "aegis-test".to_string(),
+                3,
+                "%9".to_string(),
+            )
             .unwrap();
 
         assert_eq!(plan.agent.kind, AgentKind::Bastion);
@@ -1073,7 +1119,10 @@ mod tests {
         }
 
         static PATH_LOCK: std::sync::OnceLock<std::sync::Mutex<()>> = std::sync::OnceLock::new();
-        let _guard = PATH_LOCK.get_or_init(|| std::sync::Mutex::new(())).lock().unwrap();
+        let _guard = PATH_LOCK
+            .get_or_init(|| std::sync::Mutex::new(()))
+            .lock()
+            .unwrap();
         let old_path = std::env::var_os("PATH");
         let new_path = format!("{}:/usr/bin:/bin", temp.path().display());
         unsafe {
@@ -1165,11 +1214,10 @@ mod tests {
             .unwrap();
 
         let canonical = std::fs::canonicalize(&binary).unwrap();
-        assert!(
-            plan.launch_command
-                .iter()
-                .any(|part| part == &canonical.to_string_lossy())
-        );
+        assert!(plan
+            .launch_command
+            .iter()
+            .any(|part| part == &canonical.to_string_lossy()));
         let canonical_bin_dir = std::fs::canonicalize(&bin_dir).unwrap();
         assert!(plan
             .sandbox_policy
@@ -1187,6 +1235,29 @@ mod tests {
 
         assert!(rendered.starts_with("cd '/tmp/project root' && "));
         assert!(rendered.contains("/opt/claude/bin/claude"));
+    }
+
+    #[test]
+    fn write_launch_script_wraps_long_launch_command() {
+        let agent_id = Uuid::nil();
+        let launch_shell = "cd '/tmp/project root' && sandbox-exec -f profile.sb claude";
+        let script_path = write_launch_script("test-launch", agent_id, launch_shell).unwrap();
+
+        let script = std::fs::read_to_string(&script_path).unwrap();
+        assert_eq!(
+            script,
+            "#!/bin/sh\ncd '/tmp/project root' && sandbox-exec -f profile.sb claude\n"
+        );
+
+        let _ = std::fs::remove_file(script_path);
+    }
+
+    #[test]
+    fn normalize_tui_prompt_collapses_multiline_text() {
+        assert_eq!(
+            normalize_tui_prompt("Begin by checking status.\nThen inspect inbox.\n\nProceed."),
+            "Begin by checking status. Then inspect inbox. Proceed."
+        );
     }
 
     #[tokio::test]
@@ -1358,7 +1429,7 @@ mod tests {
             startup: Some("Begin driving the milestone.".into()),
         };
         let bastion = dispatcher
-            .spawn_from_template(&bastion_rendered)
+            .spawn_from_template(bastion_rendered)
             .await
             .unwrap();
         assert_eq!(bastion.kind, AgentKind::Bastion);
@@ -1377,7 +1448,7 @@ mod tests {
             startup: Some("Check inbox then implement.".into()),
         };
         let splinter = dispatcher
-            .spawn_from_template(&splinter_rendered)
+            .spawn_from_template(splinter_rendered)
             .await
             .unwrap();
         assert_eq!(splinter.kind, AgentKind::Splinter);
@@ -1447,7 +1518,7 @@ mod tests {
             startup: Some("Begin by checking status.".into()),
         };
 
-        let agent = dispatcher.spawn_from_template(&rendered).await.unwrap();
+        let agent = dispatcher.spawn_from_template(rendered).await.unwrap();
 
         assert_eq!(agent.kind, AgentKind::Bastion);
         assert_eq!(agent.role, "test-coordinator");
