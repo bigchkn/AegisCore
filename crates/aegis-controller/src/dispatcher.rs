@@ -234,40 +234,103 @@ impl Dispatcher {
                     tracing::info!(agent_id = %existing.agent_id, role = %name, "re-using existing active bastion");
                     return Ok(existing);
                 }
-                tracing::info!(agent_id = %existing.agent_id, role = %name, "bastion pane is at shell prompt — relaunching");
             }
-        }
-
-        // Check for a recently-failed bastion with the same role — if one exists, resume its
-        // session rather than starting from scratch.
-        let resume_session = {
-            let all = AgentRegistry::list_all(self.registry.as_ref())?;
-            all.into_iter()
-                .filter(|a| {
-                    a.kind == AgentKind::Bastion
-                        && a.role == name
-                        && a.status == AgentStatus::Failed
-                })
-                .max_by_key(|a| a.updated_at)
-                .map(|prev| aegis_core::SessionRef {
-                    provider: prev.cli_provider.clone(),
-                    session_id: None, // resume most recent session
-                    checkpoint: None,
-                })
-        };
-
-        if resume_session.is_some() {
-            tracing::info!(role = %name, "resuming previous bastion session after daemon restart");
+            // Pane is dead (daemon restarted or process exited). Relaunch in-place:
+            // reuse the same agent record and resume the previous session.
+            tracing::info!(agent_id = %existing.agent_id, role = %name, "relaunching bastion in-place with --resume");
+            return self.relaunch_bastion_in_place(existing).await;
         }
 
         let mut spec = self.build_bastion_spec(name)?;
-        spec.resume_session = resume_session;
+        spec.resume_session = None;
         let agent_id = Uuid::new_v4();
         let (session, window, pane) = self
             .prepare_tmux_window(agent_id, AgentKind::Bastion, name)
             .await?;
         let plan = self.build_spawn_plan(spec, agent_id, session, window, pane)?;
         self.launch_or_insert_plan(plan).await
+    }
+
+    /// Relaunch an existing bastion agent in-place: kill the old tmux session, open a fresh one
+    /// with the same session name, and re-launch the provider with `--resume` so the agent picks
+    /// up its previous conversation. The agent_id and registry record are preserved.
+    async fn relaunch_bastion_in_place(&self, mut agent: Agent) -> Result<Agent> {
+        let Some(tmux) = &self.tmux else {
+            return Ok(agent);
+        };
+
+        // Kill the stale session and open a fresh one with the same name.
+        if tmux.session_exists(&agent.tmux_session).await? {
+            tmux.kill_session(&agent.tmux_session).await?;
+        }
+        tmux.new_session(&agent.tmux_session).await?;
+        let window_target = TmuxTarget::parse(&format!("{}:", agent.tmux_session))?;
+        let pane = tmux
+            .list_panes(&window_target)
+            .await?
+            .into_iter()
+            .next()
+            .ok_or_else(|| AegisError::TmuxPaneNotFound {
+                target: agent.tmux_session.clone(),
+            })?;
+        agent.tmux_window = 0;
+        agent.tmux_pane = pane;
+        agent.status = AgentStatus::Starting;
+        agent.updated_at = chrono::Utc::now();
+        AgentRegistry::update(self.registry.as_ref(), &agent)?;
+        self.attach_recorder(&agent)?;
+
+        let provider = self.providers.get(&agent.cli_provider)?;
+        let resume_ref = aegis_core::SessionRef {
+            provider: agent.cli_provider.clone(),
+            session_id: None,
+            checkpoint: None,
+        };
+        let provider_command =
+            provider.spawn_command(&agent.worktree_path, Some(&resume_ref), None);
+        let mut launch_command = Vec::new();
+        if !DISABLE_AGENT_SANDBOX {
+            if let Some(sandbox) = &self.sandbox {
+                launch_command.extend(sandbox.exec_prefix(&agent.sandbox_profile));
+            }
+        }
+        launch_command.extend(resolved_command_parts(
+            &provider_command,
+            &provider.config().binary,
+        ));
+
+        let target = TmuxTarget::parse(&agent.tmux_target())?;
+        let launch_shell = launch_shell_command(&agent.worktree_path, &launch_command);
+        let launch_script = write_launch_script("launch", agent.agent_id, &launch_shell)?;
+        let launch_script_cmd = shell_command(&[
+            "/bin/sh".to_string(),
+            launch_script.to_string_lossy().into_owned(),
+        ]);
+        append_tmux_send(&agent.log_path, &launch_script_cmd)?;
+        tmux.send_key(&target, "C-u").await?;
+        let launch_script_input = format!("{launch_script_cmd}\n");
+        tmux.send_raw_input(&target, launch_script_input.as_bytes())
+            .await?;
+
+        agent.status = AgentStatus::Active;
+        agent.updated_at = chrono::Utc::now();
+        AgentRegistry::update(self.registry.as_ref(), &agent)?;
+        self.events.publish(AegisEvent::AgentSpawned {
+            agent_id: agent.agent_id,
+            role: agent.role.clone(),
+        });
+
+        let startup_delay = provider.config().startup_delay_ms;
+        if startup_delay > 0 {
+            tokio::time::sleep(std::time::Duration::from_millis(startup_delay)).await;
+        }
+
+        let trigger = normalize_tui_prompt("Continue where you left off.");
+        tmux.send_raw_input(&target, trigger.as_bytes()).await?;
+        tmux.send_key(&target, "Enter").await?;
+        append_tmux_send(&agent.log_path, &trigger)?;
+
+        Ok(agent)
     }
 
     pub async fn spawn_splinter(

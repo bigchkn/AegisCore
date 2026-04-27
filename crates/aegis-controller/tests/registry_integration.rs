@@ -130,11 +130,10 @@ fn test_snapshot_and_recovery() {
     // 4. Recover
     let result = state_manager.recover().unwrap();
     assert!(result.registry_restored);
-    assert_eq!(result.agents_recovered, 0);
-    assert_eq!(result.agents_marked_failed, 1);
+    assert_eq!(result.agents_recovered, 1);
+    assert_eq!(result.agents_marked_failed, 0);
 
-    // 5. All in-flight agents (including bastions) are marked Failed on restart so that
-    //    spawn_bastion detects them and re-launches with --resume.
+    // 5. Bastions are kept Active so spawn_bastion can find and relaunch them in-place.
     let recovered = AgentRegistry::get(&registry, agent_id).unwrap().unwrap();
-    assert_eq!(recovered.status, AgentStatus::Failed);
+    assert_eq!(recovered.status, AgentStatus::Active);
 }
