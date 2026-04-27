@@ -23,12 +23,14 @@ Instead of "guessing" how to start an agent, we categorize providers into two di
 
 ### 2.1 Interaction Models (The "Why")
 
-1.  **Direct Model (e.g., Gemini CLI):**
-    *   **Mechanism:** Uses the `-i <prompt>` flag to start the agent with a goal already set.
-    *   **Benefit:** **Zero race conditions.** The prompt is part of the process launch. No `send-keys` or `sleep` is required.
-2.  **Injected Model (e.g., Claude Code):**
+1.  **Headless Iterative Model (e.g., Gemini CLI):**
+    *   **Mechanism:** Uses the `--prompt <goal>` flag for headless execution. For subsequent steps (like clarifications), Aegis launches a new headless process with `--resume latest --prompt <response>`.
+    *   **Benefit:** **Deterministic.** No TUI synchronization, buffering, or `send-keys` issues. Output is captured directly from stdout.
+    *   **Context Preservation:** Using `--resume latest` ensures the agent maintains full conversation history across multiple Aegis-triggered steps.
+2.  **Injected TUI Model (e.g., Claude Code):**
     *   **Mechanism:** Boots into a "Waiting for Input" state. Requires a simulated Enter key.
     *   **Benefit:** Standardizes the "Wait then Enter" sequence into a reusable workflow with explicit `startup_delay_ms` and `C-m` (Carriage Return) handling.
+    *   **Requirement:** Tmux hardening (`harden_pane`) is critical here to prevent escape sequence conflicts.
 
 ### 2.2 Environmental Injection (The "Where")
 
@@ -58,8 +60,8 @@ We will shift from CLI arguments to **Environment Variables** for core metadata.
 
 ### 3.4 `crates/aegis-controller` (The Orchestrator)
 *   **`dispatcher.rs`**: Rewrite `launch_or_insert_plan` to use a match statement on `provider.interaction_model()`.
-    *   **Case Direct:** Prepend `AEGIS_AGENT_ID=...` and append `-i "Begin."` to the launch command.
-    *   **Case Injected:** Launch binary -> `harden_pane` -> `sleep` -> `send_raw_input("Begin.")` -> `send_key("Enter")`.
+    *   **Case Headless Iterative:** Prepend `AEGIS_AGENT_ID=...` and use `--prompt "Begin."`. For future inputs (clarifications), re-launch with `--resume latest --prompt "..."`.
+    *   **Case Injected TUI:** Launch binary -> `harden_pane` -> `sleep` -> `send_raw_input("Begin.")` -> `send_key("C-m")`.
 
 ---
 
