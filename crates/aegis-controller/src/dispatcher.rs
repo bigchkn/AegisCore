@@ -325,9 +325,8 @@ impl Dispatcher {
             tokio::time::sleep(std::time::Duration::from_millis(startup_delay)).await;
         }
 
-        let trigger = normalize_tui_prompt("Continue where you left off.");
+        let trigger = normalize_tui_prompt("Continue where you left off.\n");
         tmux.send_raw_input(&target, trigger.as_bytes()).await?;
-        tmux.send_key(&target, "Enter").await?;
         append_tmux_send(&agent.log_path, &trigger)?;
 
         Ok(agent)
@@ -550,13 +549,12 @@ impl Dispatcher {
                 tokio::time::sleep(std::time::Duration::from_millis(plan.startup_delay_ms)).await;
             }
             let trigger_text = if plan.is_resume {
-                "Continue where you left off."
+                "Continue where you left off.\n"
             } else {
-                "Begin."
+                "Begin.\n"
             };
             let trigger = normalize_tui_prompt(trigger_text);
             tmux.send_raw_input(&target, trigger.as_bytes()).await?;
-            tmux.send_key(&target, "Enter").await?;
             append_tmux_send(&agent.log_path, &trigger)?;
             Ok(agent)
         } else {
@@ -766,9 +764,8 @@ impl Dispatcher {
             if startup_delay > 0 {
                 tokio::time::sleep(std::time::Duration::from_millis(startup_delay)).await;
             }
-            let trigger = normalize_tui_prompt("Continue.");
+            let trigger = normalize_tui_prompt("Continue.\n");
             tmux.send_raw_input(&target, trigger.as_bytes()).await?;
-            tmux.send_key(&target, "Enter").await?;
             append_tmux_send(&launch_agent.log_path, &trigger)?;
         }
 
@@ -1093,9 +1090,8 @@ impl FailoverExecutor for Dispatcher {
         }
 
         let target = TmuxTarget::parse(&agent.tmux_target())?;
-        let trigger = normalize_tui_prompt(prompt);
+        let trigger = normalize_tui_prompt(&format!("{prompt}\n"));
         tmux.send_raw_input(&target, trigger.as_bytes()).await?;
-        tmux.send_key(&target, "Enter").await?;
         append_tmux_send(&agent.log_path, &trigger)?;
         Ok(())
     }
@@ -1241,7 +1237,13 @@ fn write_launch_script(kind: &str, agent_id: Uuid, launch_shell: &str) -> Result
 }
 
 fn normalize_tui_prompt(prompt: &str) -> String {
-    prompt.split_whitespace().collect::<Vec<_>>().join(" ")
+    let has_newline = prompt.ends_with('\n');
+    let normalized = prompt.split_whitespace().collect::<Vec<_>>().join(" ");
+    if has_newline {
+        format!("{normalized}\n")
+    } else {
+        normalized
+    }
 }
 
 fn shell_quote(value: &str) -> String {
