@@ -114,8 +114,9 @@ impl Dispatcher {
         &self,
         mut spec: AgentSpec,
         agent_id: Uuid,
+        tmux_session: String,
         tmux_window: u32,
-        tmux_pane: impl Into<String>,
+        tmux_pane: String,
     ) -> Result<SpawnPlan> {
         let worktree_path = if let Some(override_path) = spec.worktree_override.take() {
             override_path
@@ -158,9 +159,9 @@ impl Dispatcher {
             role: spec.role.clone(),
             parent_id: spec.parent_id,
             task_id: spec.task_id,
-            tmux_session: self.config.global.tmux_session_name.clone(),
+            tmux_session,
             tmux_window,
-            tmux_pane: tmux_pane.into(),
+            tmux_pane,
             worktree_path: worktree_path.clone(),
             cli_provider: spec.cli_provider.clone(),
             fallback_cascade: spec.fallback_cascade.clone(),
@@ -210,10 +211,26 @@ impl Dispatcher {
     }
 
     pub async fn spawn_bastion(&self, name: &str) -> Result<Agent> {
+        let active = self.registry.list_active()?;
+        if let Some(existing) = active
+            .into_iter()
+            .find(|a| a.kind == AgentKind::Bastion && a.role == name)
+        {
+            if let Some(tmux) = &self.tmux {
+                let target = TmuxTarget::parse(&existing.tmux_target())?;
+                if tmux.pane_is_alive(&target).await.unwrap_or(false) {
+                    tracing::info!(agent_id = %existing.agent_id, role = %name, "re-using existing active bastion");
+                    return Ok(existing);
+                }
+            }
+        }
+
         let spec = self.build_bastion_spec(name)?;
         let agent_id = Uuid::new_v4();
-        let (window, pane) = self.prepare_tmux_window(agent_id, name).await?;
-        let plan = self.build_spawn_plan(spec, agent_id, window, pane)?;
+        let (session, window, pane) = self
+            .prepare_tmux_window(agent_id, AgentKind::Bastion, name)
+            .await?;
+        let plan = self.build_spawn_plan(spec, agent_id, session, window, pane)?;
         self.launch_or_insert_plan(plan).await
     }
 
@@ -240,12 +257,12 @@ impl Dispatcher {
         tracing::debug!(%agent_id, "preparing worktree");
         self.prepare_splinter_worktree(agent_id, role).await?;
 
-        let window_name = format!("splinter-{role}-{}", short_id(agent_id));
-        tracing::debug!(%agent_id, %window_name, "preparing tmux window");
-        let (window, pane) = self.prepare_tmux_window(agent_id, &window_name).await?;
+        let (session, window, pane) = self
+            .prepare_tmux_window(agent_id, AgentKind::Splinter, role)
+            .await?;
 
-        tracing::debug!(%agent_id, window, %pane, "building spawn plan");
-        let plan = self.build_spawn_plan(spec, agent_id, window, pane)?;
+        tracing::debug!(%agent_id, session, window, pane, "building spawn plan");
+        let plan = self.build_spawn_plan(spec, agent_id, session, window, pane)?;
 
         tracing::debug!(%agent_id, launch_cmd = ?plan.launch_command, "launching");
         TaskRegistry::assign(self.registry.as_ref(), task.task_id, agent_id)?;
@@ -257,13 +274,29 @@ impl Dispatcher {
     /// The rendered system_prompt and startup are combined into a single initial
     /// message injected after the agent CLI is launched. No PromptManager or
     /// taskflow_snippet is used — the template fully owns the prompt content.
-    pub async fn spawn_from_template(&self, rendered: &RenderedTemplate) -> Result<Agent> {
-        let agent_id = Uuid::new_v4();
-
+    pub async fn spawn_from_template(&self, rendered: RenderedTemplate) -> Result<Agent> {
         let kind = match rendered.kind {
             TemplateKind::Bastion => AgentKind::Bastion,
             TemplateKind::Splinter => AgentKind::Splinter,
         };
+
+        if kind == AgentKind::Bastion {
+            let active = self.registry.list_active()?;
+            if let Some(existing) = active
+                .into_iter()
+                .find(|a| a.kind == AgentKind::Bastion && a.role == rendered.role)
+            {
+                if let Some(tmux) = &self.tmux {
+                    let target = TmuxTarget::parse(&existing.tmux_target())?;
+                    if tmux.pane_is_alive(&target).await.unwrap_or(false) {
+                        tracing::info!(agent_id = %existing.agent_id, role = %rendered.role, "re-using existing active bastion from template");
+                        return Ok(existing);
+                    }
+                }
+            }
+        }
+
+        let agent_id = Uuid::new_v4();
 
         let mut inline_prompt = rendered.system_prompt.clone();
         if let Some(startup) = &rendered.startup {
@@ -296,40 +329,53 @@ impl Dispatcher {
                 .await?;
         }
 
-        let (window, pane) = self.prepare_tmux_window(agent_id, &rendered.role).await?;
-        let plan = self.build_spawn_plan(spec, agent_id, window, pane)?;
+        let (session, window, pane) = self
+            .prepare_tmux_window(agent_id, kind, &rendered.role)
+            .await?;
+        let plan = self.build_spawn_plan(spec, agent_id, session, window, pane)?;
         self.launch_or_insert_plan(plan).await
     }
 
     async fn prepare_tmux_window(
         &self,
         agent_id: Uuid,
-        window_name: &str,
-    ) -> Result<(u32, String)> {
+        kind: AgentKind,
+        role: &str,
+    ) -> Result<(String, u32, String)> {
         let Some(tmux) = &self.tmux else {
-            return Ok((0, "%0".to_string()));
+            return Ok(("aegis".to_string(), 0, "%0".to_string()));
         };
 
-        let session = &self.config.global.tmux_session_name;
-        if !tmux.session_exists(session).await? {
-            tmux.new_session(session).await?;
+        let project_prefix = self
+            .project_id
+            .map(|id| short_id(id))
+            .unwrap_or_else(|| "default".to_string());
+
+        let session = match kind {
+            AgentKind::Bastion => format!("aegis-{}-{}", project_prefix, role),
+            AgentKind::Splinter => {
+                format!("aegis-{}-{}-{}", project_prefix, role, short_id(agent_id))
+            }
+        };
+
+        if !tmux.session_exists(&session).await? {
+            tmux.new_session(&session).await?;
         }
 
-        let window = tmux.new_window(session, Some(window_name)).await?;
-        // Target the window (no pane) so list_panes returns panes for this window.
-        // The initial pane of a new window is never %0 except in the very first window.
-        let window_target = TmuxTarget::parse(&format!("{session}:{window}"))?;
+        // In a new dedicated session, the first window is typically 0 and the first pane is %0.
+        // We list panes to find the actual ID.
+        let window_target = TmuxTarget::parse(&format!("{}:", session))?;
         let pane = tmux
             .list_panes(&window_target)
             .await?
             .into_iter()
             .next()
             .ok_or_else(|| AegisError::TmuxPaneNotFound {
-                target: format!("{session}:{window}"),
+                target: session.clone(),
             })?;
 
-        tracing::debug!(%agent_id, session, window, pane, "prepared tmux window");
-        Ok((window, pane))
+        tracing::debug!(%agent_id, session, pane, "prepared tmux window");
+        Ok((session, 0, pane))
     }
 
     async fn prepare_splinter_worktree(&self, agent_id: Uuid, role: &str) -> Result<()> {
@@ -973,7 +1019,7 @@ mod tests {
         let spec = dispatcher.build_bastion_spec("architect").unwrap();
         let agent_id = Uuid::nil();
         let plan = dispatcher
-            .build_spawn_plan(spec, agent_id, 3, "%9")
+            .build_spawn_plan(spec, agent_id, "aegis-test".to_string(), 3, "%9".to_string())
             .unwrap();
 
         assert_eq!(plan.agent.kind, AgentKind::Bastion);
@@ -1036,7 +1082,7 @@ mod tests {
 
         let spec = dispatcher.build_bastion_spec("architect").unwrap();
         let plan = dispatcher
-            .build_spawn_plan(spec, Uuid::nil(), 3, "%9")
+            .build_spawn_plan(spec, Uuid::nil(), "aegis".to_string(), 3, "%9".to_string())
             .unwrap();
         let canonical_valid = std::fs::canonicalize(&valid).unwrap();
         assert!(plan
@@ -1115,7 +1161,7 @@ mod tests {
 
         let spec = dispatcher.build_bastion_spec("architect").unwrap();
         let plan = dispatcher
-            .build_spawn_plan(spec, Uuid::nil(), 3, "%9")
+            .build_spawn_plan(spec, Uuid::nil(), "aegis".to_string(), 3, "%9".to_string())
             .unwrap();
 
         let canonical = std::fs::canonicalize(&binary).unwrap();
@@ -1429,7 +1475,7 @@ mod tests {
             model_override: None,
         };
         let plan = dispatcher
-            .build_spawn_plan(spec, Uuid::nil(), 1, "%1")
+            .build_spawn_plan(spec, Uuid::nil(), "aegis".to_string(), 1, "%1".to_string())
             .unwrap();
         assert_eq!(plan.initial_prompt, "TEMPLATE PROMPT");
         assert!(!plan.initial_prompt.contains("Project Context"));

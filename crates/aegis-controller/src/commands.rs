@@ -89,7 +89,7 @@ impl ControllerCommands {
     }
 
     pub async fn spawn_from_template(&self, rendered: RenderedTemplate) -> Result<Agent> {
-        self.dispatcher.spawn_from_template(&rendered).await
+        self.dispatcher.spawn_from_template(rendered).await
     }
 
     pub async fn pause(&self, agent_id: Uuid) -> Result<()> {
