@@ -205,6 +205,7 @@ impl Dispatcher {
             launch_command,
             initial_prompt,
             sandbox_policy: spec.sandbox,
+            startup_delay_ms: provider.config().startup_delay_ms,
         })
     }
 
@@ -359,6 +360,9 @@ impl Dispatcher {
             append_tmux_send(&agent.log_path, &launch_shell)?;
             tmux.send_text(&target, &launch_shell).await?;
             let agent = self.activate_agent(agent)?;
+            if plan.startup_delay_ms > 0 {
+                tokio::time::sleep(std::time::Duration::from_millis(plan.startup_delay_ms)).await;
+            }
             append_tmux_send(&agent.log_path, &plan.initial_prompt)?;
             tmux.send_text(&target, &plan.initial_prompt).await?;
             Ok(agent)

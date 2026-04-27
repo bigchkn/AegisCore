@@ -9,6 +9,9 @@ pub struct ProviderConfig {
     pub extra_args: Vec<String>,
     pub resume_flag: Option<String>,
     pub model: Option<String>,
+    /// How long to wait after injecting the launch command before injecting the initial prompt.
+    /// Gives the CLI time to start its interactive TUI before receiving input.
+    pub startup_delay_ms: u64,
 }
 
 #[derive(Debug, Clone)]

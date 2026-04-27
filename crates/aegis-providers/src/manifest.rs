@@ -27,6 +27,8 @@ pub struct ProviderDefinition {
     pub export_command: Option<String>,
     pub model_flag: Option<String>,
     pub error_patterns: ErrorPatterns,
+    #[serde(default)]
+    pub startup_delay_ms: u64,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]

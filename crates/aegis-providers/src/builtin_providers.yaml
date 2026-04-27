@@ -2,6 +2,7 @@ providers:
   claude-code:
     binary: "claude"
     auto_approve_flags: ["--dangerously-skip-permissions"]
+    startup_delay_ms: 8000
     resume_mechanism: "cli_flag"
     resume_flag: "--resume"
     export_command: "/export"

@@ -30,6 +30,9 @@ impl ProviderRegistry {
                         .clone()
                         .or_else(|| definition.resume_flag.clone()),
                     model: entry.model.clone(),
+                    startup_delay_ms: entry
+                        .startup_delay_ms
+                        .unwrap_or(definition.startup_delay_ms),
                 }
             } else {
                 aegis_core::provider::ProviderConfig {
@@ -38,6 +41,7 @@ impl ProviderRegistry {
                     extra_args: Vec::new(),
                     resume_flag: definition.resume_flag.clone(),
                     model: None,
+                    startup_delay_ms: definition.startup_delay_ms,
                 }
             };
 
@@ -109,7 +113,7 @@ mod tests {
         let cmd = claude.spawn_command(&PathBuf::from("/tmp"), None, None);
         let args: Vec<_> = cmd.get_args().map(|a| a.to_str().unwrap()).collect();
 
-        assert!(args.contains(&"--allow-dangerously-skip-permissions"));
+        assert!(args.contains(&"--dangerously-skip-permissions"));
         assert!(!args.contains(&"--non-interactive"));
     }
 
@@ -196,6 +200,7 @@ mod tests {
                 extra_args: vec![],
                 resume_flag: None,
                 model: model.map(str::to_owned),
+                startup_delay_ms: 0,
             },
         )
     }
@@ -212,6 +217,7 @@ mod tests {
                 extra_args: vec!["--verbose".into(), "--debug".into()],
                 resume_flag: None,
                 model: None,
+                startup_delay_ms: 0,
             },
         );
 
@@ -222,7 +228,7 @@ mod tests {
         let verbose_pos = args.iter().position(|a| *a == "--verbose").unwrap();
         let yolo_pos = args
             .iter()
-            .position(|a| *a == "--allow-dangerously-skip-permissions")
+            .position(|a| *a == "--dangerously-skip-permissions")
             .unwrap();
         assert!(
             verbose_pos < yolo_pos,

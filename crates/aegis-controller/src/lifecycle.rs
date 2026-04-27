@@ -38,6 +38,7 @@ pub struct SpawnPlan {
     pub launch_command: Vec<String>,
     pub initial_prompt: String,
     pub sandbox_policy: SandboxPolicy,
+    pub startup_delay_ms: u64,
 }
 
 #[derive(Debug, Clone)]

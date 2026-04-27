@@ -87,6 +87,7 @@ pub struct RawProviderConfig {
     pub resume_flag: Option<String>,
     pub model: Option<String>,
     pub extra_args: Option<Vec<String>>,
+    pub startup_delay_ms: Option<u64>,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -197,6 +198,7 @@ pub struct ProviderEntry {
     pub resume_flag: Option<String>,
     pub model: Option<String>,
     pub extra_args: Vec<String>,
+    pub startup_delay_ms: Option<u64>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -416,6 +418,7 @@ impl EffectiveConfig {
                     resume_flag: raw.resume_flag.clone(),
                     model: raw.model.clone(),
                     extra_args: raw.extra_args.clone().unwrap_or_default(),
+                    startup_delay_ms: raw.startup_delay_ms,
                 },
             );
         }
@@ -428,6 +431,7 @@ impl EffectiveConfig {
                     resume_flag: None,
                     model: None,
                     extra_args: Vec::new(),
+                    startup_delay_ms: None,
                 });
             if let Some(bin) = &raw.binary {
                 entry.binary = bin.clone();
@@ -440,6 +444,9 @@ impl EffectiveConfig {
             }
             if let Some(args) = &raw.extra_args {
                 entry.extra_args = args.clone();
+            }
+            if let Some(delay) = raw.startup_delay_ms {
+                entry.startup_delay_ms = Some(delay);
             }
         }
 
