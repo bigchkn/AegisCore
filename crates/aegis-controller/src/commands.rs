@@ -290,6 +290,12 @@ impl ControllerCommands {
         tf.next_milestone()
     }
 
+    /// Sends a `roadmap_updated` notification to all active bastion agents.
+    /// Returns the count of agents notified (0 if no bastion is running — not an error).
+    pub async fn taskflow_notify(&self, event: &str, message: &str) -> Result<usize> {
+        notify_active_bastions(self.registry.as_ref(), &self.message_router, event, message).await
+    }
+
     pub async fn worktree_create(&self, milestone_id: &str) -> Result<std::path::PathBuf> {
         self.dispatcher.worktree_create(milestone_id).await
     }
@@ -301,6 +307,31 @@ impl ControllerCommands {
     pub async fn worktree_list(&self) -> Result<Vec<(String, std::path::PathBuf)>> {
         self.dispatcher.worktree_list().await
     }
+}
+
+async fn notify_active_bastions(
+    registry: &FileRegistry,
+    router: &MessageRouter,
+    event: &str,
+    message: &str,
+) -> Result<usize> {
+    let bastions: Vec<_> = AgentRegistry::list_by_role(registry, "bastion")?
+        .into_iter()
+        .filter(|a| a.status == aegis_core::AgentStatus::Active)
+        .collect();
+
+    for bastion in &bastions {
+        router
+            .send(
+                None,
+                &bastion.agent_id.to_string(),
+                aegis_core::MessageType::Notification,
+                serde_json::json!({ "event": event, "message": message }),
+            )
+            .await?;
+    }
+
+    Ok(bastions.len())
 }
 
 fn resolve_agent_id_from_agents(agents: &[Agent], raw: &str) -> Result<Uuid> {
@@ -333,6 +364,7 @@ mod tests {
     use super::*;
     use aegis_core::{AgentKind, AgentStatus};
     use chrono::Utc;
+    use tempfile::tempdir;
     use uuid::Uuid;
 
     fn agent(agent_id: Uuid) -> Agent {
@@ -386,5 +418,89 @@ mod tests {
         let err = resolve_agent_id_from_agents(&[], &agent_id.to_string()).unwrap_err();
 
         assert!(matches!(err, AegisError::AgentNotFound { agent_id: id } if id == agent_id));
+    }
+
+    // --- notify_active_bastions tests ---
+
+    fn write_minimal_config(root: &std::path::Path) {
+        let config = "[providers.claude-code]\nbinary = \"claude-code\"\n\n[splinter_defaults]\ncli_provider = \"claude-code\"\n";
+        std::fs::write(root.join("aegis.toml"), config).unwrap();
+    }
+
+    fn make_bastion(agent_id: Uuid, status: AgentStatus) -> Agent {
+        let now = Utc::now();
+        Agent {
+            agent_id,
+            name: format!("bastion-{agent_id}"),
+            kind: AgentKind::Bastion,
+            status,
+            role: "bastion".to_string(),
+            parent_id: None,
+            task_id: None,
+            tmux_session: "aegis".to_string(),
+            tmux_window: 0,
+            tmux_pane: "%0".to_string(),
+            worktree_path: "/tmp/worktree".into(),
+            cli_provider: "claude-code".to_string(),
+            fallback_cascade: vec![],
+            sandbox_profile: "/tmp/profile.sb".into(),
+            log_path: "/tmp/log.log".into(),
+            created_at: now,
+            updated_at: now,
+            terminated_at: None,
+        }
+    }
+
+    fn setup(root: &std::path::Path) -> (Arc<crate::registry::FileRegistry>, crate::messaging::MessageRouter) {
+        write_minimal_config(root);
+        let storage = Arc::new(crate::storage::ProjectStorage::new(root.to_path_buf()));
+        storage.ensure_layout().unwrap();
+        crate::registry::FileRegistry::init(storage.as_ref()).unwrap();
+        let registry = Arc::new(crate::registry::FileRegistry::new(storage.clone()));
+        let router = crate::messaging::MessageRouter::new(Arc::clone(&registry), storage, None);
+        (registry, router)
+    }
+
+    #[tokio::test]
+    async fn notify_sends_to_active_bastion_and_returns_one() {
+        let dir = tempdir().unwrap();
+        let (registry, router) = setup(dir.path());
+        let bastion_id = Uuid::parse_str("aaaaaaaa-0000-0000-0000-000000000001").unwrap();
+        AgentRegistry::insert(registry.as_ref(), &make_bastion(bastion_id, AgentStatus::Active)).unwrap();
+
+        let count = notify_active_bastions(registry.as_ref(), &router, "roadmap_updated", "new milestone added").await.unwrap();
+
+        assert_eq!(count, 1);
+        let inbox = router.inbox(&bastion_id.to_string()).unwrap();
+        assert_eq!(inbox.messages.len(), 1);
+        assert_eq!(inbox.messages[0].payload["event"], "roadmap_updated");
+    }
+
+    #[tokio::test]
+    async fn notify_with_no_active_bastion_returns_zero() {
+        let dir = tempdir().unwrap();
+        let (registry, router) = setup(dir.path());
+        let bastion_id = Uuid::parse_str("aaaaaaaa-0000-0000-0000-000000000002").unwrap();
+        AgentRegistry::insert(registry.as_ref(), &make_bastion(bastion_id, AgentStatus::Terminated)).unwrap();
+
+        let count = notify_active_bastions(registry.as_ref(), &router, "roadmap_updated", "").await.unwrap();
+
+        assert_eq!(count, 0);
+    }
+
+    #[tokio::test]
+    async fn notify_routes_to_all_active_bastions() {
+        let dir = tempdir().unwrap();
+        let (registry, router) = setup(dir.path());
+        let b1 = Uuid::parse_str("aaaaaaaa-0000-0000-0000-000000000003").unwrap();
+        let b2 = Uuid::parse_str("aaaaaaaa-0000-0000-0000-000000000004").unwrap();
+        AgentRegistry::insert(registry.as_ref(), &make_bastion(b1, AgentStatus::Active)).unwrap();
+        AgentRegistry::insert(registry.as_ref(), &make_bastion(b2, AgentStatus::Active)).unwrap();
+
+        let count = notify_active_bastions(registry.as_ref(), &router, "roadmap_updated", "two bastions").await.unwrap();
+
+        assert_eq!(count, 2);
+        assert_eq!(router.inbox(&b1.to_string()).unwrap().messages.len(), 1);
+        assert_eq!(router.inbox(&b2.to_string()).unwrap().messages.len(), 1);
     }
 }

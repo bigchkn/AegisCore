@@ -314,6 +314,15 @@ enum TaskflowCommands {
     },
     /// Show the next milestone to work on (greedy topological order)
     Next,
+    /// Notify the running bastion that the roadmap has changed
+    Notify {
+        /// Event name sent to the bastion
+        #[arg(long, default_value = "roadmap_updated")]
+        event: String,
+        /// Optional human-readable message
+        #[arg(long, default_value = "Roadmap updated externally.")]
+        message: String,
+    },
 }
 
 #[derive(Subcommand)]
@@ -669,6 +678,9 @@ async fn dispatch(cli: Cli, printer: &Printer, client: &DaemonClient) -> Result<
                     .await
                 }
                 TaskflowCommands::Next => commands::taskflow::next(printer, client, &anchor).await,
+                TaskflowCommands::Notify { event, message } => {
+                    commands::taskflow::notify(&event, &message, printer, client, &anchor).await
+                }
             }
         }
 

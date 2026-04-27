@@ -662,7 +662,18 @@ async fn dispatch_command(
                     })
                 })?;
             let task = commands.taskflow_create_task(milestone_id, draft)?;
-            Ok(serde_json::to_value(task).unwrap())
+            let notify_result = commands
+                .taskflow_notify("roadmap_updated", "Roadmap updated from the web UI.")
+                .await;
+            let (notified, warning) = match notify_result {
+                Ok(count) => (count, None),
+                Err(err) => (0, Some(err.to_string())),
+            };
+            Ok(serde_json::json!({
+                "task": task,
+                "notified": notified,
+                "warning": warning,
+            }))
         }
         "taskflow.update_task" => {
             let source_milestone_id = request
@@ -695,7 +706,18 @@ async fn dispatch_command(
                     })
                 })?;
             let task = commands.taskflow_update_task(source_milestone_id, task_uid, patch)?;
-            Ok(serde_json::to_value(task).unwrap())
+            let notify_result = commands
+                .taskflow_notify("roadmap_updated", "Roadmap updated from the web UI.")
+                .await;
+            let (notified, warning) = match notify_result {
+                Ok(count) => (count, None),
+                Err(err) => (0, Some(err.to_string())),
+            };
+            Ok(serde_json::json!({
+                "task": task,
+                "notified": notified,
+                "warning": warning,
+            }))
         }
         "taskflow.set_task_status" => {
             let milestone_id = request
@@ -755,6 +777,20 @@ async fn dispatch_command(
                 .map(|(id, path)| serde_json::json!({ "milestone_id": id, "path": path }))
                 .collect();
             Ok(serde_json::Value::Array(arr))
+        }
+        "taskflow.notify" => {
+            let event = request
+                .params
+                .get("event")
+                .and_then(|v| v.as_str())
+                .unwrap_or("roadmap_updated");
+            let message = request
+                .params
+                .get("message")
+                .and_then(|v| v.as_str())
+                .unwrap_or("Roadmap updated externally.");
+            let notified = commands.taskflow_notify(event, message).await?;
+            Ok(serde_json::json!({ "notified": notified }))
         }
         _ => Err(AegisError::IpcProtocol {
             reason: format!("Unknown command: {}", request.command),
@@ -1217,6 +1253,11 @@ cli_provider = "claude-code"
                 serde_json::json!({ "milestone_id": "M30" }),
             ),
             request("worktree.list", Some(project_path), serde_json::Value::Null),
+            request(
+                "taskflow.notify",
+                Some(project_path),
+                serde_json::json!({ "event": "roadmap_updated" }),
+            ),
         ];
 
         for case in cases {

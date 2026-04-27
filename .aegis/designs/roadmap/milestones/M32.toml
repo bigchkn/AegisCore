@@ -1,6 +1,6 @@
 id = 32
 name = "taskflow notify & Bastion Registry"
-status = "pending"
+status = "done"
 lld = "lld/taskflow-notify-bastion-registry.md"
 depends_on = ["M30"]
 
@@ -9,25 +9,25 @@ id = "32.1"
 uid = "b8c9d0e1-f2a3-4567-bcde-567890123457"
 task = "Add MessageSender enum (Agent/System) to messaging.rs and update send() signature"
 task_type = "feature"
-status = "pending"
+status = "done"
 
 [[tasks]]
 id = "32.2"
 uid = "c9d0e1f2-a3b4-5678-cdef-678901234568"
 task = "Add Commands::taskflow_notify and taskflow.notify IPC handler"
 task_type = "feature"
-status = "pending"
+status = "done"
 
 [[tasks]]
 id = "32.3"
 uid = "d0e1f2a3-b4c5-6789-defa-789012345679"
 task = "Add aegis taskflow notify CLI subcommand"
 task_type = "feature"
-status = "pending"
+status = "done"
 
 [[tasks]]
 id = "32.4"
 uid = "e1f2a3b4-c5d6-7890-efab-890123456780"
 task = "Write tests: notify with active bastion, notify with no bastion, notify multiple bastions"
 task_type = "feature"
-status = "pending"
+status = "done"

@@ -270,13 +270,24 @@ pub async fn next(
         return Ok(());
     }
 
-    let outcome = payload.get("outcome").and_then(|v| v.as_str()).unwrap_or("");
+    let outcome = payload
+        .get("outcome")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
     match outcome {
         "ready" => {
-            let id = payload.get("milestone_id").and_then(|v| v.as_str()).unwrap_or("?");
+            let id = payload
+                .get("milestone_id")
+                .and_then(|v| v.as_str())
+                .unwrap_or("?");
             let name = payload.get("name").and_then(|v| v.as_str()).unwrap_or("?");
-            let count = payload.get("task_count").and_then(|v| v.as_u64()).unwrap_or(0);
-            printer.line(&format!("Next milestone: {id} — {name} ({count} tasks pending)"));
+            let count = payload
+                .get("task_count")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0);
+            printer.line(&format!(
+                "Next milestone: {id} — {name} ({count} tasks pending)"
+            ));
         }
         "exhausted" => printer.line("No pending milestones — backlog is exhausted."),
         "blocked" => {
@@ -288,6 +299,35 @@ pub async fn next(
             printer.line(&format!("Blocked — waiting on: {}", deps.join(", ")));
         }
         _ => printer.line(&format!("Unexpected response: {payload}")),
+    }
+    Ok(())
+}
+
+pub async fn notify(
+    event: &str,
+    message: &str,
+    printer: &Printer,
+    client: &DaemonClient,
+    anchor: &ProjectAnchor,
+) -> Result<(), AegisCliError> {
+    let payload = client
+        .request(
+            Some(&anchor.project_root),
+            "taskflow.notify",
+            serde_json::json!({ "event": event, "message": message }),
+        )
+        .await?;
+
+    if printer.format == crate::output::OutputFormat::Json {
+        printer.json(&payload);
+        return Ok(());
+    }
+
+    let count = payload.get("notified").and_then(|v| v.as_u64()).unwrap_or(0);
+    if count == 0 {
+        printer.line("No active bastion agents found — notification not sent.");
+    } else {
+        printer.line(&format!("Notified {count} bastion agent(s): event={event}"));
     }
     Ok(())
 }
