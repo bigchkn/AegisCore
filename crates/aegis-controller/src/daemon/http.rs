@@ -170,11 +170,12 @@ async fn clarify_answer(
     let runtime = get_runtime(&state, id).await.map_err(|e| e.to_string())?;
     let commands = runtime.commands();
 
-    let request_id = payload
+    let request_id_raw = payload
         .get("request_id")
         .and_then(|v| v.as_str())
-        .and_then(|v| Uuid::parse_str(v).ok())
-        .ok_or("Missing or invalid request_id")?;
+        .ok_or("Missing request_id")?;
+    let request_id = commands.clarify_resolve_request_id(request_id_raw).map_err(|e| e.to_string())?;
+
     let answer = payload
         .get("answer")
         .and_then(|v| v.as_str())
@@ -326,22 +327,26 @@ async fn dispatch_command(
             }
         }
         "clarify.show" => {
-            let request_id = params
+            let request_id_raw = params
                 .get("request_id")
                 .and_then(|v| v.as_str())
-                .and_then(|v| Uuid::parse_str(v).ok())
-                .ok_or("Missing or invalid request_id")?;
+                .ok_or("Missing request_id")?;
+            let request_id = commands
+                .clarify_resolve_request_id(request_id_raw)
+                .map_err(|e| e.to_string())?;
             let request = commands
                 .clarify_show(request_id)
                 .map_err(|e| e.to_string())?;
             Ok(Json(serde_json::to_value(request).unwrap()))
         }
         "clarify.answer" => {
-            let request_id = params
+            let request_id_raw = params
                 .get("request_id")
                 .and_then(|v| v.as_str())
-                .and_then(|v| Uuid::parse_str(v).ok())
-                .ok_or("Missing or invalid request_id")?;
+                .ok_or("Missing request_id")?;
+            let request_id = commands
+                .clarify_resolve_request_id(request_id_raw)
+                .map_err(|e| e.to_string())?;
             let answer = params
                 .get("answer")
                 .and_then(|v| v.as_str())

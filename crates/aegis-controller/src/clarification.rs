@@ -303,6 +303,41 @@ impl ClarificationService {
         Ok(delivered)
     }
 
+    pub fn resolve_request_id(&self, raw: &str) -> Result<Uuid> {
+        let store = self.load_store()?;
+
+        if let Ok(uuid) = Uuid::parse_str(raw) {
+            if store.requests.iter().any(|r| r.request_id == uuid) {
+                return Ok(uuid);
+            }
+        }
+
+        let matches: Vec<Uuid> = store
+            .requests
+            .iter()
+            .filter(|r| r.request_id.to_string().starts_with(raw))
+            .map(|r| r.request_id)
+            .collect();
+
+        match matches.as_slice() {
+            [id] => Ok(*id),
+            [] => {
+                // Try agent resolution as a fallback - if it's an agent ID or prefix, get its latest open request
+                if let Ok(agent_id) = self.resolve_agent_id(raw) {
+                    if let Some(req) = self.latest_for_agent(&agent_id.to_string())? {
+                        return Ok(req.request_id);
+                    }
+                }
+                Err(AegisError::IpcProtocol {
+                    reason: format!("Unknown clarification request ID or prefix `{raw}`"),
+                })
+            }
+            _ => Err(AegisError::IpcProtocol {
+                reason: format!("Ambiguous clarification request ID prefix `{raw}`"),
+            }),
+        }
+    }
+
     fn resolve_agent_id(&self, raw: &str) -> Result<Uuid> {
         let agents = AgentRegistry::list_all(self.registry.as_ref())?;
 
@@ -331,29 +366,7 @@ impl ClarificationService {
     }
 
     fn resolve_wait_request_id(&self, raw: &str) -> Result<Uuid> {
-        if let Ok(uuid) = Uuid::parse_str(raw) {
-            if self.show(uuid).is_ok() {
-                return Ok(uuid);
-            }
-            if AgentRegistry::get(self.registry.as_ref(), uuid)?.is_some() {
-                return self
-                    .latest_for_agent(raw)?
-                    .map(|request| request.request_id)
-                    .ok_or_else(|| AegisError::IpcProtocol {
-                        reason: format!("Unknown clarification request or agent `{raw}`"),
-                    });
-            }
-            return Err(AegisError::IpcProtocol {
-                reason: format!("Unknown clarification request `{uuid}`"),
-            });
-        }
-
-        let latest = self.latest_for_agent(raw)?;
-        latest
-            .map(|request| request.request_id)
-            .ok_or_else(|| AegisError::IpcProtocol {
-                reason: format!("Unknown clarification request or agent `{raw}`"),
-            })
+        self.resolve_request_id(raw)
     }
 
     fn load_store(&self) -> Result<ClarificationStore> {

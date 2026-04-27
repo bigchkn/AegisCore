@@ -157,6 +157,10 @@ impl ControllerCommands {
         self.clarifications.show(request_id)
     }
 
+    pub fn clarify_resolve_request_id(&self, raw: &str) -> Result<Uuid> {
+        self.clarifications.resolve_request_id(raw)
+    }
+
     pub async fn clarify_answer(
         &self,
         request_id: Uuid,

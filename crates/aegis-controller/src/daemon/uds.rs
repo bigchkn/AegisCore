@@ -437,25 +437,25 @@ async fn dispatch_command(
             }
         }
         "clarify.show" => {
-            let request_id = request
+            let request_id_raw = request
                 .params
                 .get("request_id")
                 .and_then(|v| v.as_str())
-                .and_then(|v| Uuid::parse_str(v).ok())
                 .ok_or_else(|| AegisError::IpcProtocol {
-                    reason: "Missing or invalid request_id".to_string(),
+                    reason: "Missing request_id".to_string(),
                 })?;
+            let request_id = commands.clarify_resolve_request_id(request_id_raw)?;
             Ok(serde_json::to_value(commands.clarify_show(request_id)?).unwrap())
         }
         "clarify.answer" => {
-            let request_id = request
+            let request_id_raw = request
                 .params
                 .get("request_id")
                 .and_then(|v| v.as_str())
-                .and_then(|v| Uuid::parse_str(v).ok())
                 .ok_or_else(|| AegisError::IpcProtocol {
-                    reason: "Missing or invalid request_id".to_string(),
+                    reason: "Missing request_id".to_string(),
                 })?;
+            let request_id = commands.clarify_resolve_request_id(request_id_raw)?;
             let answer = request
                 .params
                 .get("answer")
