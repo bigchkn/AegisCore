@@ -17,6 +17,7 @@ providers:
   gemini-cli:
     binary: "gemini"
     auto_approve_flags: ["--yolo"]
+    startup_delay_ms: 8000
     resume_mechanism: "injection"
     resume_command: "/resume {session_id}"
     export_command: "/checkpoint save aegis-handoff"
