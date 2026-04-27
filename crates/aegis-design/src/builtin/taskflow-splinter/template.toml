@@ -8,7 +8,7 @@ tags = ["taskflow", "implementer"]
 [agent]
 role = "taskflow-implementer"
 cli_provider = "claude-code"
-model = "claude-sonnet-4-6"
+model = "claude-sonnet-4-7"
 auto_cleanup = true
 fallback_cascade = []
 

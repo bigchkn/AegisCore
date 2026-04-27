@@ -239,7 +239,7 @@ tags = []
 [agent]
 role = "{name}"
 cli_provider = "claude-code"
-# model = "claude-opus-4-7"
+# model = "claude-sonnet-4-7"
 auto_cleanup = false
 fallback_cascade = []
 

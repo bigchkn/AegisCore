@@ -54,7 +54,7 @@ tags        = ["custom"]
 [agent]
 role             = "my-agent"     # tmux/registry role label
 cli_provider     = "claude-code"  # claude-code | gemini-cli | codex | ollama
-model            = "claude-opus-4-7"   # optional model override
+model            = "claude-sonnet-4-7"  # optional model override
 auto_cleanup     = false          # true = destroy on completion
 fallback_cascade = ["gemini-cli"] # ordered list of fallback providers
 
@@ -160,7 +160,7 @@ aegis design spawn taskflow-splinter \
   --var bastion_agent_id=<UUID>
 
 # Override the model for this spawn only
-aegis design spawn taskflow-bastion --model claude-opus-4-7
+aegis design spawn taskflow-bastion --model claude-sonnet-4-7
 ```
 
 Output: `Agent spawned: <UUID>  role=bastion`
