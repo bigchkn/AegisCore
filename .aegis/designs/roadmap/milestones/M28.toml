@@ -1,6 +1,6 @@
 id = 28
 name = "Agent Attach Persistence"
-status = "pending"
+status = "done"
 lld = "lld/attach-persistence.md"
 
 [[tasks]]
@@ -8,39 +8,39 @@ id = "28.1"
 uid = "4d8e5f6a-b7c8-4d9e-a1f2-b3c4d5e6f7a8"
 task = "Add last_attached_agent_id to ProjectRecord and ProjectRegistry"
 task_type = "feature"
-status = "pending"
+status = "done"
 
 [[tasks]]
 id = "28.2"
 uid = "5e9f6a7b-c8d9-5e0f-b2a3-c4d5e6f7a8b9"
 task = "Update UDS pane.attach and Web WebSocket to persist attached agent ID"
 task_type = "feature"
-status = "pending"
+status = "done"
 
 [[tasks]]
 id = "28.3"
 uid = "6f0a7a8a-d9e0-6f1a-c3a4-d5e6f7a8a9a0"
 task = "Add auto-clear logic for last_attached_agent_id on agent termination"
 task_type = "feature"
-status = "pending"
+status = "done"
 
 [[tasks]]
 id = "28.4"
 uid = "7a1a8a9a-e0f1-7a2a-d4a5-a6f7a8a9a0a1"
 task = "Update project.status IPC response to include last_attached_agent_id"
 task_type = "feature"
-status = "pending"
+status = "done"
 
 [[tasks]]
 id = "28.5"
 uid = "8a2a9a0a-f1a2-8a3a-a5a6-f7a8a9a0a1a2"
 task = "Implement TUI auto-attach on startup if persistent target is active"
 task_type = "feature"
-status = "pending"
+status = "done"
 
 [[tasks]]
 id = "28.6"
 uid = "9a3a0a1a-a2a3-9a4a-f6a7-a8a9a0a1a2a3"
 task = "Implement Web UI restoration of last attached agent on reload"
 task_type = "feature"
-status = "pending"
+status = "done"

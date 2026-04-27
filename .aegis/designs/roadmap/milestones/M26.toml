@@ -1,34 +1,34 @@
 id = "M26"
 name = "Human Clarification UI"
 description = "Implement TUI and Web UI interfaces for responding to human clarification requests."
-status = "pending"
+status = "done"
 
 [[tasks]]
 id = "M26.1"
 task = "Define Clarification types and API bindings in Web UI"
-status = "pending"
+status = "done"
 task_type = "feature"
 
 [[tasks]]
 id = "M26.2"
 task = "Implement ClarificationsView in Web UI"
-status = "pending"
+status = "done"
 task_type = "feature"
 
 [[tasks]]
 id = "M26.3"
 task = "Add Clarifications routing and sidebar link to Web UI"
-status = "pending"
+status = "done"
 task_type = "feature"
 
 [[tasks]]
 id = "M26.4"
 task = "Expand TUI UDS client with clarify.list and clarify.answer"
-status = "pending"
+status = "done"
 task_type = "feature"
 
 [[tasks]]
 id = "M26.5"
 task = "Implement TUI ReplyModal and key handling"
-status = "pending"
+status = "done"
 task_type = "feature"
