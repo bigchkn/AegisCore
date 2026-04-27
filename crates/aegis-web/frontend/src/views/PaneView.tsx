@@ -1,33 +1,35 @@
 import { useEffect, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 
 import { AgentTargetPicker } from '../components/AgentTargetPicker';
 import { Terminal, type TerminalStatus } from '../components/Terminal';
-import { agentRoute } from '../lib/agentRoutes';
+import { agentIdFromLocation, agentRoute } from '../lib/agentRoutes';
 import { useAppDispatch, useAppSelector } from '../store/hooks';
 import { setSelectedAgent } from '../store/uiSlice';
 
 export function PaneView() {
   const navigate = useNavigate();
+  const location = useLocation();
   const dispatch = useAppDispatch();
   const { projectId: routeProjectId, agentId: routeAgentId } = useParams<{ projectId?: string; agentId?: string }>();
   const agentsLoading = useAppSelector((state) => state.agents.loading);
   const agents = useAppSelector((state) => state.agents.items);
+  const selectedAgentId = routeAgentId ?? agentIdFromLocation(location.pathname, location.search);
   const agent = useAppSelector((state) =>
-    state.agents.items.find((item) => item.agent_id === routeAgentId),
+    state.agents.items.find((item) => item.agent_id === selectedAgentId),
   );
   const [terminalStatus, setTerminalStatus] = useState<TerminalStatus>('connecting');
 
   useEffect(() => {
-    dispatch(setSelectedAgent(routeAgentId ?? null));
-  }, [dispatch, routeAgentId]);
+    dispatch(setSelectedAgent(selectedAgentId ?? null));
+  }, [dispatch, selectedAgentId]);
 
   useEffect(() => {
-    if (routeAgentId && !agent && !agentsLoading) {
+    if (selectedAgentId && !agent && !agentsLoading) {
       dispatch(setSelectedAgent(null));
       navigate(agentRoute(routeProjectId ?? null, 'pane'), { replace: true });
     }
-  }, [agent, agentsLoading, dispatch, navigate, routeAgentId, routeProjectId]);
+  }, [agent, agentsLoading, dispatch, navigate, routeProjectId, selectedAgentId]);
 
   if (agentsLoading && !agent) {
     return (
@@ -38,14 +40,14 @@ export function PaneView() {
     );
   }
 
-  if (!routeAgentId || !agent) {
+  if (!selectedAgentId || !agent) {
     return (
       <section className="empty-state">
         <h2>No agent selected</h2>
         <p>Select an agent to open its live pane.</p>
         <AgentTargetPicker
           agents={agents}
-          selectedAgentId={routeAgentId ?? null}
+          selectedAgentId={selectedAgentId ?? null}
           label="Agent"
           onSelect={(agentId) => {
             if (!agentId) {
@@ -70,7 +72,7 @@ export function PaneView() {
         <div className="row-actions">
           <AgentTargetPicker
             agents={agents}
-            selectedAgentId={routeAgentId}
+            selectedAgentId={selectedAgentId}
             label="Agent"
             onSelect={(agentId) => {
               if (!agentId) {
@@ -92,7 +94,7 @@ export function PaneView() {
           </button>
         </div>
       </header>
-      <Terminal agentId={routeAgentId} onStatusChange={setTerminalStatus} />
+      <Terminal agentId={selectedAgentId} onStatusChange={setTerminalStatus} />
     </section>
   );
 }

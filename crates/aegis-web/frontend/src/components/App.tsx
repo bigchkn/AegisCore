@@ -5,6 +5,7 @@ import { Toaster } from 'sonner';
 import { fetchProjectData, fetchProjects } from '../api/thunks';
 import { setActiveProject } from '../store/uiSlice';
 import { useAppDispatch, useAppSelector } from '../store/hooks';
+import { agentRoute } from '../lib/agentRoutes';
 import { AgentsView } from '../views/AgentsView';
 import { ChannelsView } from '../views/ChannelsView';
 import { LogView } from '../views/LogView';
@@ -105,7 +106,7 @@ function ProjectRoutes() {
     activeProject?.last_attached_agent_id &&
     (location.pathname === `/projects/${projectId}` || location.pathname === `/projects/${projectId}/`)
   ) {
-    return <Navigate to={`/projects/${projectId}/pane/${activeProject.last_attached_agent_id}`} replace />;
+    return <Navigate to={agentRoute(projectId ?? null, 'pane', activeProject.last_attached_agent_id)} replace />;
   }
 
   return (

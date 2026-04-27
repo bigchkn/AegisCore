@@ -16,6 +16,33 @@ vi.mock('../components/Terminal', () => ({
 }));
 
 describe('PaneView', () => {
+  it('uses the query agent when the route path omits it', () => {
+    const store = configureStore({
+      reducer: {
+        agents: agentsReducer,
+        channels: channelsReducer,
+        projects: projectsReducer,
+        tasks: tasksReducer,
+        ui: uiReducer,
+      },
+    });
+
+    store.dispatch(setActiveProject('project-1'));
+    store.dispatch(setAgents([makeAgent('agent-1', 'Alpha')]));
+
+    render(
+      <Provider store={store}>
+        <MemoryRouter initialEntries={['/projects/project-1/pane?agent=agent-1']}>
+          <Routes>
+            <Route path="/projects/:projectId/pane/:agentId?" element={<PaneView />} />
+          </Routes>
+        </MemoryRouter>
+      </Provider>,
+    );
+
+    expect(screen.getByText('Terminal mock')).toBeTruthy();
+  });
+
   it('shows an agent dropdown when no agent is selected', () => {
     const store = configureStore({
       reducer: {

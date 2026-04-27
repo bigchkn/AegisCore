@@ -12,6 +12,49 @@ import { tasksReducer } from '../store/tasksSlice';
 import { setActiveProject, uiReducer } from '../store/uiSlice';
 
 describe('LogView', () => {
+  it('uses the query agent when the route path omits it', async () => {
+    const store = configureStore({
+      reducer: {
+        agents: agentsReducer,
+        channels: channelsReducer,
+        projects: projectsReducer,
+        tasks: tasksReducer,
+        ui: uiReducer,
+      },
+    });
+
+    store.dispatch(setActiveProject('project-1'));
+    store.dispatch(setAgents([makeAgent('agent-1', 'Alpha')]));
+
+    vi.stubGlobal(
+      'WebSocket',
+      class {
+        onopen: (() => void) | null = null;
+        onclose: (() => void) | null = null;
+        onerror: (() => void) | null = null;
+        onmessage: ((event: { data: string }) => void) | null = null;
+        constructor() {
+          setTimeout(() => this.onopen?.(), 0);
+        }
+        close() {
+          this.onclose?.();
+        }
+      } as any,
+    );
+
+    render(
+      <Provider store={store}>
+        <MemoryRouter initialEntries={['/projects/project-1/logs?agent=agent-1']}>
+          <Routes>
+            <Route path="/projects/:projectId/logs/:agentId?" element={<LogView />} />
+          </Routes>
+        </MemoryRouter>
+      </Provider>,
+    );
+
+    await waitFor(() => expect(screen.getByText('Alpha')).toBeDefined());
+  });
+
   it('shows an agent dropdown when no agent is selected', () => {
     const store = configureStore({
       reducer: {
