@@ -40,8 +40,12 @@ fn builtin_templates_load() {
         "taskflow-bastion missing"
     );
     assert!(
-        names.contains(&"taskflow-splinter"),
-        "taskflow-splinter missing"
+        names.contains(&"taskflow-implementer"),
+        "taskflow-implementer missing"
+    );
+    assert!(
+        names.contains(&"taskflow-designer"),
+        "taskflow-designer missing"
     );
 }
 
@@ -252,7 +256,7 @@ status = "in-progress"
 fn bootstrap_injects_bastion_agent_id() {
     let dir = TempDir::new().unwrap();
     let reg = TemplateRegistry::load(dir.path());
-    let t = &reg.get("taskflow-splinter").unwrap().template;
+    let t = &reg.get("taskflow-implementer").unwrap().template;
     let vars = BootstrapContext::build(
         t,
         dir.path(),
@@ -328,7 +332,7 @@ fn bastion_startup_contains_idle_loop() {
 fn splinter_startup_contains_commit_step() {
     let dir = TempDir::new().unwrap();
     let reg = TemplateRegistry::load(dir.path());
-    let t = &reg.get("taskflow-splinter").unwrap().template;
+    let t = &reg.get("taskflow-implementer").unwrap().template;
 
     let mut vars = HashMap::new();
     vars.insert("project_root".into(), "/tmp/project".into());

@@ -180,10 +180,16 @@ fn builtin_template_sources() -> &'static [(
             Some(include_str!("builtin/taskflow-bastion/startup.md")),
         ),
         (
-            "taskflow-splinter",
-            include_str!("builtin/taskflow-splinter/template.toml"),
-            include_str!("builtin/taskflow-splinter/system_prompt.md"),
-            Some(include_str!("builtin/taskflow-splinter/startup.md")),
+            "taskflow-implementer",
+            include_str!("builtin/taskflow-implementer/template.toml"),
+            include_str!("builtin/taskflow-implementer/system_prompt.md"),
+            Some(include_str!("builtin/taskflow-implementer/startup.md")),
+        ),
+        (
+            "taskflow-designer",
+            include_str!("builtin/taskflow-designer/template.toml"),
+            include_str!("builtin/taskflow-designer/system_prompt.md"),
+            Some(include_str!("builtin/taskflow-designer/startup.md")),
         ),
     ]
 }

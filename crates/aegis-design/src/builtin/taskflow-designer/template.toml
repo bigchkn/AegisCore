@@ -1,0 +1,20 @@
+[template]
+name = "taskflow-designer"
+description = "Writes one HLD or LLD design document and notifies its coordinator on completion."
+kind = "splinter"
+version = "1"
+tags = ["taskflow", "designer", "docs"]
+
+[agent]
+role = "taskflow-designer"
+cli_provider = "claude-code"
+model = "sonnet"
+auto_cleanup = true
+fallback_cascade = []
+
+[agent.sandbox]
+network = "outbound_only"
+
+[variables]
+required = ["project_root", "doc_type", "doc_path", "doc_description", "bastion_agent_id"]
+optional = ["milestone_id", "milestone_name", "hld_ref", "task_id"]

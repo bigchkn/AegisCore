@@ -1,5 +1,5 @@
 [template]
-name = "taskflow-splinter"
+name = "taskflow-implementer"
 description = "Implements one AegisCore taskflow task and notifies its coordinator on completion."
 kind = "splinter"
 version = "1"

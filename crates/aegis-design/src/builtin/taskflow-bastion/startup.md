@@ -34,12 +34,23 @@ design decisions and acceptance criteria that Splinters must follow.
 
 **Step 4 — Spawn Splinters and await completion**
 
-For every pending task, in a tight loop (do not wait for one before spawning the next):
+For every pending task, in a tight loop (do not wait for one before spawning the next).
+Choose the Splinter type based on the task:
+- Design tasks (write HLD/LLD): `taskflow-designer`
+- Implementation tasks (code + tests): `taskflow-implementer`
 
 ```
-aegis design spawn taskflow-splinter \
+# Designer Splinter (design tasks):
+aegis design spawn taskflow-designer \
+  --var doc_type=<HLD|LLD> \
+  --var doc_path=<PATH> \
+  --var doc_description="<DESC>"
+
+# Implementer Splinter (implementation tasks):
+aegis design spawn taskflow-implementer \
   --var task_id=<TASK_ID> \
   --var task_description="<TASK_DESC>"
+
 aegis taskflow assign <MILESTONE_ID>.<TASK_ID> <SPLINTER_AGENT_ID>
 aegis message send <SPLINTER_AGENT_ID> task \
   '{"lld_path":"<LLD_PATH>","task_id":"<TASK_ID>","acceptance_criteria":"<FROM LLD>"}'

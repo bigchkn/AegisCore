@@ -1703,9 +1703,9 @@ mod tests {
             .unwrap();
         assert_eq!(bastion.kind, AgentKind::Bastion);
 
-        // 2. Spawn splinter from taskflow-splinter template (with bastion_agent_id known).
+        // 2. Spawn splinter from taskflow-implementer template (with bastion_agent_id known).
         let splinter_rendered = RenderedTemplate {
-            name: "taskflow-splinter".into(),
+            name: "taskflow-implementer".into(),
             kind: TemplateKind::Splinter,
             role: "taskflow-implementer".into(),
             cli_provider: "claude-code".into(),
