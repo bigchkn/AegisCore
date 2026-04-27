@@ -340,8 +340,9 @@ impl Dispatcher {
         }
 
         if use_tmux_trigger {
-            let trigger = normalize_tui_prompt(&format!("{trigger_text}\n"));
+            let trigger = normalize_tui_prompt(trigger_text);
             tmux.send_raw_input(&target, trigger.as_bytes()).await?;
+            tmux.send_key(&target, "Enter").await?;
             append_tmux_send(&agent.log_path, &trigger)?;
         }
 
@@ -585,8 +586,9 @@ impl Dispatcher {
             }
 
             if use_tmux_trigger {
-                let trigger = normalize_tui_prompt(&format!("{trigger_text}\n"));
+                let trigger = normalize_tui_prompt(trigger_text);
                 tmux.send_raw_input(&target, trigger.as_bytes()).await?;
+                tmux.send_key(&target, "Enter").await?;
                 append_tmux_send(&agent.log_path, &trigger)?;
             }
 
@@ -813,8 +815,9 @@ impl Dispatcher {
                 tokio::time::sleep(std::time::Duration::from_millis(startup_delay)).await;
             }
             if use_tmux_trigger {
-                let trigger = normalize_tui_prompt(&format!("{trigger_text}\n"));
+                let trigger = normalize_tui_prompt(trigger_text);
                 tmux.send_raw_input(&target, trigger.as_bytes()).await?;
+                tmux.send_key(&target, "Enter").await?;
                 append_tmux_send(&launch_agent.log_path, &trigger)?;
             }
         }
@@ -1140,8 +1143,9 @@ impl FailoverExecutor for Dispatcher {
         }
 
         let target = TmuxTarget::parse(&agent.tmux_target())?;
-        let trigger = normalize_tui_prompt(&format!("{prompt}\n"));
+        let trigger = normalize_tui_prompt(prompt);
         tmux.send_raw_input(&target, trigger.as_bytes()).await?;
+        tmux.send_key(&target, "Enter").await?;
         append_tmux_send(&agent.log_path, &trigger)?;
         Ok(())
     }
@@ -1287,13 +1291,7 @@ fn write_launch_script(kind: &str, agent_id: Uuid, launch_shell: &str) -> Result
 }
 
 fn normalize_tui_prompt(prompt: &str) -> String {
-    let has_newline = prompt.ends_with('\n');
-    let normalized = prompt.split_whitespace().collect::<Vec<_>>().join(" ");
-    if has_newline {
-        format!("{normalized}\n")
-    } else {
-        normalized
-    }
+    prompt.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
 fn shell_quote(value: &str) -> String {
