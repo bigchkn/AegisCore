@@ -143,7 +143,10 @@ impl Dispatcher {
         if let Some(sandbox) = &self.sandbox {
             launch_command.extend(sandbox.exec_prefix(&sandbox_profile));
         }
-        launch_command.extend(command_parts(&provider_command));
+        launch_command.extend(resolved_command_parts(
+            &provider_command,
+            &provider.config().binary,
+        ));
 
         let now = Utc::now();
         let agent = Agent {
@@ -349,8 +352,11 @@ impl Dispatcher {
 
         if let Some(tmux) = &self.tmux {
             let target = TmuxTarget::parse(&plan.agent.tmux_target())?;
-            tmux.send_text(&target, &shell_command(&plan.launch_command))
-                .await?;
+            tmux.send_text(
+                &target,
+                &launch_shell_command(&plan.agent.worktree_path, &plan.launch_command),
+            )
+            .await?;
             let agent = self.insert_starting_agent(plan.agent)?;
             self.attach_recorder(&agent)?;
             let agent = self.activate_agent(agent)?;
@@ -498,7 +504,10 @@ impl Dispatcher {
         if let Some(sandbox) = &self.sandbox {
             launch_command.extend(sandbox.exec_prefix(&agent.sandbox_profile));
         }
-        launch_command.extend(command_parts(&provider_command));
+        launch_command.extend(resolved_command_parts(
+            &provider_command,
+            &provider.config().binary,
+        ));
 
         let context = FailoverContext {
             agent_id,
@@ -513,8 +522,11 @@ impl Dispatcher {
 
         if let Some(tmux) = &self.tmux {
             let target = TmuxTarget::parse(&agent.tmux_target())?;
-            tmux.send_text(&target, &shell_command(&launch_command))
-                .await?;
+            tmux.send_text(
+                &target,
+                &launch_shell_command(&agent.worktree_path, &launch_command),
+            )
+            .await?;
             tmux.send_text(&target, &recovery_prompt).await?;
         }
 
@@ -767,12 +779,30 @@ fn command_parts(command: &std::process::Command) -> Vec<String> {
         .collect()
 }
 
+fn resolved_command_parts(command: &std::process::Command, binary: &str) -> Vec<String> {
+    let mut parts = command_parts(command);
+    if let Some(full_path) = resolve_binary_full_path(binary) {
+        if let Some(program) = parts.first_mut() {
+            *program = full_path.to_string_lossy().to_string();
+        }
+    }
+    parts
+}
+
 fn shell_command(parts: &[String]) -> String {
     parts
         .iter()
         .map(|part| shell_quote(part))
         .collect::<Vec<_>>()
         .join(" ")
+}
+
+fn launch_shell_command(worktree_path: &std::path::Path, parts: &[String]) -> String {
+    format!(
+        "cd {} && {}",
+        shell_quote(&worktree_path.to_string_lossy()),
+        shell_command(parts)
+    )
 }
 
 fn shell_quote(value: &str) -> String {
@@ -794,19 +824,31 @@ fn short_id(id: Uuid) -> String {
     id.to_string().chars().take(8).collect()
 }
 
-/// Resolve a binary name (e.g. "claude") to its parent directory via `which`.
-/// Returns None if the binary cannot be found or its path cannot be determined.
-fn resolve_binary_exec_dir(binary: &str) -> Option<std::path::PathBuf> {
+/// Resolve a binary name to its first existing full path via `which -a`.
+///
+/// Uses `which -a` to enumerate all PATH matches in order, then returns the
+/// first one that is an actual file. This skips stale PATH entries (e.g. an
+/// old Claude install location) whose target no longer exists.
+fn resolve_binary_full_path(binary: &str) -> Option<PathBuf> {
     let output = std::process::Command::new("which")
+        .arg("-a")
         .arg(binary)
         .output()
         .ok()?;
-    if !output.status.success() {
-        return None;
-    }
-    let path = String::from_utf8(output.stdout).ok()?;
-    let path = std::path::PathBuf::from(path.trim());
-    path.parent().map(|p| p.to_path_buf())
+    let stdout = String::from_utf8(output.stdout).ok()?;
+    stdout
+        .lines()
+        .map(|line| PathBuf::from(line.trim()))
+        .find(|p| p.is_file())
+}
+
+/// Resolve a binary name to its parent directory, using the first existing
+/// PATH match (see `resolve_binary_full_path`).
+fn resolve_binary_exec_dir(binary: &str) -> Option<PathBuf> {
+    resolve_binary_full_path(binary)
+        .as_deref()
+        .and_then(|p| p.parent())
+        .map(|p| p.to_path_buf())
 }
 
 #[cfg(test)]
@@ -818,7 +860,7 @@ mod tests {
         },
         TaskCreator, TaskStatus,
     };
-    use std::{collections::HashMap, sync::Arc};
+    use std::{collections::HashMap, path::Path, sync::Arc};
 
     fn dispatcher() -> (Dispatcher, tempfile::TempDir) {
         let dir = tempfile::tempdir().unwrap();
@@ -892,6 +934,82 @@ mod tests {
         assert!(plan.agent.log_path.ends_with(format!("{agent_id}.log")));
         assert!(plan.launch_command.contains(&"claude".to_string()));
         assert!(plan.initial_prompt.contains("architect"));
+    }
+
+    #[test]
+    fn build_spawn_plan_uses_first_existing_binary_path() {
+        let (dispatcher, _dir) = dispatcher();
+        let temp = tempfile::tempdir().unwrap();
+        let bin_dir = temp.path().join("bin");
+        std::fs::create_dir_all(&bin_dir).unwrap();
+
+        let stale = temp.path().join("stale").join("claude");
+        let valid = bin_dir.join("claude");
+        std::fs::write(&valid, "#!/bin/sh\nprintf 'valid\\n'\n").unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mut perms = std::fs::metadata(&valid).unwrap().permissions();
+            perms.set_mode(0o755);
+            std::fs::set_permissions(&valid, perms).unwrap();
+        }
+
+        let which_path = temp.path().join("which");
+        std::fs::write(
+            &which_path,
+            format!(
+                "#!/bin/sh\nprintf '%s\\n%s\\n' '{}' '{}'\n",
+                stale.display(),
+                valid.display()
+            ),
+        )
+        .unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mut perms = std::fs::metadata(&which_path).unwrap().permissions();
+            perms.set_mode(0o755);
+            std::fs::set_permissions(&which_path, perms).unwrap();
+        }
+
+        static PATH_LOCK: std::sync::OnceLock<std::sync::Mutex<()>> = std::sync::OnceLock::new();
+        let _guard = PATH_LOCK.get_or_init(|| std::sync::Mutex::new(())).lock().unwrap();
+        let old_path = std::env::var_os("PATH");
+        let new_path = if let Some(old_path) = &old_path {
+            format!("{}:{}", temp.path().display(), old_path.to_string_lossy())
+        } else {
+            temp.path().display().to_string()
+        };
+        unsafe {
+            std::env::set_var("PATH", &new_path);
+        }
+
+        let spec = dispatcher.build_bastion_spec("architect").unwrap();
+        let plan = dispatcher
+            .build_spawn_plan(spec, Uuid::nil(), 3, "%9")
+            .unwrap();
+        assert!(plan
+            .launch_command
+            .iter()
+            .any(|part| part == &valid.to_string_lossy()));
+
+        if let Some(old_path) = old_path {
+            unsafe {
+                std::env::set_var("PATH", old_path);
+            }
+        }
+    }
+
+    #[test]
+    fn launch_shell_command_prefixes_worktree_cd() {
+        let command = vec![
+            "/opt/claude/bin/claude".to_string(),
+            "--dangerously-skip-permissions".to_string(),
+        ];
+        let rendered = launch_shell_command(Path::new("/tmp/project root"), &command);
+
+        assert!(rendered.starts_with("cd '/tmp/project root' && "));
+        assert!(rendered.contains("/opt/claude/bin/claude"));
     }
 
     #[tokio::test]

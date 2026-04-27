@@ -50,8 +50,17 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   });
 
   if (!response.ok) {
-    const text = await response.text();
-    throw new Error(text || `${response.status} ${response.statusText}`);
+    let errorMessage = `${response.status} ${response.statusText}`;
+    try {
+      const errorJson = await response.json();
+      if (errorJson && typeof errorJson === 'object') {
+        errorMessage = errorJson.error || errorJson.message || JSON.stringify(errorJson);
+      }
+    } catch {
+      const text = await response.text();
+      if (text) errorMessage = text;
+    }
+    throw new Error(errorMessage);
   }
 
   return (await response.json()) as T;
@@ -77,6 +86,12 @@ export const api = {
     api.command<TaskMutationResponse>(projectId, 'taskflow.create_task', {
       milestone_id: milestoneId,
       draft,
+    }),
+  taskflowCreateMilestone: (projectId: string, id: string, name: string, lld?: string) =>
+    api.command(projectId, 'taskflow.create_milestone', {
+      id,
+      name,
+      lld: lld || null,
     }),
   taskflowUpdateTask: (
     projectId: string,

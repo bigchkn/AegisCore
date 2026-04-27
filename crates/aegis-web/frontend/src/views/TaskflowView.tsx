@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type Dispatch, type SetStateAction } from 'react';
+import { toast } from 'sonner';
 
 import { api } from '../api/rest';
 import type { TaskflowIndex, TaskflowMilestone, TaskType } from '../store/domain';
@@ -33,6 +34,12 @@ type TaskEditorState = {
   form: TaskEditorForm;
 };
 
+type MilestoneEditorForm = {
+  id: string;
+  name: string;
+  lld: string;
+};
+
 export function TaskflowView() {
   const activeProjectId = useAppSelector((state) => state.ui.activeProjectId);
   const [index, setIndex] = useState<TaskflowIndex | null>(null);
@@ -40,6 +47,7 @@ export function TaskflowView() {
   const [error, setError] = useState<string | null>(null);
   const [milestones, setMilestones] = useState<Record<string, MilestoneState>>({});
   const [editor, setEditor] = useState<TaskEditorState | null>(null);
+  const [milestoneEditor, setMilestoneEditor] = useState<MilestoneEditorForm | null>(null);
   const [editorSaving, setEditorSaving] = useState(false);
   const [editorError, setEditorError] = useState<string | null>(null);
   const [mutationWarning, setMutationWarning] = useState<string | null>(null);
@@ -131,6 +139,16 @@ export function TaskflowView() {
     });
   };
 
+  const openMilestoneEditor = () => {
+    setEditorError(null);
+    setMutationWarning(null);
+    setMilestoneEditor({
+      id: '',
+      name: '',
+      lld: '',
+    });
+  };
+
   const openEditEditor = (
     task: TaskflowMilestone['tasks'][number],
     sourceMilestoneId: string,
@@ -157,8 +175,35 @@ export function TaskflowView() {
 
   const closeEditor = () => {
     setEditor(null);
+    setMilestoneEditor(null);
     setEditorError(null);
     setEditorSaving(false);
+  };
+
+  const saveMilestone = async () => {
+    if (!activeProjectId || !milestoneEditor) return;
+
+    const { id, name, lld } = milestoneEditor;
+    if (!id.trim() || !name.trim()) {
+      setEditorError('Milestone ID and Name are required.');
+      return;
+    }
+
+    setEditorSaving(true);
+    setEditorError(null);
+
+    try {
+      await api.taskflowCreateMilestone(activeProjectId, id.trim(), name.trim(), lld.trim() || undefined);
+      toast.success(`Milestone ${id.trim()} created successfully`);
+      await refreshTaskflow();
+      closeEditor();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setEditorError(msg);
+      toast.error('Failed to create milestone', { description: msg });
+    } finally {
+      setEditorSaving(false);
+    }
   };
 
   const saveEditor = async () => {
@@ -191,11 +236,13 @@ export function TaskflowView() {
       if (editor.mode === 'create') {
         const response = await api.taskflowCreateTask(activeProjectId, normalizedTarget, payload);
         notifyWarning = response.warning ?? null;
+        toast.success('Task created successfully');
       } else if (!editor.taskUid) {
         throw new Error('Missing task uid.');
       } else {
         const response = await api.taskflowUpdateTask(activeProjectId, editor.sourceMilestoneId, editor.taskUid, payload);
         notifyWarning = response.warning ?? null;
+        toast.success('Task updated successfully');
       }
 
       setMutationWarning(notifyWarning);
@@ -208,7 +255,9 @@ export function TaskflowView() {
       }
       closeEditor();
     } catch (err) {
-      setEditorError(err instanceof Error ? err.message : String(err));
+      const msg = err instanceof Error ? err.message : String(err);
+      setEditorError(msg);
+      toast.error('Operation failed', { description: msg });
     } finally {
       setEditorSaving(false);
     }
@@ -333,6 +382,9 @@ export function TaskflowView() {
           </div>
 
           <div className="taskflow-actions">
+            <button type="button" onClick={() => openMilestoneEditor()}>
+              New Milestone
+            </button>
             <button type="button" onClick={() => openCreateEditor('bug')}>
               New Bug
             </button>
@@ -438,6 +490,17 @@ export function TaskflowView() {
           onClose={closeEditor}
           onChange={setEditor}
           onSave={saveEditor}
+        />
+      ) : null}
+
+      {milestoneEditor ? (
+        <MilestoneEditorModal
+          form={milestoneEditor}
+          saving={editorSaving}
+          error={editorError}
+          onClose={closeEditor}
+          onChange={setMilestoneEditor}
+          onSave={saveMilestone}
         />
       ) : null}
     </section>
@@ -689,4 +752,98 @@ function symbolForStatus(status: string) {
   if (status === 'in-progress' || status === 'lld-in-progress') return '●';
   if (status === 'blocked') return '!';
   return '○';
+}
+
+function MilestoneEditorModal({
+  form,
+  saving,
+  error,
+  onClose,
+  onChange,
+  onSave,
+}: {
+  form: MilestoneEditorForm;
+  saving: boolean;
+  error: string | null;
+  onClose: () => void;
+  onChange: Dispatch<SetStateAction<MilestoneEditorForm | null>>;
+  onSave: () => void;
+}) {
+  const updateForm = (field: keyof MilestoneEditorForm, value: string) => {
+    onChange((current) =>
+      current
+        ? {
+            ...current,
+            [field]: value,
+          }
+        : current,
+    );
+  };
+
+  return (
+    <div className="task-editor-backdrop" onClick={onClose} role="presentation">
+      <div
+        className="task-editor-modal"
+        role="dialog"
+        aria-modal="true"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <form
+          className="task-editor-form"
+          onSubmit={(event) => {
+            event.preventDefault();
+            onSave();
+          }}
+        >
+          <div className="task-editor-header">
+            <div>
+              <h3>New Milestone</h3>
+              <p>Create a new milestone file in the roadmap.</p>
+            </div>
+            <button type="submit" className="task-editor-save" disabled={saving}>
+              {saving ? 'Creating...' : 'Create'}
+            </button>
+          </div>
+
+          {error ? <div className="task-editor-error">{error}</div> : null}
+
+          <div className="task-editor-grid">
+            <label className="task-editor-field">
+              <span>Milestone ID</span>
+              <input
+                value={form.id}
+                onChange={(event) => updateForm('id', event.target.value)}
+                placeholder="e.g. M35"
+                autoFocus
+              />
+            </label>
+
+            <label className="task-editor-field task-editor-field-wide">
+              <span>Name</span>
+              <input
+                value={form.name}
+                onChange={(event) => updateForm('name', event.target.value)}
+                placeholder="Milestone title"
+              />
+            </label>
+
+            <label className="task-editor-field task-editor-field-wide">
+              <span>LLD Path</span>
+              <input
+                value={form.lld}
+                onChange={(event) => updateForm('lld', event.target.value)}
+                placeholder="e.g. lld/my-feature.md (optional)"
+              />
+            </label>
+          </div>
+
+          <div className="task-editor-footer">
+            <button type="button" onClick={onClose}>
+              Cancel
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
 }

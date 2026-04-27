@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { toast } from 'sonner';
 
 import { failoverAgent, killAgent, pauseAgent, resumeAgent, spawnTask } from '../api/thunks';
 import { StatusBadge } from '../components/StatusBadge';
@@ -42,11 +43,25 @@ export function AgentsView() {
     setSpawnError(null);
     try {
       await dispatch(spawnTask({ projectId: activeProjectId, task: prompt })).unwrap();
+      toast.success('Agent spawned successfully');
       setTaskPrompt('');
     } catch (error) {
-      setSpawnError(error instanceof Error ? error.message : 'Unable to spawn agent.');
+      const msg = error instanceof Error ? error.message : 'Unable to spawn agent.';
+      setSpawnError(msg);
+      toast.error('Spawn failed', { description: msg });
     } finally {
       setSubmitting(false);
+    }
+  }
+
+  async function handleAction(action: any, agentId: string, label: string) {
+    if (!activeProjectId) return;
+    try {
+      await dispatch(action({ projectId: activeProjectId, agentId })).unwrap();
+      toast.success(`${label} successful`);
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : `Failed to ${label.toLowerCase()}`;
+      toast.error(`${label} failed`, { description: msg });
     }
   }
 
@@ -119,34 +134,26 @@ export function AgentsView() {
                       </button>
                       <button
                         type="button"
-                        onClick={() =>
-                          void dispatch(pauseAgent({ projectId: activeProjectId, agentId: agent.agent_id }))
-                        }
+                        onClick={() => handleAction(pauseAgent, agent.agent_id, 'Pause')}
                       >
                         Pause
                       </button>
                       <button
                         type="button"
-                        onClick={() =>
-                          void dispatch(resumeAgent({ projectId: activeProjectId, agentId: agent.agent_id }))
-                        }
+                        onClick={() => handleAction(resumeAgent, agent.agent_id, 'Resume')}
                       >
                         Resume
                       </button>
                       <button
                         type="button"
-                        onClick={() =>
-                          void dispatch(failoverAgent({ projectId: activeProjectId, agentId: agent.agent_id }))
-                        }
+                        onClick={() => handleAction(failoverAgent, agent.agent_id, 'Failover')}
                       >
                         Failover
                       </button>
                       <button
                         type="button"
                         className="danger"
-                        onClick={() =>
-                          void dispatch(killAgent({ projectId: activeProjectId, agentId: agent.agent_id }))
-                        }
+                        onClick={() => handleAction(killAgent, agent.agent_id, 'Kill')}
                       >
                         Kill
                       </button>

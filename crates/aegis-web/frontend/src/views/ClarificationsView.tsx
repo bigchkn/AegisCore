@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { toast } from 'sonner';
 import { api } from '../api/rest';
 import type { ClarificationRequest } from '../store/domain';
 import { useAppSelector } from '../store/hooks';
@@ -108,9 +109,12 @@ function ClarificationCard({
     setError(null);
     try {
       await api.clarifyAnswer(projectId, request.request_id, answer.trim(), {}, 'human_tui'); // Using tui source as placeholder or system
+      toast.success('Answer submitted successfully');
       onAnswered();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to submit answer');
+      const msg = err instanceof Error ? err.message : 'Failed to submit answer';
+      setError(msg);
+      toast.error('Submission failed', { description: msg });
     } finally {
       setSubmitting(false);
     }

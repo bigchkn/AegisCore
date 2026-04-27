@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { Routes, Route, Navigate, useLocation, useParams } from 'react-router-dom';
+import { Toaster } from 'sonner';
 
 import { fetchProjectData, fetchProjects } from '../api/thunks';
 import { setActiveProject, setSelectedAgent } from '../store/uiSlice';
@@ -46,6 +47,7 @@ export function App() {
 
   return (
     <main className="app-shell">
+      <Toaster position="bottom-right" richColors />
       <Sidebar />
       <section className="workspace">
         <header className="topbar">
