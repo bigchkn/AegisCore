@@ -15,6 +15,7 @@ pub struct ProjectRecord {
     pub root_path: PathBuf,
     pub auto_start: bool,
     pub last_seen: chrono::DateTime<chrono::Utc>,
+    pub last_attached_agent_id: Option<Uuid>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

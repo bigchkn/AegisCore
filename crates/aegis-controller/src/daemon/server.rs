@@ -37,7 +37,12 @@ impl DaemonSupervisor {
         let projects = self.project_registry.load()?;
         for project in projects {
             if project.auto_start {
-                let runtime = AegisRuntime::load(project.root_path.clone()).await?;
+                let runtime = AegisRuntime::load(
+                    project.root_path.clone(),
+                    Some(Arc::clone(&self.project_registry)),
+                    Some(project.id),
+                )
+                .await?;
                 runtime.recover().await?;
                 runtime.start().await?;
                 self.active_runtimes

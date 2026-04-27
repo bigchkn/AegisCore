@@ -1,0 +1,33 @@
+id = 34
+name = "Web Task Editing & Bug Logging"
+status = "done"
+lld = "hld/web-task-editing.md"
+depends_on = []
+
+[[tasks]]
+id = "34.2"
+uid = "b3263704-0a4c-4601-8660-13a940e7430c"
+task = "Build taskflow modal editor in the web UI"
+task_type = "feature"
+status = "done"
+
+[[tasks]]
+id = "34.1"
+uid = "bd6e29fa-ada9-4e9a-bd2a-23b87d5b7267"
+task = "Add controller APIs for task create and edit mutations"
+task_type = "feature"
+status = "done"
+
+[[tasks]]
+id = "34.4"
+uid = "c7e2ffee-1a62-4666-89f5-200b75e973bf"
+task = "Add tests for task creation, editing, and notify warning states"
+task_type = "feature"
+status = "done"
+
+[[tasks]]
+id = "34.3"
+uid = "33f026f4-9c6f-4d6a-a3ab-a00cf434d544"
+task = "Trigger taskflow notify after successful task mutations"
+task_type = "feature"
+status = "done"

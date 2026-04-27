@@ -8,9 +8,9 @@ use std::collections::HashMap;
 fn parse_vars(raw: &[String]) -> Result<HashMap<String, String>, AegisCliError> {
     let mut map = HashMap::new();
     for item in raw {
-        let (k, v) = item
-            .split_once('=')
-            .ok_or_else(|| AegisCliError::Unexpected(format!("--var must be KEY=VALUE, got: {item}")))?;
+        let (k, v) = item.split_once('=').ok_or_else(|| {
+            AegisCliError::Unexpected(format!("--var must be KEY=VALUE, got: {item}"))
+        })?;
         map.insert(k.to_owned(), v.to_owned());
     }
     Ok(map)
@@ -36,7 +36,10 @@ pub fn list(printer: &Printer, anchor: &ProjectAnchor) -> Result<(), AegisCliErr
         return Ok(());
     }
 
-    println!("{:<30} {:<10} {:<10}  {}", "NAME", "KIND", "LAYER", "DESCRIPTION");
+    println!(
+        "{:<30} {:<10} {:<10}  {}",
+        "NAME", "KIND", "LAYER", "DESCRIPTION"
+    );
     printer.separator();
     for t in &items {
         println!(
@@ -253,13 +256,9 @@ optional = []
         "# {name}\n\nYou are a {{{{role}}}} agent operating in `{{{{project_root}}}}`.\n\nTODO: describe the agent's role and capabilities.\n"
     );
 
-    std::fs::write(template_dir.join("template.toml"), toml_content)
+    std::fs::write(template_dir.join("template.toml"), toml_content).map_err(AegisCliError::Io)?;
+    std::fs::write(template_dir.join("system_prompt.md"), prompt_content)
         .map_err(AegisCliError::Io)?;
-    std::fs::write(
-        template_dir.join("system_prompt.md"),
-        prompt_content,
-    )
-    .map_err(AegisCliError::Io)?;
     std::fs::write(
         template_dir.join("startup.md"),
         "TODO: first instruction sent to the agent after it starts.\n",
@@ -271,9 +270,8 @@ optional = []
             "Template scaffolded at {}",
             template_dir.display()
         ));
-        printer.line(
-            "Edit template.toml, system_prompt.md, and startup.md to define your template.",
-        );
+        printer
+            .line("Edit template.toml, system_prompt.md, and startup.md to define your template.");
     }
     Ok(())
 }

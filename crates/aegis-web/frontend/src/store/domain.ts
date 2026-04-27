@@ -1,6 +1,7 @@
 export type ProjectStatus = {
   active_agents?: number;
   pending_tasks?: number;
+  last_attached_agent_id?: string;
 };
 
 export type ProjectRecord = {
@@ -8,6 +9,7 @@ export type ProjectRecord = {
   root_path: string;
   auto_start: boolean;
   last_seen: string;
+  last_attached_agent_id?: string;
 };
 
 export type TaskflowIndex = {
@@ -28,6 +30,7 @@ export type TaskflowMilestone = {
   lld: string | null;
   tasks: Array<{
     id: string;
+    uid: string;
     task: string;
     status: string;
     task_type: TaskType;

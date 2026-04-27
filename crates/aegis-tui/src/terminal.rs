@@ -129,6 +129,8 @@ impl Tui {
     }
 
     async fn refresh_data(&mut self) -> Result<()> {
+        let is_initial = self.app.agents.is_empty();
+
         if let Ok(agents) = self
             .client
             .send_command("agents.list", serde_json::Value::Null)
@@ -169,7 +171,27 @@ impl Tui {
             if let Ok(projects_vec) =
                 serde_json::from_value::<Vec<crate::client::ProjectRecord>>(projects)
             {
-                self.app.projects = projects_vec;
+                self.app.projects = projects_vec.clone();
+
+                // If this is the initial data fetch, check if we should auto-attach
+                if is_initial {
+                    if let Some(project) = projects_vec
+                        .into_iter()
+                        .find(|p| p.root_path == self.app.project_path)
+                    {
+                        if let Some(agent_id) = project.last_attached_agent_id {
+                            // Verify agent is alive and in our current agent list
+                            if let Some(agent) = self.app.agents.get(&agent_id) {
+                                if !agent.status.is_terminal() {
+                                    self.app.selected_agent_id = Some(agent_id);
+                                    self.app.attached_agent_id = Some(agent_id);
+                                    // Trigger attach sequence
+                                    let _ = self.ensure_attach_session().await;
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
 

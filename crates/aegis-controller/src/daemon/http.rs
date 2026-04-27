@@ -243,7 +243,18 @@ async fn dispatch_command(
             let task = commands
                 .taskflow_create_task(milestone_id, draft)
                 .map_err(|e| e.to_string())?;
-            Ok(Json(serde_json::to_value(task).unwrap()))
+            let notify_result = commands
+                .taskflow_notify("roadmap_updated", "Roadmap updated from the web UI.")
+                .await;
+            let (notified, warning) = match notify_result {
+                Ok(count) => (count, None),
+                Err(err) => (0, Some(err.to_string())),
+            };
+            Ok(Json(serde_json::json!({
+                "task": task,
+                "notified": notified,
+                "warning": warning,
+            })))
         }
         "taskflow.update_task" => {
             let source_milestone_id = params
@@ -261,7 +272,18 @@ async fn dispatch_command(
             let task = commands
                 .taskflow_update_task(source_milestone_id, task_uid, patch)
                 .map_err(|e| e.to_string())?;
-            Ok(Json(serde_json::to_value(task).unwrap()))
+            let notify_result = commands
+                .taskflow_notify("roadmap_updated", "Roadmap updated from the web UI.")
+                .await;
+            let (notified, warning) = match notify_result {
+                Ok(count) => (count, None),
+                Err(err) => (0, Some(err.to_string())),
+            };
+            Ok(Json(serde_json::json!({
+                "task": task,
+                "notified": notified,
+                "warning": warning,
+            })))
         }
         "clarify.request" => {
             let agent_raw = params

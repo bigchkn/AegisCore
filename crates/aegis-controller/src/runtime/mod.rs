@@ -12,6 +12,7 @@ use crate::{
     clarification::ClarificationService,
     commands::ControllerCommands,
     daemon::logs::{LogTailer, PaneRelay},
+    daemon::projects::ProjectRegistry,
     dispatcher::Dispatcher,
     events::EventBus,
     messaging::MessageRouter,
@@ -48,7 +49,11 @@ pub struct AegisRuntime {
 }
 
 impl AegisRuntime {
-    pub async fn build(root_path: PathBuf) -> Result<Self> {
+    pub async fn build(
+        root_path: PathBuf,
+        project_registry: Option<Arc<ProjectRegistry>>,
+        project_id: Option<Uuid>,
+    ) -> Result<Self> {
         let global = EffectiveConfig::load_global()?;
         let project = EffectiveConfig::load_project(&root_path)?;
         let config = EffectiveConfig::resolve(&global, &project)?;
@@ -60,10 +65,23 @@ impl AegisRuntime {
             });
         }
 
-        Self::from_config(root_path, config).await
+        Self::from_config(root_path, config, project_registry, project_id).await
     }
 
-    pub async fn from_config(root_path: PathBuf, config: EffectiveConfig) -> Result<Self> {
+    pub async fn load(
+        root_path: PathBuf,
+        project_registry: Option<Arc<ProjectRegistry>>,
+        project_id: Option<Uuid>,
+    ) -> Result<Self> {
+        Self::build(root_path, project_registry, project_id).await
+    }
+
+    pub async fn from_config(
+        root_path: PathBuf,
+        config: EffectiveConfig,
+        project_registry: Option<Arc<ProjectRegistry>>,
+        project_id: Option<Uuid>,
+    ) -> Result<Self> {
         let storage = Arc::new(ProjectStorage::new(root_path.clone()));
         storage.ensure_layout()?;
         FileRegistry::init(storage.as_ref())?;
@@ -106,6 +124,8 @@ impl AegisRuntime {
 
         let dispatcher = Arc::new(Dispatcher::new(
             registry.clone(),
+            project_registry,
+            project_id,
             Some(tmux.clone()),
             Some(sandbox.clone()),
             Some(recorder.clone()),
@@ -122,7 +142,7 @@ impl AegisRuntime {
         ));
 
         Ok(Self {
-            project_id: Uuid::new_v4(),
+            project_id: project_id.unwrap_or_else(Uuid::new_v4),
             root_path,
             config,
             storage,
@@ -143,10 +163,6 @@ impl AegisRuntime {
             pane_relay,
             events,
         })
-    }
-
-    pub async fn load(root_path: PathBuf) -> Result<Self> {
-        Self::build(root_path).await
     }
 
     pub async fn recover(&self) -> Result<()> {

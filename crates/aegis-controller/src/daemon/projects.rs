@@ -16,6 +16,8 @@ pub struct ProjectRecord {
     pub last_seen: DateTime<Utc>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub status: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub last_attached_agent_id: Option<Uuid>,
 }
 
 #[derive(Debug, Default, Serialize, Deserialize)]
@@ -113,11 +115,21 @@ impl ProjectRegistry {
             auto_start: true,
             last_seen: Utc::now(),
             status: None,
+            last_attached_agent_id: None,
         };
 
         projects.push(record.clone());
         self.save(projects)?;
         Ok(record)
+    }
+
+    pub fn update_last_attached(&self, id: Uuid, agent_id: Option<Uuid>) -> Result<()> {
+        let mut projects = self.load()?;
+        if let Some(project) = projects.iter_mut().find(|p| p.id == id) {
+            project.last_attached_agent_id = agent_id;
+            self.save(projects)?;
+        }
+        Ok(())
     }
 
     pub fn unregister(&self, id: Uuid) -> Result<()> {

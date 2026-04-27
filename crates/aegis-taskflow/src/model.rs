@@ -176,3 +176,32 @@ pub struct ProjectTask {
     pub notes: Option<String>,
     pub registry_task_id: Option<Uuid>,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct TaskDraft {
+    pub id: Option<String>,
+    pub task: String,
+    #[serde(default)]
+    pub task_type: TaskType,
+    #[serde(default)]
+    pub status: Option<TaskflowStatus>,
+    #[serde(default)]
+    pub crate_name: Option<String>,
+    #[serde(default)]
+    pub notes: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct TaskPatch {
+    pub id: Option<String>,
+    pub task: Option<String>,
+    #[serde(default)]
+    pub task_type: Option<TaskType>,
+    #[serde(default)]
+    pub status: Option<TaskflowStatus>,
+    #[serde(default)]
+    pub crate_name: Option<Option<String>>,
+    #[serde(default)]
+    pub notes: Option<Option<String>>,
+    pub target_milestone_id: Option<String>,
+}

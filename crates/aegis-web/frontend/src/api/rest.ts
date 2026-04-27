@@ -15,6 +15,31 @@ type CommandResponse = {
   task_id?: string;
 };
 
+type TaskMutationResponse = {
+  task: TaskflowMilestone['tasks'][number];
+  notified: number;
+  warning?: string | null;
+};
+
+type TaskDraftPayload = {
+  id?: string;
+  task: string;
+  task_type: TaskflowMilestone['tasks'][number]['task_type'];
+  status?: string;
+  crate_name?: string | null;
+  notes?: string | null;
+};
+
+type TaskPatchPayload = {
+  id?: string;
+  task?: string;
+  task_type?: TaskflowMilestone['tasks'][number]['task_type'];
+  status?: string;
+  crate_name?: string | null;
+  notes?: string | null;
+  target_milestone_id?: string;
+};
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, {
     ...init,
@@ -42,12 +67,28 @@ export const api = {
     request<TaskflowIndex>(`/projects/${projectId}/taskflow/status`),
   taskflowMilestone: (projectId: string, milestoneId: string) =>
     request<TaskflowMilestone>(`/projects/${projectId}/taskflow/show/${milestoneId}`),
-  command: (projectId: string, command: string, params: unknown = null) =>
-    request<CommandResponse>(`/projects/${projectId}/commands`, {
+  command: <T = CommandResponse>(projectId: string, command: string, params: unknown = null) =>
+    request<T>(`/projects/${projectId}/commands`, {
       method: 'POST',
       body: JSON.stringify({ command, params }),
     }),
   spawn: (projectId: string, task: string) => api.command(projectId, 'spawn', task),
+  taskflowCreateTask: (projectId: string, milestoneId: string, draft: TaskDraftPayload) =>
+    api.command<TaskMutationResponse>(projectId, 'taskflow.create_task', {
+      milestone_id: milestoneId,
+      draft,
+    }),
+  taskflowUpdateTask: (
+    projectId: string,
+    sourceMilestoneId: string,
+    taskUid: string,
+    patch: TaskPatchPayload,
+  ) =>
+    api.command<TaskMutationResponse>(projectId, 'taskflow.update_task', {
+      source_milestone_id: sourceMilestoneId,
+      task_uid: taskUid,
+      patch,
+    }),
   pause: (projectId: string, agentId: string) =>
     api.command(projectId, 'pause', { agent_id: agentId }),
   resume: (projectId: string, agentId: string) =>

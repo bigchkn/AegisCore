@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useState, type Dispatch, type SetStateAction } from 'react';
 
 import { api } from '../api/rest';
 import type { TaskflowIndex, TaskflowMilestone, TaskType } from '../store/domain';
@@ -13,33 +13,60 @@ type MilestoneState = {
 
 type ViewMode = 'milestones' | 'bugs';
 
+type TaskEditorMode = 'create' | 'edit';
+
+type TaskEditorForm = {
+  id: string;
+  task: string;
+  taskType: TaskType;
+  status: string;
+  crateName: string;
+  notes: string;
+  targetMilestoneId: string;
+};
+
+type TaskEditorState = {
+  mode: TaskEditorMode;
+  sourceMilestoneId: string;
+  sourceMilestoneName: string;
+  taskUid?: string;
+  form: TaskEditorForm;
+};
+
 export function TaskflowView() {
   const activeProjectId = useAppSelector((state) => state.ui.activeProjectId);
   const [index, setIndex] = useState<TaskflowIndex | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [milestones, setMilestones] = useState<Record<string, MilestoneState>>({});
-  
+  const [editor, setEditor] = useState<TaskEditorState | null>(null);
+  const [editorSaving, setEditorSaving] = useState(false);
+  const [editorError, setEditorError] = useState<string | null>(null);
+  const [mutationWarning, setMutationWarning] = useState<string | null>(null);
+
   const [viewMode, setViewMode] = useState<ViewMode>('milestones');
   const [showAll, setShowAll] = useState(false);
 
-  useEffect(() => {
+  const refreshTaskflow = useCallback(async () => {
+    if (!activeProjectId) return;
+
     setIndex(null);
     setMilestones({});
-    if (!activeProjectId) {
-      return;
-    }
-
     setLoading(true);
-    api
-      .taskflowStatus(activeProjectId)
-      .then((value) => {
-        setIndex(value);
-        setError(null);
-      })
-      .catch((err: Error) => setError(err.message))
-      .finally(() => setLoading(false));
+    try {
+      const value = await api.taskflowStatus(activeProjectId);
+      setIndex(value);
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setLoading(false);
+    }
   }, [activeProjectId]);
+
+  useEffect(() => {
+    void refreshTaskflow();
+  }, [refreshTaskflow]);
 
   const loadMilestone = (milestoneId: string) => {
     if (!activeProjectId) return;
@@ -76,6 +103,115 @@ export function TaskflowView() {
     }
 
     loadMilestone(milestoneId);
+  };
+
+  const currentMilestoneId = index ? `M${index.project.current_milestone}` : 'backlog';
+
+  const defaultTaskForm = useCallback(
+    (mode: 'bug' | 'task'): TaskEditorForm => ({
+      id: '',
+      task: '',
+      taskType: mode === 'bug' ? 'bug' : 'feature',
+      status: 'pending',
+      crateName: '',
+      notes: '',
+      targetMilestoneId: mode === 'bug' ? 'backlog' : currentMilestoneId,
+    }),
+    [currentMilestoneId],
+  );
+
+  const openCreateEditor = (mode: 'bug' | 'task') => {
+    setEditorError(null);
+    setMutationWarning(null);
+    setEditor({
+      mode: 'create',
+      sourceMilestoneId: mode === 'bug' ? 'backlog' : currentMilestoneId,
+      sourceMilestoneName: mode === 'bug' ? 'Backlog' : currentMilestoneId,
+      form: defaultTaskForm(mode),
+    });
+  };
+
+  const openEditEditor = (
+    task: TaskflowMilestone['tasks'][number],
+    sourceMilestoneId: string,
+    sourceMilestoneName: string,
+  ) => {
+    setEditorError(null);
+    setMutationWarning(null);
+    setEditor({
+      mode: 'edit',
+      sourceMilestoneId,
+      sourceMilestoneName,
+      taskUid: task.uid,
+      form: {
+        id: task.id,
+        task: task.task,
+        taskType: task.task_type,
+        status: task.status,
+        crateName: task.crate_name ?? '',
+        notes: task.notes ?? '',
+        targetMilestoneId: sourceMilestoneId,
+      },
+    });
+  };
+
+  const closeEditor = () => {
+    setEditor(null);
+    setEditorError(null);
+    setEditorSaving(false);
+  };
+
+  const saveEditor = async () => {
+    if (!activeProjectId || !editor) return;
+
+    const task = editor.form.task.trim();
+    if (!task) {
+      setEditorError('Task text is required.');
+      return;
+    }
+
+    const targetMilestoneId = editor.form.targetMilestoneId.trim();
+    const normalizedTarget = targetMilestoneId || editor.sourceMilestoneId;
+    const payload = {
+      id: editor.form.id.trim() || undefined,
+      task,
+      task_type: editor.form.taskType,
+      status: editor.form.status,
+      crate_name: editor.form.crateName.trim() || null,
+      notes: editor.form.notes.trim() || null,
+      target_milestone_id: normalizedTarget,
+    };
+
+    setEditorSaving(true);
+    setEditorError(null);
+    setMutationWarning(null);
+
+    try {
+      let notifyWarning: string | null = null;
+      if (editor.mode === 'create') {
+        const response = await api.taskflowCreateTask(activeProjectId, normalizedTarget, payload);
+        notifyWarning = response.warning ?? null;
+      } else if (!editor.taskUid) {
+        throw new Error('Missing task uid.');
+      } else {
+        const response = await api.taskflowUpdateTask(activeProjectId, editor.sourceMilestoneId, editor.taskUid, payload);
+        notifyWarning = response.warning ?? null;
+      }
+
+      setMutationWarning(notifyWarning);
+      await refreshTaskflow();
+      if (normalizedTarget) {
+        loadMilestone(normalizedTarget);
+      }
+      if (editor.mode === 'edit' && editor.sourceMilestoneId !== normalizedTarget) {
+        loadMilestone(editor.sourceMilestoneId);
+      }
+      closeEditor();
+    } catch (err) {
+      setEditorError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setEditorSaving(false);
+    }
   };
 
   // Auto-expand and load all milestones when in Bugs view
@@ -150,6 +286,13 @@ export function TaskflowView() {
       return true;
     });
 
+  const milestoneOptions = [
+    { id: 'backlog', label: 'Backlog' },
+    ...Object.entries(index.milestones)
+      .sort(([left], [right]) => left.localeCompare(right, undefined, { numeric: true }))
+      .map(([milestoneId, ref]) => ({ id: milestoneId, label: `${milestoneId} - ${ref.name}` })),
+  ];
+
   return (
     <section className="taskflow-view">
       <header className="taskflow-header">
@@ -188,8 +331,19 @@ export function TaskflowView() {
               All
             </button>
           </div>
+
+          <div className="taskflow-actions">
+            <button type="button" onClick={() => openCreateEditor('bug')}>
+              New Bug
+            </button>
+            <button type="button" onClick={() => openCreateEditor('task')}>
+              New Task
+            </button>
+          </div>
         </div>
       </header>
+
+      {mutationWarning ? <div className="banner">{mutationWarning}</div> : null}
 
       <div className="taskflow-tree">
         {viewMode === 'bugs' ? (
@@ -202,9 +356,12 @@ export function TaskflowView() {
               <div className="taskflow-task-list padding-14">
                 {filteredTasks.map(({ task, milestoneId, milestoneName }) => (
                   <TaskItem 
-                    key={`${milestoneId}-${task.id}`} 
+                    key={task.uid}
                     task={task} 
-                    context={milestoneName} 
+                    context={milestoneName}
+                    sourceMilestoneId={milestoneId}
+                    sourceMilestoneName={milestoneName}
+                    onEdit={openEditEditor}
                   />
                 ))}
               </div>
@@ -227,6 +384,9 @@ export function TaskflowView() {
                       <MilestoneDetail 
                         milestone={milestones['backlog'].data} 
                         showAll={showAll}
+                        sourceMilestoneId="backlog"
+                        sourceMilestoneName="Backlog"
+                        onEdit={openEditEditor}
                       />
                     ) : null}
                   </div>
@@ -255,6 +415,9 @@ export function TaskflowView() {
                         <MilestoneDetail 
                           milestone={state.data} 
                           showAll={showAll}
+                          sourceMilestoneId={milestoneId}
+                          sourceMilestoneName={ref.name}
+                          onEdit={openEditEditor}
                         />
                       ) : null}
                     </div>
@@ -265,6 +428,18 @@ export function TaskflowView() {
           </>
         )}
       </div>
+
+      {editor ? (
+        <TaskEditorModal
+          editor={editor}
+          milestoneOptions={milestoneOptions}
+          saving={editorSaving}
+          error={editorError}
+          onClose={closeEditor}
+          onChange={setEditor}
+          onSave={saveEditor}
+        />
+      ) : null}
     </section>
   );
 }
@@ -273,7 +448,23 @@ function loadingAnyMilestone(milestones: Record<string, MilestoneState>) {
   return Object.values(milestones).some(m => m.loading);
 }
 
-function MilestoneDetail({ milestone, showAll }: { milestone: TaskflowMilestone; showAll: boolean }) {
+function MilestoneDetail({
+  milestone,
+  showAll,
+  sourceMilestoneId,
+  sourceMilestoneName,
+  onEdit,
+}: {
+  milestone: TaskflowMilestone;
+  showAll: boolean;
+  sourceMilestoneId: string;
+  sourceMilestoneName: string;
+  onEdit: (
+    task: TaskflowMilestone['tasks'][number],
+    sourceMilestoneId: string,
+    sourceMilestoneName: string,
+  ) => void;
+}) {
   const tasks = milestone.tasks.filter(t => showAll || t.status !== 'done');
 
   if (tasks.length === 0) {
@@ -283,13 +474,35 @@ function MilestoneDetail({ milestone, showAll }: { milestone: TaskflowMilestone;
   return (
     <div className="taskflow-task-list">
       {tasks.map((task) => (
-        <TaskItem key={task.id} task={task} />
+        <TaskItem
+          key={task.uid}
+          task={task}
+          sourceMilestoneId={sourceMilestoneId}
+          sourceMilestoneName={sourceMilestoneName}
+          onEdit={onEdit}
+        />
       ))}
     </div>
   );
 }
 
-function TaskItem({ task, context }: { task: TaskflowMilestone['tasks'][0]; context?: string }) {
+function TaskItem({
+  task,
+  context,
+  sourceMilestoneId,
+  sourceMilestoneName,
+  onEdit,
+}: {
+  task: TaskflowMilestone['tasks'][0];
+  context?: string;
+  sourceMilestoneId: string;
+  sourceMilestoneName: string;
+  onEdit: (
+    task: TaskflowMilestone['tasks'][number],
+    sourceMilestoneId: string,
+    sourceMilestoneName: string,
+  ) => void;
+}) {
   return (
     <div className="taskflow-task">
       <span className={`task-icon task-${task.status}`}>{symbolForStatus(task.status)}</span>
@@ -299,6 +512,13 @@ function TaskItem({ task, context }: { task: TaskflowMilestone['tasks'][0]; cont
           <strong>{task.id}</strong>
           <p>{task.task}</p>
           {context ? <span className="task-context-label">{context}</span> : null}
+          <button
+            type="button"
+            className="task-edit-button"
+            onClick={() => onEdit(task, sourceMilestoneId, sourceMilestoneName)}
+          >
+            Edit
+          </button>
         </div>
         {task.notes ? <small className="task-notes">{task.notes}</small> : null}
       </div>
@@ -309,6 +529,150 @@ function TaskItem({ task, context }: { task: TaskflowMilestone['tasks'][0]; cont
 function TaskTypeBadge({ type }: { type: TaskType }) {
   const label = type.charAt(0).toUpperCase() + type.slice(1);
   return <span className={`task-type-badge type-${type}`}>{label}</span>;
+}
+
+function TaskEditorModal({
+  editor,
+  milestoneOptions,
+  saving,
+  error,
+  onClose,
+  onChange,
+  onSave,
+}: {
+  editor: TaskEditorState;
+  milestoneOptions: Array<{ id: string; label: string }>;
+  saving: boolean;
+  error: string | null;
+  onClose: () => void;
+  onChange: Dispatch<SetStateAction<TaskEditorState | null>>;
+  onSave: () => void;
+}) {
+  const updateForm = (field: keyof TaskEditorForm, value: string) => {
+    onChange((current) =>
+      current
+        ? {
+            ...current,
+            form: {
+              ...current.form,
+              [field]: value as never,
+            },
+          }
+        : current,
+    );
+  };
+
+  return (
+    <div className="task-editor-backdrop" onClick={onClose} role="presentation">
+      <div className="task-editor-modal" role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}>
+        <form
+          className="task-editor-form"
+          onSubmit={(event) => {
+            event.preventDefault();
+            onSave();
+          }}
+        >
+          <div className="task-editor-header">
+            <div>
+              <h3>{editor.mode === 'create' ? 'New Task' : 'Edit Task'}</h3>
+              <p>{editor.mode === 'create' ? 'Create a task or bug from Taskflow.' : editor.sourceMilestoneName}</p>
+            </div>
+            <button type="submit" className="task-editor-save" disabled={saving}>
+              {saving ? 'Saving...' : 'Save'}
+            </button>
+          </div>
+
+          {error ? <div className="task-editor-error">{error}</div> : null}
+
+          <div className="task-editor-grid">
+            <label className="task-editor-field">
+              <span>Task ID</span>
+              <input
+                value={editor.form.id}
+                onChange={(event) => updateForm('id', event.target.value)}
+                placeholder={editor.mode === 'create' ? 'Optional' : 'Required'}
+              />
+            </label>
+
+            <label className="task-editor-field task-editor-field-wide">
+              <span>Task</span>
+              <input
+                value={editor.form.task}
+                onChange={(event) => updateForm('task', event.target.value)}
+                placeholder="Describe the task"
+              />
+            </label>
+
+            <label className="task-editor-field">
+              <span>Type</span>
+              <select
+                value={editor.form.taskType}
+                onChange={(event) => updateForm('taskType', event.target.value)}
+              >
+                <option value="feature">Feature</option>
+                <option value="bug">Bug</option>
+                <option value="maintenance">Maintenance</option>
+              </select>
+            </label>
+
+            <label className="task-editor-field">
+              <span>Status</span>
+              <select
+                value={editor.form.status}
+                onChange={(event) => updateForm('status', event.target.value)}
+              >
+                <option value="pending">Pending</option>
+                <option value="in-progress">In progress</option>
+                <option value="done">Done</option>
+                <option value="blocked">Blocked</option>
+                <option value="lld-in-progress">LLD in progress</option>
+                <option value="lld-done">LLD done</option>
+              </select>
+            </label>
+
+            <label className="task-editor-field">
+              <span>Target</span>
+              <select
+                value={editor.form.targetMilestoneId}
+                onChange={(event) => updateForm('targetMilestoneId', event.target.value)}
+              >
+                {milestoneOptions.map((option) => (
+                  <option key={option.id} value={option.id}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="task-editor-field">
+              <span>Crate</span>
+              <input
+                value={editor.form.crateName}
+                onChange={(event) => updateForm('crateName', event.target.value)}
+                placeholder="Optional crate name"
+              />
+            </label>
+
+            <label className="task-editor-field task-editor-field-wide">
+              <span>Notes</span>
+              <textarea
+                value={editor.form.notes}
+                onChange={(event) => updateForm('notes', event.target.value)}
+                rows={5}
+                placeholder="Optional notes"
+              />
+            </label>
+          </div>
+
+          <div className="task-editor-footer">
+            <button type="button" onClick={onClose}>
+              Cancel
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
 }
 
 function EmptyPanel({ title, body }: { title: string; body: string }) {

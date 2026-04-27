@@ -140,6 +140,8 @@ mod tests {
             None,
             None,
             None,
+            None,
+            None,
             providers,
             prompts,
             storage,
