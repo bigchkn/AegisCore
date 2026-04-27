@@ -76,9 +76,10 @@ All providers are configured in `aegis.toml`. Failover cascades are user-defined
 
 ## Documentation
 
-- **[Getting Started](GETTING_STARTED.md)**: Installation and your first agent.
-- **[TUI Guide](TUI.md)**: Full reference for the interactive terminal dashboard — layout, modes, key bindings, and common workflows.
-- **[Taskflow System](TASKFLOW.md)**: How AegisCore manages project roadmaps and agent alignment.
+- **[Getting Started](docs/getting-started.md)**: Installation and your first agent.
+- **[TUI Guide](docs/tui.md)**: Full reference for the interactive terminal dashboard — layout, modes, key bindings, and common workflows.
+- **[Taskflow System](docs/taskflow.md)**: How AegisCore manages project roadmaps and agent alignment.
+- **[Design Templates](docs/design-templates.md)**: Template system and `aegis design` commands — spawn, customise, and author agent templates.
 - **[Architecture (HLD)](.aegis/designs/hld/aegis.md)**: Deep dive into the system design.
 
 ---
@@ -87,7 +88,7 @@ All providers are configured in `aegis.toml`. Failover cascades are user-defined
 
 Early development. Following a structured HLD → LLD → Roadmap task approach.
 
-Design documents: [`.aegis/designs/hld/aegis.md`](.aegis/designs/hld/aegis.md)
+Design documents: [`.aegis/designs/hld/aegis.md`](.aegis/designs/hld/aegis.md) · [docs/](docs/)
 
 ---
 

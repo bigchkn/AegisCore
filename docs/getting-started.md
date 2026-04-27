@@ -78,5 +78,5 @@ Run `aegis ui` to open the interactive dashboard.
 ## Next Steps
 
 - Edit `aegis.toml` to configure providers and watchdog intervals.
-- Check the [Roadmap](.aegis/designs/roadmap/roadmap.md) for upcoming features.
-- Explore the [HLD](.aegis/designs/hld/aegis.md) and [LLDs](.aegis/designs/lld/) for architecture details.
+- Explore the [HLD](../.aegis/designs/hld/aegis.md) and [LLDs](../.aegis/designs/lld/) for architecture details.
+- Learn about the template and design system: [Design Templates](design-templates.md).
