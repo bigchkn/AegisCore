@@ -9,7 +9,7 @@ import { agentsReducer, setAgents } from '../store/agentsSlice';
 import { channelsReducer } from '../store/channelsSlice';
 import { projectsReducer } from '../store/projectsSlice';
 import { tasksReducer } from '../store/tasksSlice';
-import { setActiveProject, setSelectedAgent, uiReducer } from '../store/uiSlice';
+import { setActiveProject, uiReducer } from '../store/uiSlice';
 
 vi.mock('../components/Terminal', () => ({
   Terminal: () => <div>Terminal mock</div>,
@@ -28,15 +28,21 @@ describe('PaneView', () => {
     });
 
     store.dispatch(setActiveProject('project-1'));
-    store.dispatch(setSelectedAgent('agent-1'));
     store.dispatch(setAgents([makeAgent('agent-1', 'Alpha')]));
 
     render(
       <Provider store={store}>
-        <MemoryRouter initialEntries={['/projects/project-1/pane']}>
+        <MemoryRouter initialEntries={['/projects/project-1/pane/agent-1']}>
           <Routes>
-            <Route path="/projects/:projectId/agents" element={<div>Agents route</div>} />
-            <Route path="/projects/:projectId/pane" element={<PaneView />} />
+            <Route path="/projects/:projectId/pane/:agentId?" element={<PaneView />} />
+            <Route
+              path="*"
+              element={
+                <div>
+                  <span>No agent selected</span>
+                </div>
+              }
+            />
           </Routes>
         </MemoryRouter>
       </Provider>,
@@ -44,7 +50,37 @@ describe('PaneView', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Detach' }));
 
-    await waitFor(() => expect(screen.getByText('Agents route')).toBeDefined());
+    await waitFor(() => expect(screen.getByText('No agent selected')).toBeDefined());
+  });
+
+  it('updates the pane selection from the header picker', async () => {
+    const store = configureStore({
+      reducer: {
+        agents: agentsReducer,
+        channels: channelsReducer,
+        projects: projectsReducer,
+        tasks: tasksReducer,
+        ui: uiReducer,
+      },
+    });
+
+    store.dispatch(setActiveProject('project-1'));
+    store.dispatch(setAgents([makeAgent('agent-1', 'Alpha'), makeAgent('agent-2', 'Beta')]));
+
+    render(
+      <Provider store={store}>
+        <MemoryRouter initialEntries={['/projects/project-1/pane/agent-1']}>
+          <Routes>
+            <Route path="/projects/:projectId/pane/agent-2" element={<div>Agent 2 route</div>} />
+            <Route path="/projects/:projectId/pane/:agentId?" element={<PaneView />} />
+          </Routes>
+        </MemoryRouter>
+      </Provider>,
+    );
+
+    fireEvent.change(screen.getByLabelText('Agent'), { target: { value: 'agent-2' } });
+
+    await waitFor(() => expect(screen.getByText('Agent 2 route')).toBeDefined());
   });
 });
 

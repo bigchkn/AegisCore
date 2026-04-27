@@ -1,7 +1,7 @@
 providers:
   claude-code:
     binary: "claude"
-    auto_approve_flags: ["--dangerously-skip-permissions"]
+    auto_approve_flags: ["--dangerously-skip-permissions", "--bare", "--permission-mode", "bypassPermissions"]
     startup_delay_ms: 8000
     resume_mechanism: "cli_flag"
     resume_flag: "--resume"

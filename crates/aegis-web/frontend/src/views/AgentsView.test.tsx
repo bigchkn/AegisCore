@@ -79,7 +79,7 @@ describe('AgentsView', () => {
         <MemoryRouter initialEntries={['/projects/project-1/agents']}>
           <Routes>
             <Route path="/projects/:projectId/agents" element={<AgentsView />} />
-            <Route path="/projects/:projectId/pane" element={<div>Pane route</div>} />
+            <Route path="/projects/:projectId/pane/:agentId?" element={<div>Pane route</div>} />
           </Routes>
         </MemoryRouter>
       </Provider>,

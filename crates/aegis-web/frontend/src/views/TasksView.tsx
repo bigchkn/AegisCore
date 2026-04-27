@@ -1,15 +1,17 @@
 import { useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 
-import { setActiveView, setSelectedAgent } from '../store/uiSlice';
-import { useAppDispatch, useAppSelector } from '../store/hooks';
+import { useAppSelector } from '../store/hooks';
+import { agentRoute } from '../lib/agentRoutes';
 import type { TaskStatus } from '../types/TaskStatus';
 
 const tabs: Array<'all' | TaskStatus> = ['all', 'queued', 'active', 'complete', 'failed'];
 
 export function TasksView() {
-  const dispatch = useAppDispatch();
+  const navigate = useNavigate();
   const tasks = useAppSelector((state) => state.tasks.items);
   const loading = useAppSelector((state) => state.tasks.loading);
+  const activeProjectId = useAppSelector((state) => state.ui.activeProjectId);
   const [activeTab, setActiveTab] = useState<'all' | TaskStatus>('all');
 
   const filteredTasks = useMemo(
@@ -66,8 +68,7 @@ export function TasksView() {
                       type="button"
                       className="link-button"
                       onClick={() => {
-                        dispatch(setSelectedAgent(task.assigned_agent_id));
-                        dispatch(setActiveView('pane'));
+                        navigate(agentRoute(activeProjectId, 'pane', task.assigned_agent_id));
                       }}
                     >
                       {task.assigned_agent_id}

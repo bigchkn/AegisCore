@@ -1,5 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
 
+import { AgentTargetPicker } from '../components/AgentTargetPicker';
+import { agentRoute } from '../lib/agentRoutes';
 import { useAppSelector } from '../store/hooks';
 
 type LogMessage = {
@@ -10,10 +13,12 @@ type LogMessage = {
 const LOG_BUFFER_LIMIT = 2000;
 
 export function LogView() {
-  const selectedAgentId = useAppSelector((state) => state.ui.selectedAgentId);
+  const navigate = useNavigate();
+  const { projectId: routeProjectId, agentId: routeAgentId } = useParams<{ projectId?: string; agentId?: string }>();
   const agent = useAppSelector((state) =>
-    state.agents.items.find((item) => item.agent_id === selectedAgentId),
+    state.agents.items.find((item) => item.agent_id === routeAgentId),
   );
+  const agents = useAppSelector((state) => state.agents.items);
   const [lines, setLines] = useState<string[]>([]);
   const [filter, setFilter] = useState('');
   const [follow, setFollow] = useState(true);
@@ -22,11 +27,11 @@ export function LogView() {
 
   useEffect(() => {
     setLines([]);
-    if (!selectedAgentId) {
+    if (!routeAgentId) {
       return;
     }
 
-    const socket = new WebSocket(wsUrl(`/ws/logs/${selectedAgentId}?last_n=200`));
+    const socket = new WebSocket(wsUrl(`/ws/logs/${routeAgentId}?last_n=200`));
     socket.onopen = () => setConnected(true);
     socket.onclose = () => setConnected(false);
     socket.onerror = () => setConnected(false);
@@ -38,7 +43,7 @@ export function LogView() {
     };
 
     return () => socket.close();
-  }, [selectedAgentId]);
+  }, [routeAgentId]);
 
   useEffect(() => {
     if (follow) {
@@ -60,11 +65,22 @@ export function LogView() {
     }
   }, [filter, lines]);
 
-  if (!selectedAgentId || !agent) {
+  if (!routeAgentId || !agent) {
     return (
       <section className="empty-state">
         <h2>No agent selected</h2>
-        <p>Select an agent row before opening logs.</p>
+        <p>Select an agent to open its logs.</p>
+        <AgentTargetPicker
+          agents={agents}
+          selectedAgentId={routeAgentId ?? null}
+          label="Attachable agents"
+          onSelect={(agentId) => {
+            if (!agentId) {
+              return;
+            }
+            navigate(agentRoute(routeProjectId ?? null, 'logs', agentId));
+          }}
+        />
       </section>
     );
   }
@@ -77,6 +93,17 @@ export function LogView() {
           <p>{connected ? 'Streaming recorder output' : 'Disconnected'}</p>
         </div>
         <div className="log-controls">
+          <AgentTargetPicker
+            agents={agents}
+            selectedAgentId={routeAgentId}
+            label="Agent"
+            onSelect={(agentId) => {
+              if (!agentId) {
+                return;
+              }
+              navigate(agentRoute(routeProjectId ?? null, 'logs', agentId));
+            }}
+          />
           <input
             value={filter}
             placeholder="Filter"

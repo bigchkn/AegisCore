@@ -356,15 +356,38 @@ impl Dispatcher {
             let target = TmuxTarget::parse(&plan.agent.tmux_target())?;
             let agent = self.insert_starting_agent(plan.agent)?;
             self.attach_recorder(&agent)?;
-            let launch_shell = launch_shell_command(&agent.worktree_path, &plan.launch_command);
+
+            // Write the initial prompt to a temp file and inject it via
+            // --append-system-prompt-file. This avoids the newline-as-submit problem
+            // that occurs when send-keys -l delivers a multi-line string into Claude's
+            // TUI: each embedded \n triggers a separate message submit. The sandbox
+            // allows reads from /tmp so the sandboxed claude process can access it.
+            let sys_prompt_path = std::env::temp_dir()
+                .join(format!("aegis_sysprompt_{}.txt", agent.agent_id));
+            std::fs::write(&sys_prompt_path, &plan.initial_prompt).map_err(|source| {
+                AegisError::StorageIo {
+                    path: sys_prompt_path.clone(),
+                    source,
+                }
+            })?;
+
+            let mut launch_cmd = plan.launch_command.clone();
+            launch_cmd.push("--append-system-prompt-file".to_string());
+            launch_cmd.push(sys_prompt_path.to_string_lossy().into_owned());
+
+            let launch_shell = launch_shell_command(&agent.worktree_path, &launch_cmd);
             append_tmux_send(&agent.log_path, &launch_shell)?;
             tmux.send_text(&target, &launch_shell).await?;
             let agent = self.activate_agent(agent)?;
             if plan.startup_delay_ms > 0 {
                 tokio::time::sleep(std::time::Duration::from_millis(plan.startup_delay_ms)).await;
             }
-            append_tmux_send(&agent.log_path, &plan.initial_prompt)?;
-            tmux.send_text(&target, &plan.initial_prompt).await?;
+            // Single-line trigger so no newlines hit the TUI.
+            let trigger = "Begin.\n";
+            append_tmux_send(&agent.log_path, trigger.trim_end())?;
+            tmux.send_raw_input(&target, trigger.as_bytes()).await?;
+            // File has been consumed by claude at startup; clean up after sending trigger.
+            let _ = std::fs::remove_file(&sys_prompt_path);
             Ok(agent)
         } else {
             let agent = self.insert_starting_agent(plan.agent)?;
@@ -526,13 +549,30 @@ impl Dispatcher {
 
         if let Some(tmux) = &self.tmux {
             let target = TmuxTarget::parse(&agent.tmux_target())?;
-            let launch_shell = launch_shell_command(&agent.worktree_path, &launch_command);
+
+            let sys_prompt_path = std::env::temp_dir()
+                .join(format!("aegis_failover_{}.txt", agent_id));
+            std::fs::write(&sys_prompt_path, &recovery_prompt).map_err(|source| {
+                AegisError::StorageIo {
+                    path: sys_prompt_path.clone(),
+                    source,
+                }
+            })?;
+            let mut launch_cmd_with_prompt = launch_command.clone();
+            launch_cmd_with_prompt.push("--append-system-prompt-file".to_string());
+            launch_cmd_with_prompt.push(sys_prompt_path.to_string_lossy().into_owned());
+
+            let launch_shell = launch_shell_command(&agent.worktree_path, &launch_cmd_with_prompt);
             append_tmux_send(&agent.log_path, &launch_shell)?;
-            tmux.send_text(
-                &target, &launch_shell,
-            ).await?;
-            append_tmux_send(&agent.log_path, &recovery_prompt)?;
-            tmux.send_text(&target, &recovery_prompt).await?;
+            tmux.send_text(&target, &launch_shell).await?;
+            let startup_delay = provider.config().startup_delay_ms;
+            if startup_delay > 0 {
+                tokio::time::sleep(std::time::Duration::from_millis(startup_delay)).await;
+            }
+            let trigger = "Continue.\n";
+            append_tmux_send(&agent.log_path, trigger.trim_end())?;
+            tmux.send_raw_input(&target, trigger.as_bytes()).await?;
+            let _ = std::fs::remove_file(&sys_prompt_path);
         }
 
         let mut updated = self.require_agent(agent_id)?;
@@ -946,7 +986,7 @@ mod tests {
         assert!(plan
             .launch_command
             .iter()
-            .any(|part| part.ends_with("/claude") || part == "claude"));
+            .any(|part| part.contains("claude")));
         assert!(plan.initial_prompt.contains("architect"));
     }
 

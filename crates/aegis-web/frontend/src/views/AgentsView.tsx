@@ -4,7 +4,7 @@ import { toast } from 'sonner';
 
 import { failoverAgent, killAgent, pauseAgent, resumeAgent, spawnTask } from '../api/thunks';
 import { StatusBadge } from '../components/StatusBadge';
-import { setActiveView, setSelectedAgent } from '../store/uiSlice';
+import { agentRoute } from '../lib/agentRoutes';
 import { useAppDispatch, useAppSelector } from '../store/hooks';
 
 export function AgentsView() {
@@ -22,9 +22,7 @@ export function AgentsView() {
       return;
     }
 
-    dispatch(setSelectedAgent(agentId));
-    dispatch(setActiveView('pane'));
-    navigate(`/projects/${activeProjectId}/pane`);
+    navigate(agentRoute(activeProjectId, 'pane', agentId));
   }
 
   async function handleSpawn(event: FormEvent<HTMLFormElement>) {

@@ -52,14 +52,18 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   if (!response.ok) {
     let errorMessage = `${response.status} ${response.statusText}`;
     try {
-      const errorJson = await response.json();
-      if (errorJson && typeof errorJson === 'object') {
-        errorMessage = errorJson.error || errorJson.message || JSON.stringify(errorJson);
+      const errorBody = await response.text();
+      if (errorBody) {
+        try {
+          const errorJson = JSON.parse(errorBody);
+          if (errorJson && typeof errorJson === 'object') {
+            errorMessage = errorJson.error || errorJson.message || JSON.stringify(errorJson);
+          }
+        } catch {
+          errorMessage = errorBody;
+        }
       }
-    } catch {
-      const text = await response.text();
-      if (text) errorMessage = text;
-    }
+    } catch {}
     throw new Error(errorMessage);
   }
 

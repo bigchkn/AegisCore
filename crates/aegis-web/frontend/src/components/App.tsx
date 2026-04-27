@@ -3,7 +3,7 @@ import { Routes, Route, Navigate, useLocation, useParams } from 'react-router-do
 import { Toaster } from 'sonner';
 
 import { fetchProjectData, fetchProjects } from '../api/thunks';
-import { setActiveProject, setSelectedAgent } from '../store/uiSlice';
+import { setActiveProject } from '../store/uiSlice';
 import { useAppDispatch, useAppSelector } from '../store/hooks';
 import { AgentsView } from '../views/AgentsView';
 import { ChannelsView } from '../views/ChannelsView';
@@ -65,8 +65,8 @@ export function App() {
           
           {/* Legacy/Direct routes */}
           <Route path="/agents" element={<AgentsView />} />
-          <Route path="/pane" element={<PaneView />} />
-          <Route path="/logs" element={<LogView />} />
+          <Route path="/pane/:agentId?" element={<PaneView />} />
+          <Route path="/logs/:agentId?" element={<LogView />} />
           <Route path="/tasks" element={<TasksView />} />
           <Route path="/channels" element={<ChannelsView />} />
           <Route path="/taskflow" element={<TaskflowView />} />
@@ -105,15 +105,14 @@ function ProjectRoutes() {
     activeProject?.last_attached_agent_id &&
     (location.pathname === `/projects/${projectId}` || location.pathname === `/projects/${projectId}/`)
   ) {
-    dispatch(setSelectedAgent(activeProject.last_attached_agent_id));
-    return <Navigate to={`/projects/${projectId}/pane`} replace />;
+    return <Navigate to={`/projects/${projectId}/pane/${activeProject.last_attached_agent_id}`} replace />;
   }
 
   return (
     <Routes>
       <Route path="agents" element={<AgentsView />} />
-      <Route path="pane" element={<PaneView />} />
-      <Route path="logs" element={<LogView />} />
+      <Route path="pane/:agentId?" element={<PaneView />} />
+      <Route path="logs/:agentId?" element={<LogView />} />
       <Route path="tasks" element={<TasksView />} />
       <Route path="channels" element={<ChannelsView />} />
       <Route path="taskflow" element={<TaskflowView />} />

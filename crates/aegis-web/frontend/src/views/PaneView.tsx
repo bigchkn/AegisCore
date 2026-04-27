@@ -1,28 +1,33 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 
+import { AgentTargetPicker } from '../components/AgentTargetPicker';
 import { Terminal, type TerminalStatus } from '../components/Terminal';
+import { agentRoute } from '../lib/agentRoutes';
 import { useAppDispatch, useAppSelector } from '../store/hooks';
-import { setActiveView, setSelectedAgent } from '../store/uiSlice';
+import { setSelectedAgent } from '../store/uiSlice';
 
 export function PaneView() {
   const navigate = useNavigate();
   const dispatch = useAppDispatch();
-  const selectedAgentId = useAppSelector((state) => state.ui.selectedAgentId);
-  const activeProjectId = useAppSelector((state) => state.ui.activeProjectId);
+  const { projectId: routeProjectId, agentId: routeAgentId } = useParams<{ projectId?: string; agentId?: string }>();
   const agentsLoading = useAppSelector((state) => state.agents.loading);
+  const agents = useAppSelector((state) => state.agents.items);
   const agent = useAppSelector((state) =>
-    state.agents.items.find((item) => item.agent_id === selectedAgentId),
+    state.agents.items.find((item) => item.agent_id === routeAgentId),
   );
   const [terminalStatus, setTerminalStatus] = useState<TerminalStatus>('connecting');
 
   useEffect(() => {
-    if (selectedAgentId && !agent && !agentsLoading) {
+    dispatch(setSelectedAgent(routeAgentId ?? null));
+  }, [dispatch, routeAgentId]);
+
+  useEffect(() => {
+    if (routeAgentId && !agent && !agentsLoading) {
       dispatch(setSelectedAgent(null));
-      dispatch(setActiveView('agents'));
-      navigate(activeProjectId ? `/projects/${activeProjectId}/agents` : '/agents', { replace: true });
+      navigate(agentRoute(routeProjectId ?? null, 'pane'), { replace: true });
     }
-  }, [activeProjectId, agent, agentsLoading, dispatch, navigate, selectedAgentId]);
+  }, [agent, agentsLoading, dispatch, navigate, routeAgentId, routeProjectId]);
 
   if (agentsLoading && !agent) {
     return (
@@ -33,17 +38,22 @@ export function PaneView() {
     );
   }
 
-  if (!selectedAgentId || !agent) {
+  if (!routeAgentId || !agent) {
     return (
       <section className="empty-state">
         <h2>No agent selected</h2>
-        <p>Select an agent row to attach to its live pane.</p>
-        <button
-          type="button"
-          onClick={() => navigate(activeProjectId ? `/projects/${activeProjectId}/agents` : '/agents')}
-        >
-          Back to agents
-        </button>
+        <p>Select an agent to open its live pane.</p>
+        <AgentTargetPicker
+          agents={agents}
+          selectedAgentId={routeAgentId ?? null}
+          label="Attachable agents"
+          onSelect={(agentId) => {
+            if (!agentId) {
+              return;
+            }
+            navigate(agentRoute(routeProjectId ?? null, 'pane', agentId));
+          }}
+        />
       </section>
     );
   }
@@ -58,21 +68,31 @@ export function PaneView() {
           </p>
         </div>
         <div className="row-actions">
+          <AgentTargetPicker
+            agents={agents}
+            selectedAgentId={routeAgentId}
+            label="Agent"
+            onSelect={(agentId) => {
+              if (!agentId) {
+                return;
+              }
+              navigate(agentRoute(routeProjectId ?? null, 'pane', agentId));
+            }}
+          />
           <span className="connection-pill">{agent.cli_provider}</span>
           <span className="connection-pill">{terminalStatus}</span>
           <button
             type="button"
             onClick={() => {
               dispatch(setSelectedAgent(null));
-              dispatch(setActiveView('agents'));
-              navigate(activeProjectId ? `/projects/${activeProjectId}/agents` : '/agents');
+              navigate(agentRoute(routeProjectId ?? null, 'pane'));
             }}
           >
             Detach
           </button>
         </div>
       </header>
-      <Terminal agentId={selectedAgentId} onStatusChange={setTerminalStatus} />
+      <Terminal agentId={routeAgentId} onStatusChange={setTerminalStatus} />
     </section>
   );
 }

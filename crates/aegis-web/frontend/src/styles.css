@@ -500,6 +500,24 @@ tbody tr:hover {
   gap: 10px;
 }
 
+.agent-target-picker {
+  display: grid;
+  gap: 5px;
+  color: #cbd3dd;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.agent-target-picker select {
+  min-height: 32px;
+  min-width: 220px;
+  padding: 0 10px;
+  border: 1px solid #3b4652;
+  border-radius: 6px;
+  background: #101316;
+  color: #e8eaed;
+}
+
 .log-controls input[type="text"],
 .log-controls input:not([type]) {
   min-height: 32px;
