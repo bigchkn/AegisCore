@@ -75,9 +75,11 @@ impl HttpServer {
 }
 
 async fn get_runtime(state: &HttpState, project_id: Uuid) -> Result<AegisRuntime> {
-    let mut runtimes = state.active_runtimes.lock().await;
-    if let Some(r) = runtimes.get(&project_id) {
-        return Ok(r.clone());
+    if let Some(runtime) = {
+        let runtimes = state.active_runtimes.lock().await;
+        runtimes.get(&project_id).cloned()
+    } {
+        return Ok(runtime);
     }
 
     let project =
@@ -89,15 +91,19 @@ async fn get_runtime(state: &HttpState, project_id: Uuid) -> Result<AegisRuntime
                 reason: "project not found".to_string(),
             })?;
 
-    let r = AegisRuntime::load(
+    let runtime = AegisRuntime::load(
         project.root_path.clone(),
         Some(state.projects.clone()),
         Some(project_id),
     )
     .await?;
-    r.recover().await?;
-    runtimes.insert(project_id, r.clone());
-    Ok(r)
+    runtime.recover().await?;
+
+    let mut runtimes = state.active_runtimes.lock().await;
+    Ok(runtimes
+        .entry(project_id)
+        .or_insert_with(|| runtime.clone())
+        .clone())
 }
 
 async fn list_projects(State(state): State<HttpState>) -> Json<Vec<ProjectRecord>> {
@@ -454,10 +460,13 @@ async fn find_runtime_by_agent(
     active_runtimes: &Arc<Mutex<HashMap<Uuid, AegisRuntime>>>,
     agent_id: Uuid,
 ) -> Option<AegisRuntime> {
-    let runtimes = active_runtimes.lock().await;
-    for runtime in runtimes.values() {
+    let runtimes: Vec<AegisRuntime> = {
+        let runtimes = active_runtimes.lock().await;
+        runtimes.values().cloned().collect()
+    };
+    for runtime in runtimes {
         if let Ok(Some(_)) = aegis_core::AgentRegistry::get(runtime.registry.as_ref(), agent_id) {
-            return Some(runtime.clone());
+            return Some(runtime);
         }
     }
     None

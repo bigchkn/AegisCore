@@ -10,18 +10,28 @@ export function PaneView() {
   const dispatch = useAppDispatch();
   const selectedAgentId = useAppSelector((state) => state.ui.selectedAgentId);
   const activeProjectId = useAppSelector((state) => state.ui.activeProjectId);
+  const agentsLoading = useAppSelector((state) => state.agents.loading);
   const agent = useAppSelector((state) =>
     state.agents.items.find((item) => item.agent_id === selectedAgentId),
   );
   const [terminalStatus, setTerminalStatus] = useState<TerminalStatus>('connecting');
 
   useEffect(() => {
-    if (selectedAgentId && !agent) {
+    if (selectedAgentId && !agent && !agentsLoading) {
       dispatch(setSelectedAgent(null));
       dispatch(setActiveView('agents'));
       navigate(activeProjectId ? `/projects/${activeProjectId}/agents` : '/agents', { replace: true });
     }
-  }, [activeProjectId, agent, dispatch, navigate, selectedAgentId]);
+  }, [activeProjectId, agent, agentsLoading, dispatch, navigate, selectedAgentId]);
+
+  if (agentsLoading && !agent) {
+    return (
+      <section className="empty-state">
+        <h2>Loading agent...</h2>
+        <p>Fetching the latest registry state.</p>
+      </section>
+    );
+  }
 
   if (!selectedAgentId || !agent) {
     return (

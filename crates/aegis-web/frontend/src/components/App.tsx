@@ -79,7 +79,7 @@ export function App() {
 
 function ProjectRedirect({ projects }: { projects: any[] }) {
   if (projects.length > 0) {
-    return <Navigate to={`/projects/${projects[0].id}/agents`} replace />;
+    return <Navigate to={`/projects/${projects[0].id}`} replace />;
   }
   return <Navigate to="/agents" replace />;
 }
@@ -98,18 +98,13 @@ function ProjectRoutes() {
     }
   }, [projectId, activeProjectId, dispatch]);
 
-  // Handle auto-attach redirect on initial project load
+  // Handle auto-attach redirect on initial project load (only if landing on the root project path)
   if (
     activeProject?.last_attached_agent_id &&
-    (location.pathname === `/projects/${projectId}` || location.pathname === `/projects/${projectId}/` || location.pathname === `/projects/${projectId}/agents`)
+    (location.pathname === `/projects/${projectId}` || location.pathname === `/projects/${projectId}/`)
   ) {
-    // We only want to do this once on initial landing, but simple redirect is usually fine
-    // if the user hasn't explicitly navigated elsewhere. 
-    // For now, if they land on agents list and have a last_attached, we send them to pane.
-    if (location.pathname.endsWith('/agents') || location.pathname === `/projects/${projectId}` || location.pathname === `/projects/${projectId}/`) {
-        dispatch(setSelectedAgent(activeProject.last_attached_agent_id));
-        return <Navigate to={`/projects/${projectId}/pane`} replace />;
-    }
+    dispatch(setSelectedAgent(activeProject.last_attached_agent_id));
+    return <Navigate to={`/projects/${projectId}/pane`} replace />;
   }
 
   return (

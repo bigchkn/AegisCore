@@ -37,7 +37,7 @@ export function Sidebar() {
           {projects.map((project) => (
             <NavLink
               key={project.id}
-              to={`/projects/${project.id}/agents`}
+              to={`/projects/${project.id}`}
               className={({ isActive }) => 
                 isActive || project.id === activeProjectId ? 'nav-button is-active' : 'nav-button'
               }
