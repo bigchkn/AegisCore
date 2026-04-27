@@ -1,74 +1,70 @@
-# LLD: Robust Agent Orchestration & Interaction (M37)
+# LLD: Robust Agent Orchestration & Interaction (M37) - REFINED
 
 **Milestone:** M37  
 **Status:** draft  
-**HLD ref:** §4.3, §7, §10  
-**Implements:** Unified provider launch, Robust TUI triggers, and Session cleanup.
+**Implements:** Interaction Models, Environmental Injection, and Tmux Pane Hardening.
 
 ---
 
-## 1. Purpose
+## 1. Problem Statement
 
-The current orchestration logic relies on brittle `tmux send-keys` timing which often results in agents "hanging" at initial prompts (especially Gemini) or failing to register the first command (Claude). This document defines a unified strategy for robust interaction across `claude-code`, `gemini-cli`, and others.
+The current orchestration logic in `dispatcher.rs` is **procedural and brittle**. It treats all AI CLIs as generic "black boxes" and attempts to drive them using hardcoded `sleep` delays and `tmux send-keys` events.
 
----
-
-## 2. Unified Provider Interface
-
-We will formalize the `Provider` trait to distinguish between different interaction models.
-
-### 2.1 Trigger Mechanisms
-
-1.  **Direct (CLI-based):** The provider accepts an initial goal/prompt as a CLI argument and enters interactive mode (e.g., `gemini -i "Begin."`). This is preferred as it is atomic.
-2.  **Injected (TUI-based):** The provider boots into a TUI and requires a simulated keyboard event to start (e.g., Claude Code). This requires `startup_delay_ms` and explicit `Enter` events.
-
-### 2.3 Updated Schema (`ProviderDefinition`)
-
-```yaml
-system_prompt:
-  mechanism: "flag" | "env"
-  key: "--append-system-prompt-file" | "GEMINI_SYSTEM_MD"
-
-interaction:
-  type: "direct" | "injected"
-  interactive_flag: "-i"
-  initial_prompt_arg: "-i"
-  startup_delay_ms: 8000
-```
+**Long-term issues with current approach:**
+*   **Race Conditions:** If a system is under load, the 8s `startup_delay_ms` might be too short, causing the trigger ("Begin.") to be sent before the TUI is listening.
+*   **Quoting Hell:** Passing complex system prompts and triggers via shell arguments leads to escaping issues across different OSs/shells.
+*   **TUI Conflicts:** Tmux often intercepts the very escape sequences (like `modifyOtherKeys`) that modern TUIs like Claude Code or Gemini CLI use to provide a rich experience.
 
 ---
 
-## 3. Robust Dispatcher Flow
+## 2. Proposed Solution: Structured Interaction Models
 
-The `Dispatcher` will follow a strict state machine for launching agents:
+Instead of "guessing" how to start an agent, we categorize providers into two distinct **Interaction Models**.
 
-1.  **Preparation:** Generate the System Prompt temp file and Sandbox profile.
-2.  **Environment:** Inject `AEGIS_AGENT_ID`, `AEGIS_PROJECT_ROOT`, and System Prompt environment variables.
-3.  **Launch Command Construction:**
-    *   If `interaction.type == "direct"`: Include the `initial_prompt_arg` and trigger text (e.g., "Begin.") in the `exec` command.
-    *   If `interaction.type == "injected"`: Launch the binary only.
-4.  **TMUX Execution:**
-    *   Set `allow-passthrough on` and `extended-keys on` for the pane.
-    *   Run the generated launch script.
-5.  **Post-Launch Trigger (Only for `injected` types):**
-    *   Wait for `startup_delay_ms`.
-    *   Use `send_raw_input` for the prompt text.
-    *   Follow immediately with an explicit `send_key("Enter")`.
+### 2.1 Interaction Models (The "Why")
 
----
+1.  **Direct Model (e.g., Gemini CLI):**
+    *   **Mechanism:** Uses the `-i <prompt>` flag to start the agent with a goal already set.
+    *   **Benefit:** **Zero race conditions.** The prompt is part of the process launch. No `send-keys` or `sleep` is required.
+2.  **Injected Model (e.g., Claude Code):**
+    *   **Mechanism:** Boots into a "Waiting for Input" state. Requires a simulated Enter key.
+    *   **Benefit:** Standardizes the "Wait then Enter" sequence into a reusable workflow with explicit `startup_delay_ms` and `C-m` (Carriage Return) handling.
 
-## 4. Termination & Cleanup (M36/M37 Convergence)
+### 2.2 Environmental Injection (The "Where")
 
-To prevent "Zombie Splinters" (agents that finish work but stay open):
+We will shift from CLI arguments to **Environment Variables** for core metadata.
 
-1.  **Agent Identity:** Every splinter is launched with `AEGIS_AGENT_ID` in its env.
-2.  **Explicit Exit:** The `aegis agent exit self` command is the mandatory final step in all splinter templates.
-3.  **Tmux Hook:** We will explore adding a `remain-on-exit off` option to tmux windows for splinters so the pane closes automatically when the process terminates, with the Controller detecting the `pane_dead` state as a backup to the explicit exit command.
+*   **Location:** `crates/aegis-controller/src/dispatcher.rs`
+*   **Change:** Instead of appending `--append-system-prompt-file` to the CLI, we will always set `AEGIS_SYSTEM_PROMPT_PATH`. Providers will be configured in `builtin_providers.yaml` to either use a flag or look for this env var.
+*   **Reason:** Environment variables are safer for passing paths and long strings than CLI arguments, which can be truncated or mis-parsed by shell wrappers.
 
 ---
 
-## 5. Localized Testing Strategy
+## 3. Location of Changes
 
-To avoid regressions:
-1.  **Mock TUI Test:** A rust-based mock TUI that requires a specific sequence of raw bytes to "succeed." The Dispatcher must be able to drive this mock TUI successfully.
-2.  **Provider Matrix Test:** A unit test in `aegis-controller` that asserts the `launch_shell_command` generated for every entry in `builtin_providers.yaml` matches the expected string (checking flags, env vars, and triggers).
+### 3.1 `crates/aegis-core` (Data Structures)
+*   **`provider.rs`**: Add `InteractionModel` enum (`Direct` | `Injected`). Add `startup_delay_ms` to `ProviderConfig`.
+*   **Reason:** Formalizes the contract between the Controller and the AI Providers.
+
+### 3.2 `crates/aegis-providers` (Manifest & YAML)
+*   **`manifest.rs`**: Add fields for `interaction_model`, `interactive_flag`, and `initial_prompt_arg`.
+*   **`builtin_providers.yaml`**: Define these for `claude-code` (Injected), `gemini-cli` (Direct), and `codex` (Injected).
+*   **Reason:** Moves orchestration logic into configuration, allowing new AI tools to be added without code changes.
+
+### 3.3 `crates/aegis-tmux` (Pane Hardening)
+*   **`client.rs`**: Add `harden_pane(target)` method. 
+*   **Implementation:** Executes `tmux set-window-option allow-passthrough on` and `tmux set-option extended-keys on`.
+*   **Reason:** This is the **primary change for long-term stability**. It ensures that the TUI has direct, un-interrupted communication with the terminal, preventing "stuck" prompts or broken rendering.
+
+### 3.4 `crates/aegis-controller` (The Orchestrator)
+*   **`dispatcher.rs`**: Rewrite `launch_or_insert_plan` to use a match statement on `provider.interaction_model()`.
+    *   **Case Direct:** Prepend `AEGIS_AGENT_ID=...` and append `-i "Begin."` to the launch command.
+    *   **Case Injected:** Launch binary -> `harden_pane` -> `sleep` -> `send_raw_input("Begin.")` -> `send_key("Enter")`.
+
+---
+
+## 4. Expected Long-term Outcomes
+
+1.  **Deterministic Startup:** Agents using the `Direct` model will succeed 100% of the time regardless of system load.
+2.  **Platform Parity:** Standardizing on `C-m` and `extended-keys` ensures the orchestration works identically on Linux and macOS.
+3.  **Extensibility:** Adding a local LLM via `ollama` or `llama.cpp` will only require a YAML update to specify it uses the `Direct` model with a specific CLI flag.
