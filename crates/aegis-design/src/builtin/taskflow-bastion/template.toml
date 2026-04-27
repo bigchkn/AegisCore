@@ -1,12 +1,12 @@
 [template]
 name = "taskflow-bastion"
-description = "Coordinates an AegisCore milestone: reads the taskflow, delegates tasks to Splinters, monitors completion."
+description = "Continuous coordinator: picks milestones via taskflow next, spawns Splinters, merges worktrees, loops until the roadmap is exhausted."
 kind = "bastion"
-version = "1"
+version = "2"
 tags = ["taskflow", "coordinator"]
 
 [agent]
-role = "taskflow-coordinator"
+role = "bastion"
 cli_provider = "claude-code"
 model = "claude-opus-4-7"
 auto_cleanup = false
@@ -16,5 +16,5 @@ fallback_cascade = ["gemini-cli"]
 network = "outbound_only"
 
 [variables]
-required = ["project_root", "milestone_id"]
-optional = ["lld_path", "milestone_name", "task_id", "task_description", "bastion_agent_id"]
+required = ["project_root"]
+optional = ["bastion_agent_id"]

@@ -61,7 +61,7 @@ status = "pending"
 [milestones.M33]
 name = "Continuous Bastion Template"
 path = "milestones/M33.toml"
-status = "pending"
+status = "done"
 
 [milestones.M20]
 name = "Agent Design — Template Engine"

@@ -1,6 +1,6 @@
 id = 33
 name = "Continuous Bastion Template"
-status = "pending"
+status = "done"
 lld = "lld/continuous-bastion-loop.md"
 depends_on = ["M31", "M32"]
 
@@ -9,32 +9,32 @@ id = "33.1"
 uid = "f2a3b4c5-d6e7-8901-fabc-901234567891"
 task = "Rewrite taskflow-bastion system_prompt.md for full multi-milestone control loop"
 task_type = "feature"
-status = "pending"
+status = "done"
 
 [[tasks]]
 id = "33.2"
 uid = "a3b4c5d6-e7f8-9012-abcd-012345678902"
 task = "Rewrite taskflow-bastion startup.md with resume check, loop entry, idle/notify wait"
 task_type = "feature"
-status = "pending"
+status = "done"
 
 [[tasks]]
 id = "33.3"
 uid = "b4c5d6e7-f8a9-0123-bcde-123456789013"
 task = "Update taskflow-bastion template.toml: add worktree/notify commands to tools list"
 task_type = "feature"
-status = "pending"
+status = "done"
 
 [[tasks]]
 id = "33.4"
 uid = "c5d6e7f8-a9b0-1234-cdef-234567890124"
 task = "Update taskflow-splinter startup.md to commit work before reporting done"
 task_type = "feature"
-status = "pending"
+status = "done"
 
 [[tasks]]
 id = "33.5"
 uid = "d6e7f8a9-b0c1-2345-defa-345678901235"
 task = "Integration test: bastion loop processes two milestones end-to-end in test harness"
 task_type = "feature"
-status = "pending"
+status = "done"
