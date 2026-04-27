@@ -27,6 +27,8 @@ pub struct ProviderDefinition {
     pub resume_command: Option<String>,
     pub export_command: Option<String>,
     pub model_flag: Option<String>,
+    pub interactive_flag: Option<String>,
+    pub initial_prompt_arg: Option<String>,
     pub system_prompt_mechanism: SystemPromptMechanism,
     pub error_patterns: ErrorPatterns,
     #[serde(default)]

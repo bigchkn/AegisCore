@@ -299,6 +299,20 @@ impl Dispatcher {
             &provider.config().binary,
         ));
 
+        let trigger_text = "Continue where you left off.";
+        let mut use_tmux_trigger = true;
+
+        if let Some(i_flag) = provider.interactive_flag() {
+            launch_command.push(i_flag.to_string());
+            if let Some(p_arg) = provider.initial_prompt_arg() {
+                if p_arg != i_flag {
+                    launch_command.push(p_arg.to_string());
+                }
+                launch_command.push(trigger_text.to_string());
+                use_tmux_trigger = false;
+            }
+        }
+
         let target = TmuxTarget::parse(&agent.tmux_target())?;
         let launch_shell = launch_shell_command(&agent.worktree_path, &launch_command);
         let launch_script = write_launch_script("launch", agent.agent_id, &launch_shell)?;
@@ -325,9 +339,11 @@ impl Dispatcher {
             tokio::time::sleep(std::time::Duration::from_millis(startup_delay)).await;
         }
 
-        let trigger = normalize_tui_prompt("Continue where you left off.\n");
-        tmux.send_raw_input(&target, trigger.as_bytes()).await?;
-        append_tmux_send(&agent.log_path, &trigger)?;
+        if use_tmux_trigger {
+            let trigger = normalize_tui_prompt(&format!("{trigger_text}\n"));
+            tmux.send_raw_input(&target, trigger.as_bytes()).await?;
+            append_tmux_send(&agent.log_path, &trigger)?;
+        }
 
         Ok(agent)
     }
@@ -522,6 +538,25 @@ impl Dispatcher {
             let mut env_vars = vec![("AEGIS_AGENT_ID".to_string(), agent.agent_id.to_string())];
             let provider = self.providers.get(&agent.cli_provider)?;
 
+            let trigger_text = if plan.is_resume {
+                "Continue where you left off."
+            } else {
+                "Begin."
+            };
+
+            let mut use_tmux_trigger = true;
+
+            if let Some(i_flag) = provider.interactive_flag() {
+                launch_cmd.push(i_flag.to_string());
+                if let Some(p_arg) = provider.initial_prompt_arg() {
+                    if p_arg != i_flag {
+                        launch_cmd.push(p_arg.to_string());
+                    }
+                    launch_cmd.push(trigger_text.to_string());
+                    use_tmux_trigger = false;
+                }
+            }
+
             match provider.system_prompt_mechanism() {
                 aegis_core::SystemPromptMechanism::Flag { arg } => {
                     launch_cmd.push(arg);
@@ -548,14 +583,13 @@ impl Dispatcher {
             if plan.startup_delay_ms > 0 {
                 tokio::time::sleep(std::time::Duration::from_millis(plan.startup_delay_ms)).await;
             }
-            let trigger_text = if plan.is_resume {
-                "Continue where you left off.\n"
-            } else {
-                "Begin.\n"
-            };
-            let trigger = normalize_tui_prompt(trigger_text);
-            tmux.send_raw_input(&target, trigger.as_bytes()).await?;
-            append_tmux_send(&agent.log_path, &trigger)?;
+
+            if use_tmux_trigger {
+                let trigger = normalize_tui_prompt(&format!("{trigger_text}\n"));
+                tmux.send_raw_input(&target, trigger.as_bytes()).await?;
+                append_tmux_send(&agent.log_path, &trigger)?;
+            }
+
             Ok(agent)
         } else {
             let agent = self.insert_starting_agent(plan.agent)?;
@@ -737,6 +771,20 @@ impl Dispatcher {
             let mut launch_cmd_with_prompt = launch_command.clone();
             let mut env_vars = vec![("AEGIS_AGENT_ID".to_string(), launch_agent.agent_id.to_string())];
 
+            let trigger_text = "Continue.";
+            let mut use_tmux_trigger = true;
+
+            if let Some(i_flag) = provider.interactive_flag() {
+                launch_cmd_with_prompt.push(i_flag.to_string());
+                if let Some(p_arg) = provider.initial_prompt_arg() {
+                    if p_arg != i_flag {
+                        launch_cmd_with_prompt.push(p_arg.to_string());
+                    }
+                    launch_cmd_with_prompt.push(trigger_text.to_string());
+                    use_tmux_trigger = false;
+                }
+            }
+
             match provider.system_prompt_mechanism() {
                 aegis_core::SystemPromptMechanism::Flag { arg } => {
                     launch_cmd_with_prompt.push(arg);
@@ -764,9 +812,11 @@ impl Dispatcher {
             if startup_delay > 0 {
                 tokio::time::sleep(std::time::Duration::from_millis(startup_delay)).await;
             }
-            let trigger = normalize_tui_prompt("Continue.\n");
-            tmux.send_raw_input(&target, trigger.as_bytes()).await?;
-            append_tmux_send(&launch_agent.log_path, &trigger)?;
+            if use_tmux_trigger {
+                let trigger = normalize_tui_prompt(&format!("{trigger_text}\n"));
+                tmux.send_raw_input(&target, trigger.as_bytes()).await?;
+                append_tmux_send(&launch_agent.log_path, &trigger)?;
+            }
         }
 
         let mut updated = self.require_agent(agent_id)?;

@@ -19,6 +19,8 @@ pub struct ProviderConfig {
     pub extra_args: Vec<String>,
     pub resume_flag: Option<String>,
     pub model: Option<String>,
+    pub interactive_flag: Option<String>,
+    pub initial_prompt_arg: Option<String>,
     /// How long to wait after injecting the launch command before injecting the initial prompt.
     /// Gives the CLI time to start its interactive TUI before receiving input.
     pub startup_delay_ms: u64,
@@ -51,6 +53,9 @@ pub trait Provider: Send + Sync {
 
     /// How this provider expects system prompts to be injected at startup.
     fn system_prompt_mechanism(&self) -> SystemPromptMechanism;
+
+    fn interactive_flag(&self) -> Option<&str>;
+    fn initial_prompt_arg(&self) -> Option<&str>;
 
     /// Build the Command to launch this provider in the given worktree.
     /// `model_override` takes precedence over any model set in the provider config.

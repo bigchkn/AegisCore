@@ -30,6 +30,8 @@ impl ProviderRegistry {
                         .clone()
                         .or_else(|| definition.resume_flag.clone()),
                     model: entry.model.clone(),
+                    interactive_flag: definition.interactive_flag.clone(),
+                    initial_prompt_arg: definition.initial_prompt_arg.clone(),
                     startup_delay_ms: entry
                         .startup_delay_ms
                         .unwrap_or(definition.startup_delay_ms),
@@ -41,6 +43,8 @@ impl ProviderRegistry {
                     extra_args: Vec::new(),
                     resume_flag: definition.resume_flag.clone(),
                     model: None,
+                    interactive_flag: definition.interactive_flag.clone(),
+                    initial_prompt_arg: definition.initial_prompt_arg.clone(),
                     startup_delay_ms: definition.startup_delay_ms,
                 }
             };

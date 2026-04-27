@@ -31,6 +31,14 @@ impl Provider for GenericProvider {
         self.definition.system_prompt_mechanism.clone()
     }
 
+    fn interactive_flag(&self) -> Option<&str> {
+        self.definition.interactive_flag.as_deref()
+    }
+
+    fn initial_prompt_arg(&self) -> Option<&str> {
+        self.definition.initial_prompt_arg.as_deref()
+    }
+
     fn spawn_command(
 
         &self,
