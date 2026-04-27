@@ -25,6 +25,7 @@ should be able to act on an LLD without asking clarifying questions.
 ```
 aegis message send {{bastion_agent_id}} notification \
   '{"status":"done","task_id":"{{task_id}}","doc_path":"{{doc_path}}","summary":"<one-line description>"}'
+aegis agent exit self
 ```
 
 If at any point you are blocked (missing critical context you cannot infer from the codebase):

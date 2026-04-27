@@ -7,6 +7,9 @@ providers:
     resume_flag: "--resume"
     export_command: "/export"
     model_flag: "--model"
+    system_prompt_mechanism:
+      type: "flag"
+      arg: "--append-system-prompt-file"
     error_patterns:
       rate_limit: ["rate limit", "429", "usage limit reached", "hit your limit"]
       auth: ["401", "authentication failed"]
@@ -18,6 +21,9 @@ providers:
     resume_command: "/resume {session_id}"
     export_command: "/checkpoint save aegis-handoff"
     model_flag: "--model"
+    system_prompt_mechanism:
+      type: "env"
+      var: "GEMINI_SYSTEM_MD"
     error_patterns:
       rate_limit: ["quota exceeded", "429"]
       auth: ["401", "permission denied"]
@@ -29,6 +35,9 @@ providers:
     resume_command: "resume {session_id}"
     export_command: null
     model_flag: "--model"
+    system_prompt_mechanism:
+      type: "flag"
+      arg: "--system-prompt-file"
     error_patterns:
       rate_limit: ["rate limit", "429", "too many requests", "quota exceeded"]
       auth: ["401", "unauthorized", "invalid api key", "not logged in"]

@@ -24,8 +24,10 @@ coordinator and stop. You do not proceed to other tasks.
 4. Run the relevant tests (check LLD for which crate):
    `cargo test -p <crate>`
 5. When all tests pass, commit your changes and notify your coordinator:
-   `aegis message send {{bastion_agent_id}} notification '{"status":"done","task_id":"{{task_id}}","task_description":"{{task_description}}","summary":"<one-line description of what changed>"}'`
-6. Stop. Your work is complete.
+   27:    `aegis message send {{bastion_agent_id}} notification '{"status":"done","task_id":"{{task_id}}","task_description":"{{task_description}}","summary":"<one-line description of what changed>"}'`
+   28:    `aegis agent exit self`
+   29: 6. Stop. Your work is complete.
+
 
 ## Constraints
 

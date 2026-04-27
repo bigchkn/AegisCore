@@ -1,3 +1,4 @@
+use aegis_core::SystemPromptMechanism;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -26,6 +27,7 @@ pub struct ProviderDefinition {
     pub resume_command: Option<String>,
     pub export_command: Option<String>,
     pub model_flag: Option<String>,
+    pub system_prompt_mechanism: SystemPromptMechanism,
     pub error_patterns: ErrorPatterns,
     #[serde(default)]
     pub startup_delay_ms: u64,

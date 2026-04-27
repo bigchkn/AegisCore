@@ -1,6 +1,16 @@
+use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use uuid::Uuid;
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum SystemPromptMechanism {
+    /// Pass via a specific CLI flag (e.g. --append-system-prompt-file)
+    Flag { arg: String },
+    /// Pass via an environment variable (e.g. GEMINI_SYSTEM_MD)
+    Env { var: String },
+}
 
 #[derive(Debug, Clone)]
 pub struct ProviderConfig {
@@ -38,6 +48,9 @@ pub struct FailoverContext {
 pub trait Provider: Send + Sync {
     fn name(&self) -> &str;
     fn config(&self) -> &ProviderConfig;
+
+    /// How this provider expects system prompts to be injected at startup.
+    fn system_prompt_mechanism(&self) -> SystemPromptMechanism;
 
     /// Build the Command to launch this provider in the given worktree.
     /// `model_override` takes precedence over any model set in the provider config.

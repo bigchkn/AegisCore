@@ -536,6 +536,11 @@ async fn dispatch_command(
             commands.kill(agent_id).await?;
             Ok(serde_json::json!({ "agent_id": agent_id, "status": "terminated" }))
         }
+        "agents.terminate" => {
+            let agent_id = parse_agent_id(&request.params, &commands)?;
+            commands.terminate_agent(agent_id).await?;
+            Ok(serde_json::json!({ "agent_id": agent_id, "status": "terminated" }))
+        }
         "agents.failover" => {
             let agent_id = parse_agent_id(&request.params, &commands)?;
             let agent = commands.failover(agent_id).await?;

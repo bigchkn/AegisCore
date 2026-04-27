@@ -155,6 +155,23 @@ pub async fn kill(
     Ok(())
 }
 
+pub async fn terminate(
+    agent_id: &str,
+    printer: &Printer,
+    client: &DaemonClient,
+    anchor: &ProjectAnchor,
+) -> Result<(), AegisCliError> {
+    client
+        .request(
+            Some(&anchor.project_root),
+            "agents.terminate",
+            serde_json::json!({ "agent_id": agent_id }),
+        )
+        .await?;
+    printer.line(&format!("Agent {agent_id} terminated."));
+    Ok(())
+}
+
 pub async fn failover(
     agent_id: &str,
     printer: &Printer,

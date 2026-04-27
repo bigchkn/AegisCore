@@ -3,7 +3,7 @@ use std::{path::PathBuf, sync::Arc};
 use aegis_core::{
     config::AgentEntry, AegisError, AegisEvent, Agent, AgentKind, AgentRegistry, AgentStatus,
     FailoverContext, LogQuery, Recorder, Result, SandboxPolicy, SandboxProfile, StorageBackend,
-    Task, TaskRegistry, TaskStatus,
+    Task, TaskRegistry,
 };
 use aegis_design::{RenderedTemplate, TemplateKind};
 use aegis_providers::ProviderRegistry;
@@ -520,10 +520,21 @@ impl Dispatcher {
             })?;
 
             let mut launch_cmd = plan.launch_command.clone();
-            launch_cmd.push("--append-system-prompt-file".to_string());
-            launch_cmd.push(sys_prompt_path.to_string_lossy().into_owned());
+            let mut env_vars = vec![("AEGIS_AGENT_ID".to_string(), agent.agent_id.to_string())];
+            let provider = self.providers.get(&agent.cli_provider)?;
 
-            let launch_shell = launch_shell_command(&agent.worktree_path, &launch_cmd);
+            match provider.system_prompt_mechanism() {
+                aegis_core::SystemPromptMechanism::Flag { arg } => {
+                    launch_cmd.push(arg);
+                    launch_cmd.push(sys_prompt_path.to_string_lossy().into_owned());
+                }
+                aegis_core::SystemPromptMechanism::Env { var } => {
+                    env_vars.push((var, sys_prompt_path.to_string_lossy().into_owned()));
+                }
+            }
+
+            let launch_shell =
+                launch_shell_command_with_env(&agent.worktree_path, &launch_cmd, &env_vars);
             let launch_script = write_launch_script("launch", agent.agent_id, &launch_shell)?;
             let launch_script_cmd = shell_command(&[
                 "/bin/sh".to_string(),
@@ -724,11 +735,22 @@ impl Dispatcher {
                     source,
                 }
             })?;
-            let mut launch_cmd_with_prompt = launch_command.clone();
-            launch_cmd_with_prompt.push("--append-system-prompt-file".to_string());
-            launch_cmd_with_prompt.push(sys_prompt_path.to_string_lossy().into_owned());
 
-            let launch_shell = launch_shell_command(&agent.worktree_path, &launch_cmd_with_prompt);
+            let mut launch_cmd_with_prompt = launch_command.clone();
+            let mut env_vars = vec![("AEGIS_AGENT_ID".to_string(), launch_agent.agent_id.to_string())];
+
+            match provider.system_prompt_mechanism() {
+                aegis_core::SystemPromptMechanism::Flag { arg } => {
+                    launch_cmd_with_prompt.push(arg);
+                    launch_cmd_with_prompt.push(sys_prompt_path.to_string_lossy().into_owned());
+                }
+                aegis_core::SystemPromptMechanism::Env { var } => {
+                    env_vars.push((var, sys_prompt_path.to_string_lossy().into_owned()));
+                }
+            }
+
+            let launch_shell =
+                launch_shell_command_with_env(&agent.worktree_path, &launch_cmd_with_prompt, &env_vars);
             let launch_script =
                 write_launch_script("failover", launch_agent.agent_id, &launch_shell)?;
             let launch_script_cmd = shell_command(&[
@@ -791,6 +813,12 @@ impl Dispatcher {
         }
     }
 
+    pub async fn terminate_agent(&self, agent_id: Uuid) -> Result<()> {
+        let agent = self.require_agent(agent_id)?;
+        self.ensure_transition(&agent.status, &AgentStatus::Reporting)?;
+        self.perform_termination(agent).await
+    }
+
     pub async fn process_receipt(&self, agent_id: Uuid) -> Result<()> {
         let agent = self.require_agent(agent_id)?;
         self.ensure_transition(&agent.status, &AgentStatus::Reporting)?;
@@ -809,63 +837,62 @@ impl Dispatcher {
         });
 
         let receipt_path = self.receipt_path(task_id);
-        let receipt_result = self.validate_receipt(task_id, &receipt_path);
-        match receipt_result {
-            Ok(()) => {
-                TaskRegistry::complete(
-                    self.registry.as_ref(),
-                    task_id,
-                    Some(receipt_path.clone()),
-                )?;
-                self.maybe_clear_last_attached(agent_id)?;
-                self.detach_and_archive(agent_id)?;
-                if let Some(tmux) = &self.tmux {
-                    let target = TmuxTarget::parse(&agent.tmux_target())?;
-                    let _ = tmux.kill_window(&target).await;
-                }
-                if agent.kind == AgentKind::Splinter && self.config.splinter_defaults.auto_cleanup {
-                    let git = GitWorktree::new(
-                        self.storage.project_root().to_path_buf(),
-                        self.storage.worktrees_dir(),
-                    );
-                    let _ = git.prune_for_agent(agent_id).await;
-                }
-                AgentRegistry::update_status(
-                    self.registry.as_ref(),
-                    agent_id,
-                    AgentStatus::Terminated,
-                )?;
-                AgentRegistry::archive(self.registry.as_ref(), agent_id)?;
-                self.events.publish(AegisEvent::AgentStatusChanged {
-                    agent_id,
-                    old_status: AgentStatus::Reporting,
-                    new_status: AgentStatus::Terminated,
-                });
-                self.events.publish(AegisEvent::TaskComplete {
-                    task_id,
-                    receipt_path: receipt_path.to_string_lossy().into_owned(),
-                });
-                Ok(())
-            }
-            Err(error) => {
-                let _ = TaskRegistry::update_status(
-                    self.registry.as_ref(),
-                    task_id,
-                    TaskStatus::Failed,
-                );
-                let _ = AgentRegistry::update_status(
-                    self.registry.as_ref(),
-                    agent_id,
-                    AgentStatus::Failed,
-                );
-                self.events.publish(AegisEvent::AgentStatusChanged {
-                    agent_id,
-                    old_status: AgentStatus::Reporting,
-                    new_status: AgentStatus::Failed,
-                });
-                Err(error)
-            }
+        if receipt_path.exists() {
+            self.validate_receipt(task_id, &receipt_path)?;
+            TaskRegistry::complete(
+                self.registry.as_ref(),
+                task_id,
+                Some(receipt_path.clone()),
+            )?;
+            self.events.publish(AegisEvent::TaskComplete {
+                task_id,
+                receipt_path: receipt_path.to_string_lossy().into_owned(),
+            });
+        } else {
+            // In M23 messaging design, agents may complete without writing a receipt.json.
+            // We still mark the task complete if the agent is being explicitly terminated.
+            TaskRegistry::complete(self.registry.as_ref(), task_id, None)?;
+            self.events.publish(AegisEvent::TaskComplete {
+                task_id: task_id,
+                receipt_path: "m23-messaging".to_string(),
+            });
         }
+
+        self.perform_termination(agent).await
+    }
+
+    async fn perform_termination(&self, agent: Agent) -> Result<()> {
+        let agent_id = agent.agent_id;
+        self.maybe_clear_last_attached(agent_id)?;
+        self.detach_and_archive(agent_id)?;
+
+        if let Some(tmux) = &self.tmux {
+            let target = TmuxTarget::parse(&agent.tmux_target())?;
+            let _ = tmux.kill_window(&target).await;
+        }
+
+        if agent.kind == AgentKind::Splinter && self.config.splinter_defaults.auto_cleanup {
+            let git = GitWorktree::new(
+                self.storage.project_root().to_path_buf(),
+                self.storage.worktrees_dir(),
+            );
+            let _ = git.prune_for_agent(agent_id).await;
+        }
+
+        AgentRegistry::update_status(
+            self.registry.as_ref(),
+            agent_id,
+            AgentStatus::Terminated,
+        )?;
+        AgentRegistry::archive(self.registry.as_ref(), agent_id)?;
+
+        self.events.publish(AegisEvent::AgentStatusChanged {
+            agent_id,
+            old_status: AgentStatus::Reporting,
+            new_status: AgentStatus::Terminated,
+        });
+
+        Ok(())
     }
 
     fn receipt_path(&self, task_id: Uuid) -> PathBuf {
@@ -1182,9 +1209,23 @@ fn shell_command(parts: &[String]) -> String {
 }
 
 fn launch_shell_command(worktree_path: &std::path::Path, parts: &[String]) -> String {
+    launch_shell_command_with_env(worktree_path, parts, &[])
+}
+
+fn launch_shell_command_with_env(
+    worktree_path: &std::path::Path,
+    parts: &[String],
+    env_vars: &[(String, String)],
+) -> String {
+    let env_prefix = env_vars
+        .iter()
+        .map(|(k, v)| format!("export {}={} && ", k, shell_quote(v)))
+        .collect::<String>();
+
     format!(
-        "cd {} && {}",
+        "cd {} && {}{}",
         shell_quote(&worktree_path.to_string_lossy()),
+        env_prefix,
         shell_command(parts)
     )
 }

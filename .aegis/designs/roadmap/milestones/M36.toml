@@ -1,0 +1,29 @@
+id = 36
+name = "Fix Claude-to-Gemini Handoff & Splinter Termination"
+status = "done"
+lld = "lld/M36-termination-and-handoff.md"
+depends_on = []
+
+[[tasks]]
+id = "36.1"
+task = "Create LLD document and M36 tracking"
+task_type = "design"
+status = "done"
+
+[[tasks]]
+id = "36.2"
+task = "Support dynamic system prompt injection mechanisms in providers"
+task_type = "feature"
+status = "done"
+
+[[tasks]]
+id = "36.3"
+task = "Implement aegis agent exit command and termiation workflow"
+task_type = "feature"
+status = "done"
+
+[[tasks]]
+id = "36.4"
+task = "Update taskflow templates to use explicit termination"
+task_type = "feature"
+status = "done"

@@ -30,6 +30,7 @@ git commit -m "<concise description of what changed>"
 ```
 aegis message send {{bastion_agent_id}} notification \
   '{"status":"done","task_id":"{{task_id}}","summary":"<one-line description>"}'
+aegis agent exit self
 ```
 
 If at any point you are blocked (missing context, failing tests you cannot fix, ambiguous requirements), commit any partial work, then send a blocked notification and stop:

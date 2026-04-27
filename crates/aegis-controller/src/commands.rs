@@ -104,11 +104,28 @@ impl ControllerCommands {
         self.dispatcher.kill_agent(agent_id).await
     }
 
+    pub async fn terminate_agent(&self, agent_id: Uuid) -> Result<()> {
+        self.dispatcher.terminate_agent(agent_id).await
+    }
+
     pub async fn failover(&self, agent_id: Uuid) -> Result<Agent> {
+
         self.dispatcher.failover_agent(agent_id).await
     }
 
     pub fn resolve_agent_id(&self, raw: &str) -> Result<Uuid> {
+        if raw == "self" {
+            if let Ok(id_str) = std::env::var("AEGIS_AGENT_ID") {
+                if let Ok(uuid) = Uuid::parse_str(&id_str) {
+                    return Ok(uuid);
+                }
+            }
+            return Err(AegisError::IpcProtocol {
+                reason: "agent_id 'self' specified but AEGIS_AGENT_ID env var is missing or invalid"
+                    .to_string(),
+            });
+        }
+
         let agents = self.list_all_agents()?;
         resolve_agent_id_from_agents(&agents, raw)
     }

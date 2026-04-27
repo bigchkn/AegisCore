@@ -27,7 +27,12 @@ impl Provider for GenericProvider {
         &self.user_config
     }
 
+    fn system_prompt_mechanism(&self) -> aegis_core::SystemPromptMechanism {
+        self.definition.system_prompt_mechanism.clone()
+    }
+
     fn spawn_command(
+
         &self,
         worktree: &Path,
         session: Option<&SessionRef>,

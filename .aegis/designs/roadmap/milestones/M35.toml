@@ -3,4 +3,14 @@ name = "Clean up raw tmux logs to remove control characters and extraneous space
 status = "pending"
 lld = "lld/M35-tmux.md"
 depends_on = []
-tasks = []
+[[tasks]]
+id = "35.1"
+task = "Implement log_clean module in crates/aegis-tmux"
+task_type = "feature"
+status = "pending"
+
+[[tasks]]
+id = "35.2"
+task = "Update call sites in aegis-controller and aegis-recorder to use log_clean"
+task_type = "feature"
+status = "pending"

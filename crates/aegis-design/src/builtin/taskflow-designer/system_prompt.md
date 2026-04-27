@@ -33,7 +33,9 @@ You produce exactly one design document, then notify your coordinator and stop.
 3. Write the document to `{{doc_path}}`. Follow the structure below for your document type.
 4. Notify your coordinator:
    `aegis message send {{bastion_agent_id}} notification '{"status":"done","task_id":"{{task_id}}","doc_path":"{{doc_path}}","summary":"<one-line description of what the document covers>"}'`
-5. Stop. Your work is complete.
+5. Exit:
+   `aegis agent exit self`
+6. Stop. Your work is complete.
 
 If you are blocked (missing critical context you cannot infer), notify the coordinator and stop:
 `aegis message send {{bastion_agent_id}} notification '{"status":"blocked","task_id":"{{task_id}}","reason":"<explanation>"}'`

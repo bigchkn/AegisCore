@@ -106,6 +106,12 @@ enum Commands {
     /// Trigger provider failover for an agent
     Failover { agent_id: String },
 
+    /// Gracefully terminate an agent (archives log and kills tmux window)
+    Terminate { agent_id: String },
+
+    /// Alias for terminate (used by agents to exit gracefully)
+    Exit { agent_id: String },
+
     /// Channel management
     Channel {
         #[command(subcommand)]
@@ -457,6 +463,11 @@ async fn dispatch(cli: Cli, printer: &Printer, client: &DaemonClient) -> Result<
         Commands::Failover { agent_id } => {
             let anchor = require_anchor()?;
             commands::agents::failover(&agent_id, printer, client, &anchor).await
+        }
+
+        Commands::Terminate { agent_id } | Commands::Exit { agent_id } => {
+            let anchor = require_anchor()?;
+            commands::agents::terminate(&agent_id, printer, client, &anchor).await
         }
 
         Commands::Channel { subcommand } => {
