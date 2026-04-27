@@ -129,23 +129,16 @@ async fn handle_connection(
                     path: project_path.clone(),
                 })?;
 
-            let mut runtimes = active_runtimes.lock().await;
-            let runtime = if let Some(r) = runtimes.get(&project.id) {
-                r
-            } else {
-                let r = AegisRuntime::load(
-                    project.root_path.clone(),
-                    Some(Arc::clone(&project_registry)),
-                    Some(project.id),
-                )
-                .await?;
-                r.recover().await?;
-                r.start().await?;
-                runtimes.insert(project.id, r);
-                runtimes.get(&project.id).unwrap()
-            };
-
+            let runtime = get_or_load_runtime(
+                project.id,
+                project.root_path.clone(),
+                Arc::clone(&project_registry),
+                &active_runtimes,
+            )
+            .await?;
             let commands = runtime.commands();
+            let pane_relay = runtime.pane_relay.clone();
+
             if request.command == "logs.tail" {
                 handle_log_tail(lines, &request, &commands).await;
             } else {
@@ -153,7 +146,7 @@ async fn handle_connection(
                     lines,
                     &request,
                     &commands,
-                    runtime.pane_relay.clone(),
+                    pane_relay,
                     &project_registry,
                     project.id,
                 )
@@ -260,20 +253,13 @@ async fn dispatch_command(
             path: project_path.clone(),
         })?;
 
-    let mut runtimes = active_runtimes.lock().await;
-    let runtime = if let Some(r) = runtimes.get(&project.id) {
-        r
-    } else {
-        let r = AegisRuntime::load(
-            project.root_path.clone(),
-            Some(Arc::clone(&project_registry)),
-            Some(project.id),
-        )
-        .await?;
-        r.recover().await?;
-        runtimes.insert(project.id, r);
-        runtimes.get(&project.id).unwrap()
-    };
+    let runtime = get_or_load_runtime(
+        project.id,
+        project.root_path.clone(),
+        Arc::clone(&project_registry),
+        active_runtimes,
+    )
+    .await?;
 
     let commands = runtime.commands();
 
@@ -1086,6 +1072,7 @@ mod tests {
     use crate::runtime::AegisRuntime;
     use std::collections::HashMap;
     use std::fs;
+    use std::os::unix::fs::PermissionsExt;
     use std::sync::{Mutex, OnceLock};
     use tempfile::tempdir;
     use tokio::sync::Mutex as AsyncMutex;
@@ -1118,6 +1105,11 @@ mod tests {
         HOME_LOCK.get_or_init(|| Mutex::new(()))
     }
 
+    fn env_lock() -> &'static Mutex<()> {
+        static ENV_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+        ENV_LOCK.get_or_init(|| Mutex::new(()))
+    }
+
     fn write_minimal_config(project_root: &std::path::Path) {
         let config = r#"
 [providers.claude-code]
@@ -1125,8 +1117,49 @@ binary = "claude-code"
 
 [splinter_defaults]
 cli_provider = "claude-code"
+
+[agent.coordinator]
+type = "bastion"
+role = "coordinator"
+cli_provider = "claude-code"
 "#;
         fs::write(project_root.join("aegis.toml"), config).unwrap();
+    }
+
+    fn write_fake_tmux(script_dir: &std::path::Path) {
+        let script = r#"#!/bin/sh
+cmd="$1"
+shift || true
+case "$cmd" in
+  has-session)
+    exit 1
+    ;;
+  new-session)
+    exit 0
+    ;;
+  new-window)
+    sleep 2
+    printf '1\n'
+    ;;
+  list-panes)
+    printf '%%0\n'
+    ;;
+  send-keys)
+    exit 0
+    ;;
+  display-message)
+    printf '0\n'
+    ;;
+  *)
+    exit 0
+    ;;
+esac
+"#;
+        let path = script_dir.join("tmux");
+        fs::write(&path, script).unwrap();
+        let mut perms = fs::metadata(&path).unwrap().permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(&path, perms).unwrap();
     }
 
     fn request(
@@ -1272,6 +1305,88 @@ cli_provider = "claude-code"
             }
         }
     }
+
+    #[tokio::test]
+    async fn session_start_does_not_block_agents_list_while_loading_runtime() {
+        let _home_guard = home_lock().lock().unwrap();
+        let _env_guard = env_lock().lock().unwrap();
+
+        let home = tempdir().unwrap();
+        std::env::set_var("HOME", home.path());
+
+        let tmux_dir = tempdir().unwrap();
+        write_fake_tmux(tmux_dir.path());
+        let old_path = std::env::var("PATH").unwrap_or_default();
+        let new_path = format!("{}:{}", tmux_dir.path().display(), old_path);
+        std::env::set_var("PATH", &new_path);
+
+        let project = tempdir().unwrap();
+        write_minimal_config(project.path());
+
+        let registry = Arc::new(ProjectRegistry::new());
+        registry.register(project.path().to_path_buf()).unwrap();
+        let runtimes: Arc<AsyncMutex<HashMap<Uuid, AegisRuntime>>> =
+            Arc::new(AsyncMutex::new(HashMap::new()));
+
+        let start_req = request("session.start", Some(project.path()), serde_json::Value::Null);
+        let list_req = request("agents.list", Some(project.path()), serde_json::Value::Null);
+
+        let start_task = tokio::spawn({
+            let registry = Arc::clone(&registry);
+            let runtimes = Arc::clone(&runtimes);
+            async move { dispatch_command(&start_req, registry, &runtimes).await }
+        });
+
+        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+
+        let list_result = tokio::time::timeout(
+            std::time::Duration::from_millis(500),
+            dispatch_command(&list_req, Arc::clone(&registry), &runtimes),
+        )
+        .await;
+
+        std::env::set_var("PATH", old_path);
+
+        assert!(
+            list_result.is_ok(),
+            "agents.list was blocked behind session.start runtime loading"
+        );
+
+        let _ = start_task.await.unwrap();
+    }
+}
+
+/// Get a runtime from the cache or load it from disk.
+///
+/// The `active_runtimes` mutex is held only for the brief cache lookup and the
+/// final insert — never during the async `load`/`recover` work or during command
+/// execution. This prevents slow operations (tmux I/O, git, long-running commands)
+/// from blocking all other project commands.
+async fn get_or_load_runtime(
+    project_id: Uuid,
+    root_path: PathBuf,
+    project_registry: Arc<ProjectRegistry>,
+    active_runtimes: &Arc<Mutex<HashMap<Uuid, AegisRuntime>>>,
+) -> Result<AegisRuntime> {
+    // Fast path: clone from cache with the mutex held only briefly
+    {
+        let runtimes = active_runtimes.lock().await;
+        if let Some(r) = runtimes.get(&project_id) {
+            return Ok(r.clone());
+        }
+    }
+
+    // Slow path: load and recover without holding the mutex
+    let r = AegisRuntime::load(root_path, Some(project_registry), Some(project_id)).await?;
+    r.recover().await?;
+
+    // Re-acquire to insert; another task may have loaded the same project meanwhile
+    let mut runtimes = active_runtimes.lock().await;
+    if let Some(existing) = runtimes.get(&project_id) {
+        return Ok(existing.clone());
+    }
+    runtimes.insert(project_id, r.clone());
+    Ok(r)
 }
 
 fn io_error_from_codec(e: tokio_util::codec::LinesCodecError) -> std::io::Error {

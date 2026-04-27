@@ -177,11 +177,15 @@ impl AegisRuntime {
                 self.dispatcher.spawn_bastion(name).await?;
             }
         }
+        self.start_background_tasks();
+        Ok(())
+    }
 
+    /// Start background tasks (scheduler drain loop) without spawning bastions.
+    /// Safe to call on a freshly loaded runtime that was not started via `session.start`.
+    pub fn start_background_tasks(&self) {
         let scheduler = Arc::clone(&self.scheduler);
         tokio::spawn(async move { scheduler.run_drain_loop("splinter").await });
-
-        Ok(())
     }
 
     pub async fn shutdown(&self) -> Result<()> {
