@@ -68,6 +68,11 @@ name = "Fix Claude-to-Gemini Handoff & Splinter Termination"
 path = "milestones/M36.toml"
 status = "done"
 
+[milestones.M37]
+name = "Robust Orchestration & TUI Interaction"
+path = "milestones/M37.toml"
+status = "pending"
+
 [milestones.M29]
 name = "Continuous Taskflow Workflow — Design Phase"
 path = "milestones/M29.toml"

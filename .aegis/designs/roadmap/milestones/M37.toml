@@ -1,0 +1,29 @@
+id = 37
+name = "Robust Orchestration & TUI Interaction"
+status = "pending"
+lld = "lld/M37-robust-orchestration.md"
+depends_on = ["M36"]
+
+[[tasks]]
+id = "37.1"
+task = "Refactor Provider trait and manifest for Interaction models"
+task_type = "feature"
+status = "pending"
+
+[[tasks]]
+id = "37.2"
+task = "Implement 'direct' vs 'injected' launch logic in Dispatcher"
+task_type = "feature"
+status = "pending"
+
+[[tasks]]
+id = "37.3"
+task = "Enable tmux passthrough and extended-keys for agent panes"
+task_type = "feature"
+status = "pending"
+
+[[tasks]]
+id = "37.4"
+task = "Add mock TUI integration test for orchestration validation"
+task_type = "test"
+status = "pending"
