@@ -1,6 +1,9 @@
 # Rust build artifacts
 /target/
 
+# claude local files
+.claude/
+
 # Web build artifacts
 node_modules/
 crates/aegis-web/frontend/node_modules/

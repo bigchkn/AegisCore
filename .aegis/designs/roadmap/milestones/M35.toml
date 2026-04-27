@@ -1,0 +1,6 @@
+id = 35
+name = "Clean up raw tmux logs to remove control characters and extraneous spaces"
+status = "pending"
+lld = "lld/M35-tmux.md"
+depends_on = []
+tasks = []
