@@ -18,6 +18,9 @@
 @@EXTRA_EXEC_PATHS@@
 (allow process-fork)
 (allow signal)
+; sysctl-read is required by the claude binary for platform/hardware detection at startup.
+; Without it, sandbox-exec sends SIGTRAP and the process dies immediately.
+(allow sysctl-read)
 
 ; Hard denials — must appear before the broad file-read allow (first-match wins in Seatbelt).
 ; These protect credentials even though (allow file-read* /) comes after.

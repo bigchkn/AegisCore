@@ -1,8 +1,7 @@
 providers:
   claude-code:
     binary: "claude"
-    auto_approve_flags: ["--yolo"]
-    non_interactive_flags: ["--non-interactive"]
+    auto_approve_flags: ["--dangerously-skip-permissions"]
     resume_mechanism: "cli_flag"
     resume_flag: "--resume"
     export_command: "/export"
@@ -14,7 +13,6 @@ providers:
   gemini-cli:
     binary: "gemini"
     auto_approve_flags: ["--yes"]
-    non_interactive_flags: []
     resume_mechanism: "injection"
     resume_command: "/resume {session_id}"
     export_command: "/checkpoint save aegis-handoff"
@@ -26,7 +24,6 @@ providers:
   codex:
     binary: "codex"
     auto_approve_flags: ["--full-auto"]
-    non_interactive_flags: ["--no-alt-screen"]
     resume_mechanism: "subcommand"
     resume_command: "resume {session_id}"
     export_command: null

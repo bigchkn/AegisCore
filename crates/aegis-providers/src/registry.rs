@@ -101,7 +101,7 @@ mod tests {
     }
 
     #[test]
-    fn test_claude_unattended_flags() {
+    fn test_claude_auto_approve_flags() {
         let cfg = mock_config();
         let registry = ProviderRegistry::from_config(&cfg).unwrap();
         let claude = registry.get("claude-code").unwrap();
@@ -109,12 +109,12 @@ mod tests {
         let cmd = claude.spawn_command(&PathBuf::from("/tmp"), None, None);
         let args: Vec<_> = cmd.get_args().map(|a| a.to_str().unwrap()).collect();
 
-        assert!(args.contains(&"--yolo"));
-        assert!(args.contains(&"--non-interactive"));
+        assert!(args.contains(&"--allow-dangerously-skip-permissions"));
+        assert!(!args.contains(&"--non-interactive"));
     }
 
     #[test]
-    fn test_gemini_unattended_flags() {
+    fn test_gemini_auto_approve_flags() {
         let cfg = mock_config();
         let registry = ProviderRegistry::from_config(&cfg).unwrap();
         let gemini = registry.get("gemini-cli").unwrap();
@@ -123,10 +123,11 @@ mod tests {
         let args: Vec<_> = cmd.get_args().map(|a| a.to_str().unwrap()).collect();
 
         assert!(args.contains(&"--yes"));
+        assert!(!args.contains(&"--non-interactive"));
     }
 
     #[test]
-    fn test_codex_unattended_flags() {
+    fn test_codex_auto_approve_flags() {
         let cfg = mock_config();
         let registry = ProviderRegistry::from_config(&cfg).unwrap();
         let codex = registry.get("codex").unwrap();
@@ -135,7 +136,7 @@ mod tests {
         let args: Vec<_> = cmd.get_args().map(|a| a.to_str().unwrap()).collect();
 
         assert!(args.contains(&"--full-auto"));
-        assert!(args.contains(&"--no-alt-screen"));
+        assert!(!args.contains(&"--no-alt-screen"));
     }
 
     #[test]
@@ -163,7 +164,7 @@ mod tests {
         assert_eq!(args[0], "resume");
         assert_eq!(args[1], "00000000-0000-0000-0000-000000000001");
         assert!(args.contains(&"--full-auto"));
-        assert!(args.contains(&"--no-alt-screen"));
+        assert!(!args.contains(&"--no-alt-screen"));
     }
 
     #[test]
@@ -217,12 +218,15 @@ mod tests {
         let cmd = provider.spawn_command(&PathBuf::from("/tmp"), None, None);
         let args: Vec<_> = cmd.get_args().map(|a| a.to_str().unwrap()).collect();
 
-        // extra_args must appear before auto_approve_flags
+        // extra_args must appear before auto-approve flags
         let verbose_pos = args.iter().position(|a| *a == "--verbose").unwrap();
-        let yolo_pos = args.iter().position(|a| *a == "--yolo").unwrap();
+        let yolo_pos = args
+            .iter()
+            .position(|a| *a == "--allow-dangerously-skip-permissions")
+            .unwrap();
         assert!(
             verbose_pos < yolo_pos,
-            "extra_args must precede auto_approve_flags"
+            "extra_args must precede auto-approve flags"
         );
         assert!(args.contains(&"--debug"));
     }

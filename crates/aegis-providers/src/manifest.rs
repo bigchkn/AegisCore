@@ -21,7 +21,6 @@ pub enum ResumeMechanism {
 pub struct ProviderDefinition {
     pub binary: String,
     pub auto_approve_flags: Vec<String>,
-    pub non_interactive_flags: Vec<String>,
     pub resume_mechanism: ResumeMechanism,
     pub resume_flag: Option<String>,
     pub resume_command: Option<String>,

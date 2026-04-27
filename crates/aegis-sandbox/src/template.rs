@@ -19,7 +19,15 @@ pub fn render_template(
     let logs_dir = path_to_sbpl(aegis_logs_dir)?;
     let extra_reads = render_allow_paths("file-read*", &policy.extra_reads)?;
     let extra_writes = render_allow_paths("file-write*", &policy.extra_writes)?;
-    let extra_exec_paths = render_allow_paths("process-exec", &policy.extra_exec_paths)?;
+    let mut extra_exec_paths = render_allow_paths("process-exec", &policy.extra_exec_paths)?;
+    let local_exec_path = home.join(".local");
+    if !policy.extra_exec_paths.iter().any(|path| path == &local_exec_path) {
+        let local_exec = render_allow_paths("process-exec", &[local_exec_path])?;
+        if !extra_exec_paths.is_empty() && !local_exec.is_empty() {
+            extra_exec_paths.push('\n');
+        }
+        extra_exec_paths.push_str(&local_exec);
+    }
     let hard_deny_reads = render_deny_paths("file-read*", &policy.hard_deny_reads)?;
     let network_policy = render_network_policy(&policy.network);
 

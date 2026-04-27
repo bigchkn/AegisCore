@@ -13,6 +13,7 @@ use uuid::Uuid;
 
 use crate::registry::FileRegistry;
 use crate::storage::ProjectStorage;
+use crate::transcript::append_tmux_send;
 
 #[derive(Clone)]
 pub struct MessageRouter {
@@ -203,6 +204,7 @@ impl MessageRouter {
                 reason: e.to_string(),
             })?;
         let command = format!("aegis message inbox {}", agent.agent_id);
+        append_tmux_send(&self.storage.agent_log_path(agent.agent_id), &command)?;
 
         tmux.send_text(&target, &command)
             .await

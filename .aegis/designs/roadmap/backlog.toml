@@ -18,3 +18,11 @@ uid = "b0877187-c030-44c1-b0a1-fef39e254c2e"
 task = "Clarifications tab shows 'Error: The string did not match the expected pattern.' when empty"
 task_type = "bug"
 status = "done"
+
+[[tasks]]
+id = "B4"
+uid = "81adc229-c19b-42f1-9230-4f686d9f8dd2"
+task = "aegis agents prints short id only while aegis attach requires long."
+task_type = "bug"
+status = "pending"
+notes = "Update attach to support either short or long"

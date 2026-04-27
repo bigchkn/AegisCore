@@ -10,6 +10,7 @@ use uuid::Uuid;
 
 use crate::registry::FileRegistry;
 use crate::storage::ProjectStorage;
+use crate::transcript::append_tmux_input;
 
 pub struct LogTailer {
     storage: Arc<ProjectStorage>,
@@ -172,6 +173,7 @@ impl PaneRelay {
 
                 // (b) Receive from in_rx and send to tmux
                 Some(input_bytes) = in_rx.next() => {
+                    append_tmux_input(&log_path, &input_bytes)?;
                     self.tmux.send_raw_input(&target, &input_bytes).await
                         .map_err(|e| AegisError::IpcConnection { source: std::io::Error::new(std::io::ErrorKind::Other, e.to_string()) })?;
                 }

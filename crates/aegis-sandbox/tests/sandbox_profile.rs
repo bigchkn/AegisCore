@@ -220,6 +220,7 @@ fn render_includes_extra_exec_paths_in_process_exec() {
         .expect("profile renders");
 
     assert!(rendered.contains("(allow process-exec\n  (subpath \"/custom/bin\"))"));
+    assert!(rendered.contains("(allow process-exec\n  (subpath \"/Users/tester/.local\"))"));
     assert!(!rendered.contains("@@"));
 }
 

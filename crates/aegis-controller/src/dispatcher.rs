@@ -20,6 +20,7 @@ use crate::{
     prompts::{PromptContext, PromptManager, PromptType},
     registry::FileRegistry,
     storage::ProjectStorage,
+    transcript::append_tmux_send,
 };
 
 pub struct Dispatcher {
@@ -352,14 +353,13 @@ impl Dispatcher {
 
         if let Some(tmux) = &self.tmux {
             let target = TmuxTarget::parse(&plan.agent.tmux_target())?;
-            tmux.send_text(
-                &target,
-                &launch_shell_command(&plan.agent.worktree_path, &plan.launch_command),
-            )
-            .await?;
             let agent = self.insert_starting_agent(plan.agent)?;
             self.attach_recorder(&agent)?;
+            let launch_shell = launch_shell_command(&agent.worktree_path, &plan.launch_command);
+            append_tmux_send(&agent.log_path, &launch_shell)?;
+            tmux.send_text(&target, &launch_shell).await?;
             let agent = self.activate_agent(agent)?;
+            append_tmux_send(&agent.log_path, &plan.initial_prompt)?;
             tmux.send_text(&target, &plan.initial_prompt).await?;
             Ok(agent)
         } else {
@@ -522,11 +522,12 @@ impl Dispatcher {
 
         if let Some(tmux) = &self.tmux {
             let target = TmuxTarget::parse(&agent.tmux_target())?;
+            let launch_shell = launch_shell_command(&agent.worktree_path, &launch_command);
+            append_tmux_send(&agent.log_path, &launch_shell)?;
             tmux.send_text(
-                &target,
-                &launch_shell_command(&agent.worktree_path, &launch_command),
-            )
-            .await?;
+                &target, &launch_shell,
+            ).await?;
+            append_tmux_send(&agent.log_path, &recovery_prompt)?;
             tmux.send_text(&target, &recovery_prompt).await?;
         }
 
@@ -830,6 +831,11 @@ fn short_id(id: Uuid) -> String {
 /// first one that is an actual file. This skips stale PATH entries (e.g. an
 /// old Claude install location) whose target no longer exists.
 fn resolve_binary_full_path(binary: &str) -> Option<PathBuf> {
+    let binary_path = std::path::Path::new(binary);
+    if binary_path.is_absolute() && binary_path.is_file() {
+        return std::fs::canonicalize(binary_path).ok().or_else(|| Some(binary_path.to_path_buf()));
+    }
+
     let output = std::process::Command::new("which")
         .arg("-a")
         .arg(binary)
@@ -840,6 +846,7 @@ fn resolve_binary_full_path(binary: &str) -> Option<PathBuf> {
         .lines()
         .map(|line| PathBuf::from(line.trim()))
         .find(|p| p.is_file())
+        .and_then(|p| std::fs::canonicalize(&p).ok().or(Some(p)))
 }
 
 /// Resolve a binary name to its parent directory, using the first existing
@@ -932,7 +939,10 @@ mod tests {
         assert_eq!(plan.agent.tmux_pane, "%9");
         assert_eq!(plan.agent.worktree_path, dir.path());
         assert!(plan.agent.log_path.ends_with(format!("{agent_id}.log")));
-        assert!(plan.launch_command.contains(&"claude".to_string()));
+        assert!(plan
+            .launch_command
+            .iter()
+            .any(|part| part.ends_with("/claude") || part == "claude"));
         assert!(plan.initial_prompt.contains("architect"));
     }
 
@@ -975,11 +985,7 @@ mod tests {
         static PATH_LOCK: std::sync::OnceLock<std::sync::Mutex<()>> = std::sync::OnceLock::new();
         let _guard = PATH_LOCK.get_or_init(|| std::sync::Mutex::new(())).lock().unwrap();
         let old_path = std::env::var_os("PATH");
-        let new_path = if let Some(old_path) = &old_path {
-            format!("{}:{}", temp.path().display(), old_path.to_string_lossy())
-        } else {
-            temp.path().display().to_string()
-        };
+        let new_path = format!("{}:/usr/bin:/bin", temp.path().display());
         unsafe {
             std::env::set_var("PATH", &new_path);
         }
@@ -988,16 +994,97 @@ mod tests {
         let plan = dispatcher
             .build_spawn_plan(spec, Uuid::nil(), 3, "%9")
             .unwrap();
+        let canonical_valid = std::fs::canonicalize(&valid).unwrap();
         assert!(plan
             .launch_command
             .iter()
-            .any(|part| part == &valid.to_string_lossy()));
+            .any(|part| part == &canonical_valid.to_string_lossy()));
 
         if let Some(old_path) = old_path {
             unsafe {
                 std::env::set_var("PATH", old_path);
             }
         }
+    }
+
+    #[test]
+    fn build_spawn_plan_uses_absolute_binary_exec_path() {
+        let (dispatcher, _dir) = dispatcher();
+        let temp = tempfile::tempdir().unwrap();
+        let bin_dir = temp.path().join("claude-home");
+        std::fs::create_dir_all(&bin_dir).unwrap();
+        let binary = bin_dir.join("claude");
+        std::fs::write(&binary, "#!/bin/sh\nprintf 'absolute\\n'\n").unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mut perms = std::fs::metadata(&binary).unwrap().permissions();
+            perms.set_mode(0o755);
+            std::fs::set_permissions(&binary, perms).unwrap();
+        }
+
+        let mut project = RawConfig::default();
+        project.global = Some(RawGlobalConfig {
+            tmux_session_name: Some("aegis-test".into()),
+            ..Default::default()
+        });
+        project.providers = HashMap::from([(
+            "claude-code".to_string(),
+            RawProviderConfig {
+                binary: Some(binary.to_string_lossy().to_string()),
+                ..Default::default()
+            },
+        )]);
+        project.splinter_defaults = Some(RawSplinterDefaults {
+            cli_provider: Some("claude-code".to_string()),
+            fallback_cascade: Some(vec!["gemini-cli".to_string()]),
+            auto_cleanup: Some(false),
+            model: None,
+        });
+        project.agent = HashMap::from([(
+            "architect".to_string(),
+            RawAgentConfig {
+                kind: Some("bastion".to_string()),
+                role: Some("architect".to_string()),
+                cli_provider: Some("claude-code".to_string()),
+                ..Default::default()
+            },
+        )]);
+
+        let config = aegis_core::EffectiveConfig::resolve(&RawConfig::default(), &project).unwrap();
+        let registry = Arc::new(FileRegistry::new(dispatcher.storage.clone()));
+        let providers = Arc::new(ProviderRegistry::from_config(&config).unwrap());
+        let prompts = Arc::new(PromptManager::new(temp.path().to_path_buf()));
+        let dispatcher = Dispatcher::new(
+            registry,
+            None,
+            None,
+            None,
+            None,
+            None,
+            providers,
+            prompts,
+            dispatcher.storage.clone(),
+            EventBus::default(),
+            config,
+        );
+
+        let spec = dispatcher.build_bastion_spec("architect").unwrap();
+        let plan = dispatcher
+            .build_spawn_plan(spec, Uuid::nil(), 3, "%9")
+            .unwrap();
+
+        let canonical = std::fs::canonicalize(&binary).unwrap();
+        assert!(
+            plan.launch_command
+                .iter()
+                .any(|part| part == &canonical.to_string_lossy())
+        );
+        let canonical_bin_dir = std::fs::canonicalize(&bin_dir).unwrap();
+        assert!(plan
+            .sandbox_policy
+            .extra_exec_paths
+            .contains(&canonical_bin_dir));
     }
 
     #[test]

@@ -45,9 +45,8 @@ impl Provider for GenericProvider {
         // User extra_args before framework flags so they can't accidentally override unattended mode
         cmd.args(&self.user_config.extra_args);
 
-        // Standard unattended flags
+        // Standard auto-approve flags.
         cmd.args(&self.definition.auto_approve_flags);
-        cmd.args(&self.definition.non_interactive_flags);
 
         // CLI-level resume if applicable
         if let Some(s) = session {

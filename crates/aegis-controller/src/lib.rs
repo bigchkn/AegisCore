@@ -12,6 +12,7 @@ pub mod runtime;
 pub mod scheduler;
 pub mod state;
 pub mod storage;
+pub mod transcript;
 pub mod watchdog;
 
 pub use clarification::*;

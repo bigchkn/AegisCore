@@ -47,9 +47,9 @@ export function App() {
 
   return (
     <main className="app-shell">
-      <Toaster position="bottom-right" richColors />
       <Sidebar />
       <section className="workspace">
+        <Toaster position="bottom-right" richColors />
         <header className="topbar">
           <div>
             <h1>{titleForView(activeViewPath)}</h1>
