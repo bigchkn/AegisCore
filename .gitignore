@@ -9,6 +9,13 @@ node_modules/
 crates/aegis-web/frontend/node_modules/
 crates/aegis-web/frontend/dist/
 
+# agent stuff
+AGENTS.md
+.cursorrules
+CLAUDE.md
+.cursor/
+.mcp.json
+
 # macOS
 .DS_Store
 .AppleDouble
@@ -46,3 +53,5 @@ clean_worktrees.sh
 restart_daemon_dev.sh
 
 
+# Added by code-review-graph
+.code-review-graph/

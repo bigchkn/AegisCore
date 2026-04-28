@@ -1,0 +1,19 @@
+id = 40
+name = "Terminal State Persistence"
+status = "done"
+lld = ""
+depends_on = []
+
+[[tasks]]
+id = "40.1"
+uid = "6f8d1e2b-3c4d-4e5f-a6b7-c8d9e0f1a2b3"
+task = "Fix TmuxClient capture_pane flags"
+status = "done"
+task_type = "maintenance"
+
+[[tasks]]
+id = "40.2"
+uid = "7185e001-2d73-4149-a13a-99f11fe14084"
+task = "Update PaneRelay to send initial snapshot"
+status = "done"
+task_type = "maintenance"

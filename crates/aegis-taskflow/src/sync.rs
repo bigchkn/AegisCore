@@ -218,11 +218,25 @@ impl TaskflowEngine {
         lock.read_toml()
     }
 
-    /// Returns the next milestone the bastion should work on using greedy
-    /// topological ordering: lowest-ID ready milestone whose dependencies are
-    /// all done.
+    /// Returns the next roadmap bucket the bastion should work on. Global
+    /// backlog work takes priority, then milestones use greedy topological
+    /// ordering: lowest-ID ready milestone whose dependencies are all done.
     pub fn next_milestone(&self) -> Result<NextMilestoneOutcome> {
         let index = self.get_status()?;
+        let backlog = self.get_backlog()?;
+        let backlog_task_count = backlog
+            .tasks
+            .iter()
+            .filter(|task| task.status != TaskflowStatus::Done)
+            .count();
+
+        if backlog_task_count > 0 {
+            return Ok(NextMilestoneOutcome::Ready {
+                milestone_id: "backlog".to_string(),
+                name: "Global Backlog".to_string(),
+                task_count: backlog_task_count,
+            });
+        }
 
         // Build a status lookup from the index (cheap, no file I/O per entry).
         let status_map: std::collections::HashMap<String, String> = index
@@ -1256,6 +1270,30 @@ mod tests {
         );
     }
 
+    fn write_backlog(roadmap_dir: &std::path::Path, statuses: &[TaskflowStatus]) {
+        let backlog = Backlog {
+            tasks: statuses
+                .iter()
+                .enumerate()
+                .map(|(index, status)| crate::model::ProjectTask {
+                    id: format!("B{}", index + 1),
+                    uid: Uuid::new_v4(),
+                    task: format!("backlog task {}", index + 1),
+                    task_type: crate::model::TaskType::Feature,
+                    status: status.clone(),
+                    crate_name: None,
+                    notes: None,
+                    registry_task_id: None,
+                })
+                .collect(),
+        };
+        std::fs::write(
+            roadmap_dir.join("backlog.toml"),
+            toml::to_string(&backlog).unwrap(),
+        )
+        .unwrap();
+    }
+
     #[test]
     fn next_returns_lowest_ready_milestone() {
         let (tmp, engine) = setup_engine();
@@ -1279,6 +1317,62 @@ mod tests {
         let outcome = engine.next_milestone().unwrap();
         assert!(
             matches!(outcome, NextMilestoneOutcome::Ready { milestone_id, .. } if milestone_id == "M3")
+        );
+        drop(tmp);
+    }
+
+    #[test]
+    fn next_prioritizes_global_backlog_before_milestones() {
+        let (tmp, engine) = setup_engine();
+        let roadmap_dir = engine.storage().designs_dir().join("roadmap");
+        let m_dir = roadmap_dir.join("milestones");
+
+        write_backlog(
+            &roadmap_dir,
+            &[TaskflowStatus::Pending, TaskflowStatus::Done],
+        );
+        make_milestone_file(&m_dir, 1, "pending", &[]);
+
+        let mut index: ProjectIndex =
+            toml::from_str(&std::fs::read_to_string(roadmap_dir.join("index.toml")).unwrap())
+                .unwrap();
+        add_milestone_ref(&mut index, 1, "pending");
+        std::fs::write(
+            roadmap_dir.join("index.toml"),
+            toml::to_string(&index).unwrap(),
+        )
+        .unwrap();
+
+        let outcome = engine.next_milestone().unwrap();
+        assert!(
+            matches!(outcome, NextMilestoneOutcome::Ready { milestone_id, name, task_count }
+                if milestone_id == "backlog" && name == "Global Backlog" && task_count == 1)
+        );
+        drop(tmp);
+    }
+
+    #[test]
+    fn next_uses_milestones_when_global_backlog_is_done() {
+        let (tmp, engine) = setup_engine();
+        let roadmap_dir = engine.storage().designs_dir().join("roadmap");
+        let m_dir = roadmap_dir.join("milestones");
+
+        write_backlog(&roadmap_dir, &[TaskflowStatus::Done]);
+        make_milestone_file(&m_dir, 2, "pending", &[]);
+
+        let mut index: ProjectIndex =
+            toml::from_str(&std::fs::read_to_string(roadmap_dir.join("index.toml")).unwrap())
+                .unwrap();
+        add_milestone_ref(&mut index, 2, "pending");
+        std::fs::write(
+            roadmap_dir.join("index.toml"),
+            toml::to_string(&index).unwrap(),
+        )
+        .unwrap();
+
+        let outcome = engine.next_milestone().unwrap();
+        assert!(
+            matches!(outcome, NextMilestoneOutcome::Ready { milestone_id, .. } if milestone_id == "M2")
         );
         drop(tmp);
     }

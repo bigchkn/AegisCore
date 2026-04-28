@@ -55,8 +55,43 @@ pub async fn list(
     client: &DaemonClient,
     anchor: &ProjectAnchor,
 ) -> Result<(), AegisCliError> {
-    // Re-use status for list for now, or refine if needed
-    status(printer, client, anchor).await
+    let status_payload = client
+        .request(
+            Some(&anchor.project_root),
+            "taskflow.status",
+            serde_json::json!({}),
+        )
+        .await?;
+    let backlog_payload = client
+        .request(
+            Some(&anchor.project_root),
+            "taskflow.show",
+            serde_json::json!("backlog"),
+        )
+        .await?;
+
+    if printer.format == crate::output::OutputFormat::Json {
+        printer.json(&serde_json::json!({
+            "project": status_payload.get("project").cloned().unwrap_or(serde_json::Value::Null),
+            "backlog": backlog_payload,
+            "milestones": status_payload.get("milestones").cloned().unwrap_or(serde_json::Value::Null),
+        }));
+        return Ok(());
+    }
+
+    let project = status_payload.get("project");
+    let name = project
+        .and_then(|p| p.get("name"))
+        .and_then(|v| v.as_str())
+        .unwrap_or("AegisCore");
+
+    println!("{} Taskflow List", name);
+    printer.separator();
+    printer.table(
+        &["ID", "Name", "Status", "Tasks"],
+        taskflow_list_rows(&status_payload, &backlog_payload),
+    );
+    Ok(())
 }
 
 pub async fn show(
@@ -128,6 +163,75 @@ pub async fn show(
     }
 
     Ok(())
+}
+
+fn taskflow_list_rows(
+    status_payload: &serde_json::Value,
+    backlog_payload: &serde_json::Value,
+) -> Vec<Vec<String>> {
+    let mut rows = Vec::new();
+
+    rows.push(vec![
+        "backlog".to_string(),
+        backlog_payload
+            .get("name")
+            .and_then(|v| v.as_str())
+            .unwrap_or("Global Backlog")
+            .to_string(),
+        "n/a".to_string(),
+        task_summary(backlog_payload),
+    ]);
+
+    if let Some(milestones) = status_payload.get("milestones").and_then(|v| v.as_object()) {
+        let mut keys: Vec<_> = milestones.keys().collect();
+        keys.sort();
+        for key in keys {
+            let milestone = milestones.get(key).unwrap();
+            rows.push(vec![
+                key.to_string(),
+                milestone
+                    .get("name")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("-")
+                    .to_string(),
+                milestone
+                    .get("status")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("pending")
+                    .to_string(),
+                "-".to_string(),
+            ]);
+        }
+    }
+
+    rows
+}
+
+fn task_summary(payload: &serde_json::Value) -> String {
+    let Some(tasks) = payload.get("tasks").and_then(|v| v.as_array()) else {
+        return "no tasks".to_string();
+    };
+    let total = tasks.len();
+    if total == 0 {
+        return "no tasks".to_string();
+    }
+
+    let pending = tasks
+        .iter()
+        .filter(|task| {
+            task.get("status")
+                .and_then(|v| v.as_str())
+                .map(|status| status != "done")
+                .unwrap_or(true)
+        })
+        .count();
+
+    let total_label = if total == 1 { "task" } else { "tasks" };
+    match pending {
+        0 => format!("{total} {total_label}, none pending"),
+        1 => format!("{total} {total_label}, 1 pending"),
+        _ => format!("{total} {total_label}, {pending} pending"),
+    }
 }
 
 pub async fn sync(
@@ -285,9 +389,13 @@ pub async fn next(
                 .get("task_count")
                 .and_then(|v| v.as_u64())
                 .unwrap_or(0);
-            printer.line(&format!(
-                "Next milestone: {id} — {name} ({count} tasks pending)"
-            ));
+            if id == "backlog" {
+                printer.line(&format!("Next backlog: {name} ({count} tasks pending)"));
+            } else {
+                printer.line(&format!(
+                    "Next milestone: {id} — {name} ({count} tasks pending)"
+                ));
+            }
         }
         "exhausted" => printer.line("No pending milestones — backlog is exhausted."),
         "blocked" => {
@@ -323,11 +431,61 @@ pub async fn notify(
         return Ok(());
     }
 
-    let count = payload.get("notified").and_then(|v| v.as_u64()).unwrap_or(0);
+    let count = payload
+        .get("notified")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(0);
     if count == 0 {
         printer.line("No active bastion agents found — notification not sent.");
     } else {
         printer.line(&format!("Notified {count} bastion agent(s): event={event}"));
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn task_summary_reports_empty_backlog() {
+        assert_eq!(task_summary(&json!({ "tasks": [] })), "no tasks");
+    }
+
+    #[test]
+    fn task_summary_counts_pending_backlog_tasks() {
+        let payload = json!({
+            "tasks": [
+                { "status": "pending" },
+                { "status": "done" },
+                { "status": "blocked" }
+            ]
+        });
+
+        assert_eq!(task_summary(&payload), "3 tasks, 2 pending");
+    }
+
+    #[test]
+    fn taskflow_list_rows_include_backlog_before_milestones() {
+        let status = json!({
+            "milestones": {
+                "M2": { "name": "Second", "status": "pending" },
+                "M1": { "name": "First", "status": "done" }
+            }
+        });
+        let backlog = json!({
+            "name": "Global Backlog",
+            "tasks": [{ "status": "pending" }]
+        });
+
+        let rows = taskflow_list_rows(&status, &backlog);
+
+        assert_eq!(
+            rows[0],
+            vec!["backlog", "Global Backlog", "n/a", "1 task, 1 pending"]
+        );
+        assert_eq!(rows[1], vec!["M1", "First", "done", "-"]);
+        assert_eq!(rows[2], vec!["M2", "Second", "pending", "-"]);
+    }
 }

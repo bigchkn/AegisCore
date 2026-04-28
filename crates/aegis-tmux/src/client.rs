@@ -311,17 +311,6 @@ impl TmuxClient {
         lines: usize,
     ) -> Result<String, TmuxError> {
         let start = format!("-{lines}");
-        self.run_tmux(&["capture-pane", "-t", target.as_str(), "-p", "-S", &start])
-            .await
-    }
-
-    /// Capture the last `lines` lines with ANSI escape codes stripped.
-    pub async fn capture_pane_plain(
-        &self,
-        target: &TmuxTarget,
-        lines: usize,
-    ) -> Result<String, TmuxError> {
-        let start = format!("-{lines}");
         self.run_tmux(&[
             "capture-pane",
             "-t",
@@ -332,6 +321,17 @@ impl TmuxClient {
             &start,
         ])
         .await
+    }
+
+    /// Capture the last `lines` lines with ANSI escape codes stripped.
+    pub async fn capture_pane_plain(
+        &self,
+        target: &TmuxTarget,
+        lines: usize,
+    ) -> Result<String, TmuxError> {
+        let start = format!("-{lines}");
+        self.run_tmux(&["capture-pane", "-t", target.as_str(), "-p", "-S", &start])
+            .await
     }
 
     // ── pipe-pane ─────────────────────────────────────────────────────────────

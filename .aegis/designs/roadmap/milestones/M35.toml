@@ -1,16 +1,19 @@
 id = 35
 name = "Clean up raw tmux logs to remove control characters and extraneous spaces"
-status = "pending"
+status = "done"
 lld = "lld/M35-tmux.md"
 depends_on = []
+
 [[tasks]]
 id = "35.1"
+uid = "3c2a9889-2ac2-48a0-85ac-6f437c13665d"
 task = "Implement log_clean module in crates/aegis-tmux"
 task_type = "feature"
-status = "pending"
+status = "done"
 
 [[tasks]]
 id = "35.2"
+uid = "1d1fa506-fefd-491c-a3f2-0c99059f47b6"
 task = "Update call sites in aegis-controller and aegis-recorder to use log_clean"
 task_type = "feature"
-status = "pending"
+status = "done"

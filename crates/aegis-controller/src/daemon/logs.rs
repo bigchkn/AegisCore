@@ -145,6 +145,11 @@ impl PaneRelay {
                     source,
                 })?;
 
+        // 1. Initial burst: capture current tmux pane state
+        if let Ok(snapshot) = self.tmux.capture_pane(&target, 2000).await {
+            out_tx.send(snapshot.into_bytes()).await?;
+        }
+
         loop {
             tokio::select! {
                 // (a) Read from log file and stream to out_tx

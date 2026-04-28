@@ -24,5 +24,34 @@ id = "B4"
 uid = "81adc229-c19b-42f1-9230-4f686d9f8dd2"
 task = "aegis agents prints short id only while aegis attach requires long."
 task_type = "bug"
+status = "done"
+notes = "attach now accepts short prefix or full UUID via starts_with matching"
+
+[[tasks]]
+id = "B5"
+uid = "b0c6ee5d-0c5a-4487-a218-09e82e975407"
+task = "New milestone, and new bug functions in taskflow web-ui pane do not function with json error from backend"
+task_type = "bug"
 status = "pending"
-notes = "Update attach to support either short or long"
+
+[[tasks]]
+id = "B6"
+uid = "9ab7c401-6d66-4632-879c-860d6ae02a8e"
+task = "Support task id being optional in commands to add-task with the system auto-assigning."
+task_type = "feature"
+status = "done"
+notes = "Changed add-task --id from required positional to optional flag; routes to create_task IPC when omitted for auto-ID generation"
+
+[[tasks]]
+id = "B7"
+uid = "6190853b-6e31-4612-b8b3-bc0d1cbe8883"
+task = "Active and non-active tasks have a highlight on left hand side. The icon highlight works correctly."
+task_type = "feature"
+status = "pending"
+
+[[tasks]]
+id = "B8"
+uid = "97d76e5a-c8ed-41cb-9937-6b79819ab262"
+task = "When reopening pane on web-ui, text is scrambled. Over time it will correct. Identify with tests first then fix."
+task_type = "feature"
+status = "pending"

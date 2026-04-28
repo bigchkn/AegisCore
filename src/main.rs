@@ -77,7 +77,7 @@ enum Commands {
     },
 
     /// Attach to the project tmux session (or a specific agent pane)
-    Attach { agent_id: Option<Uuid> },
+    Attach { agent_id: Option<String> },
 
     /// List all agents
     Agents,

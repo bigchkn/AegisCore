@@ -2,7 +2,6 @@ use crate::{
     anchoring::ProjectAnchor, client::DaemonClient, error::AegisCliError, output::Printer,
 };
 use std::path::Path;
-use uuid::Uuid;
 
 pub async fn start(
     role: Option<&str>,
@@ -63,14 +62,14 @@ pub async fn stop(
 }
 
 /// `aegis attach [<agent_id>]` — local tmux passthrough, no UDS call.
-pub fn attach(agent_id: Option<Uuid>, anchor: &ProjectAnchor) -> Result<(), AegisCliError> {
+/// `agent_id` may be a full UUID or a short prefix (≥4 chars, as printed by `aegis agents`).
+pub fn attach(agent_id: Option<String>, anchor: &ProjectAnchor) -> Result<(), AegisCliError> {
     let session_name =
         read_session_name(&anchor.project_root).unwrap_or_else(|| "aegis".to_string());
 
-    if let Some(id) = agent_id {
-        // Try to find pane target from registry file
-        let pane =
-            find_agent_pane(&anchor.aegis_dir, id).unwrap_or_else(|| format!("{session_name}:0"));
+    if let Some(prefix) = agent_id {
+        let pane = find_agent_pane_by_prefix(&anchor.aegis_dir, &prefix)
+            .unwrap_or_else(|| format!("{session_name}:0"));
         exec_tmux(&["select-window", "-t", &pane])?;
     } else {
         exec_tmux(&["attach-session", "-t", &session_name])?;
@@ -87,14 +86,14 @@ fn read_session_name(project_root: &Path) -> Option<String> {
         .map(|c| c.global.tmux_session_name)
 }
 
-fn find_agent_pane(aegis_dir: &Path, agent_id: Uuid) -> Option<String> {
+fn find_agent_pane_by_prefix(aegis_dir: &Path, prefix: &str) -> Option<String> {
     let registry_path = aegis_dir.join("state/registry.json");
     let data = std::fs::read_to_string(registry_path).ok()?;
     let v: serde_json::Value = serde_json::from_str(&data).ok()?;
     let agents = v.get("agents")?.as_array()?;
-    let id_str = agent_id.to_string();
     for a in agents {
-        if a.get("agent_id").and_then(|v| v.as_str()) == Some(&id_str) {
+        let id = a.get("agent_id").and_then(|v| v.as_str())?;
+        if id.starts_with(prefix) || id == prefix {
             let session = a
                 .get("tmux_session")
                 .and_then(|v| v.as_str())
