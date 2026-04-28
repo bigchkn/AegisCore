@@ -453,6 +453,10 @@ impl Dispatcher {
         // In a new dedicated session, the first window is typically 0 and the first pane is %0.
         // We list panes to find the actual ID.
         let window_target = TmuxTarget::parse(&format!("{}:", session))?;
+        
+        // Ensure a reasonable terminal size for TUIs
+        let _ = tmux.resize_window(&window_target, 160, 50).await;
+        
         let pane = tmux
             .list_panes(&window_target)
             .await?
@@ -463,6 +467,9 @@ impl Dispatcher {
             })?;
         let pane_target = TmuxTarget::parse(&pane)?;
         tmux.harden_pane(&pane_target).await?;
+
+        // Wait for shell to be ready
+        let _ = self.wait_for_shell(&pane_target).await;
 
         tracing::debug!(%agent_id, session, pane, "prepared tmux window");
         Ok((session, 0, pane))
@@ -1058,6 +1065,26 @@ impl Dispatcher {
         git.list_milestone_worktrees().await
     }
 
+    async fn wait_for_shell(&self, target: &TmuxTarget) -> Result<()> {
+        let Some(tmux) = &self.tmux else {
+            return Ok(());
+        };
+
+        // Try for up to 2 seconds to see a shell prompt or activity
+        for _ in 0..10 {
+            if let Ok(bytes) = tmux.capture_pane(target, 1).await {
+                let out = String::from_utf8_lossy(&bytes);
+                // Common shell prompt markers
+                if out.contains('%') || out.contains('$') || out.contains('#') || out.contains('>') {
+                    return Ok(());
+                }
+            }
+            sleep(Duration::from_millis(200)).await;
+        }
+
+        Ok(())
+    }
+
     async fn replace_tmux_session_for_relaunch(&self, mut agent: Agent) -> Result<Agent> {
         let Some(tmux) = &self.tmux else {
             return Ok(agent);
@@ -1084,6 +1111,7 @@ impl Dispatcher {
             if let Some(pane) = panes.into_iter().next() {
                 if let Ok(pane_target) = TmuxTarget::parse(&pane) {
                     let _ = tmux.harden_pane(&pane_target).await;
+                    let _ = self.wait_for_shell(&pane_target).await;
                 }
                 agent.tmux_pane = pane;
             }

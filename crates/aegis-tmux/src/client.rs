@@ -95,6 +95,26 @@ impl TmuxClient {
         Ok(out.trim().to_owned())
     }
 
+    /// Resize a window to a specific width and height.
+    pub async fn resize_window(
+        &self,
+        target: &TmuxTarget,
+        width: usize,
+        height: usize,
+    ) -> Result<(), TmuxError> {
+        self.run_tmux(&[
+            "resize-window",
+            "-t",
+            target.as_str(),
+            "-x",
+            &width.to_string(),
+            "-y",
+            &height.to_string(),
+        ])
+        .await?;
+        Ok(())
+    }
+
     /// Kill a specific pane and its process.
     pub async fn kill_pane(&self, target: &TmuxTarget) -> Result<(), TmuxError> {
         self.run_tmux(&["kill-pane", "-t", target.as_str()]).await?;
