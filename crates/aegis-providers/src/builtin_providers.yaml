@@ -13,7 +13,7 @@ providers:
       type: "flag"
       arg: "--append-system-prompt-file"
     error_patterns:
-      rate_limit: ["rate limit", "429", "usage limit reached", "hit your limit"]
+      rate_limit: ["rate limit", "429", "usage limit reached", "hit your limit", "apierror: 529"]
       auth: ["401", "authentication failed"]
 
   gemini-cli:

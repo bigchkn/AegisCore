@@ -184,6 +184,7 @@ mod tests {
 
         let claude = registry.get("claude-code").unwrap();
         assert!(claude.is_rate_limit_error("429 usage limit reached"));
+        assert!(claude.is_rate_limit_error("APIError: 529 AuthenticationService"));
 
         let gemini = registry.get("gemini-cli").unwrap();
         assert!(gemini.is_rate_limit_error("quota exceeded"));
