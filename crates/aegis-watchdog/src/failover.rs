@@ -46,6 +46,7 @@ pub trait FailoverExecutor: Send + Sync {
     async fn mark_failed(&self, agent_id: Uuid, reason: &str) -> Result<()>;
     async fn mark_cooling(&self, agent_id: Uuid) -> Result<()>;
     async fn mark_active(&self, agent_id: Uuid, provider_name: &str) -> Result<()>;
+    async fn mark_paused(&self, agent_id: Uuid) -> Result<()>;
     async fn process_receipt(&self, agent_id: Uuid) -> Result<()>;
 }
 
@@ -467,6 +468,11 @@ mod tests {
         async fn mark_active(&self, _agent_id: Uuid, provider_name: &str) -> Result<()> {
             self.calls.lock().unwrap().push("active".to_string());
             *self.active_provider.lock().unwrap() = Some(provider_name.to_string());
+            Ok(())
+        }
+
+        async fn mark_paused(&self, _agent_id: Uuid) -> Result<()> {
+            self.calls.lock().unwrap().push("paused".to_string());
             Ok(())
         }
 

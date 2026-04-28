@@ -166,6 +166,12 @@ impl Watchdog {
 
             if let Some(event) = self.matcher.detect(agent.agent_id, provider, &capture) {
                 if self.should_emit(&event) {
+                    tracing::info!(
+                        agent_id = %agent.agent_id,
+                        provider = %agent.cli_provider,
+                        event_type = ?event,
+                        "watchdog detected event"
+                    );
                     events.push(event);
                 }
             }
@@ -183,6 +189,7 @@ impl Watchdog {
             WatchdogAction::PauseAndNotify => {
                 if let Some(agent) = self.agents.get(event.agent_id())? {
                     self.executor.pause_current(&agent).await?;
+                    self.executor.mark_paused(agent.agent_id).await?;
                 }
                 Ok(())
             }
@@ -518,6 +525,7 @@ mod tests {
     #[derive(Default)]
     struct RecordingExecutor {
         paused: Mutex<Vec<Uuid>>,
+        status_paused: Mutex<Vec<Uuid>>,
         failed: Mutex<Vec<(Uuid, String)>>,
         receipts: Mutex<Vec<Uuid>>,
     }
@@ -556,6 +564,11 @@ mod tests {
         }
 
         async fn mark_active(&self, _agent_id: Uuid, _provider_name: &str) -> Result<()> {
+            Ok(())
+        }
+
+        async fn mark_paused(&self, agent_id: Uuid) -> Result<()> {
+            self.status_paused.lock().unwrap().push(agent_id);
             Ok(())
         }
 

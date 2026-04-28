@@ -1261,6 +1261,17 @@ impl FailoverExecutor for Dispatcher {
         Ok(())
     }
 
+    async fn mark_paused(&self, agent_id: Uuid) -> Result<()> {
+        let old_status = self.require_agent(agent_id)?.status;
+        AgentRegistry::update_status(self.registry.as_ref(), agent_id, AgentStatus::Paused)?;
+        self.events.publish(AegisEvent::AgentStatusChanged {
+            agent_id,
+            old_status,
+            new_status: AgentStatus::Paused,
+        });
+        Ok(())
+    }
+
     async fn process_receipt(&self, agent_id: Uuid) -> Result<()> {
         Dispatcher::process_receipt(self, agent_id).await
     }

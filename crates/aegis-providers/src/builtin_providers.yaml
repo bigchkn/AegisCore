@@ -13,7 +13,7 @@ providers:
       type: "flag"
       arg: "--append-system-prompt-file"
     error_patterns:
-      rate_limit: ["rate limit", "429", "usage limit reached", "hit your limit", "apierror: 529"]
+      rate_limit: ["rate limit", "re:\\b429\\b", "usage limit reached", "hit your limit", "apierror: 529"]
       auth: ["401", "authentication failed"]
 
   gemini-cli:
@@ -32,7 +32,7 @@ providers:
       type: "env"
       var: "GEMINI_SYSTEM_MD"
     error_patterns:
-      rate_limit: ["quota exceeded", "429"]
+      rate_limit: ["quota exceeded", "re:\\b429\\b"]
       auth: ["401", "permission denied"]
 
   codex:
@@ -48,5 +48,5 @@ providers:
       type: "flag"
       arg: "--system-prompt-file"
     error_patterns:
-      rate_limit: ["rate limit", "429", "too many requests", "quota exceeded"]
+      rate_limit: ["rate limit", "re:\\b429\\b", "too many requests", "quota exceeded"]
       auth: ["401", "unauthorized", "invalid api key", "not logged in"]

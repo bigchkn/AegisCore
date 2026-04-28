@@ -107,7 +107,7 @@ fn detect_category(
     for line in lines {
         for pattern in configured {
             if pattern.matches(line) {
-                return Some(pattern.raw().to_string());
+                return Some(format!("{}: {}", pattern.raw(), line.trim()));
             }
         }
         if provider_matcher(line) {
@@ -179,7 +179,12 @@ mod tests {
             )
             .unwrap();
 
-        assert!(matches!(event, DetectedEvent::RateLimit { .. }));
+        if let DetectedEvent::RateLimit { matched_pattern, .. } = event {
+            assert!(matched_pattern.contains("too many requests"));
+            assert!(matched_pattern.contains("TOO MANY REQUESTS"));
+        } else {
+            panic!("expected RateLimit event");
+        }
     }
 
     #[test]
@@ -193,7 +198,12 @@ mod tests {
             .detect(Uuid::new_v4(), provider, "error: 429   TOO MANY requests")
             .unwrap();
 
-        assert!(matches!(event, DetectedEvent::RateLimit { .. }));
+        if let DetectedEvent::RateLimit { matched_pattern, .. } = event {
+            assert!(matched_pattern.contains("re:429\\s+too\\s+many"));
+            assert!(matched_pattern.contains("429   TOO MANY requests"));
+        } else {
+            panic!("expected RateLimit event");
+        }
     }
 
     #[test]
