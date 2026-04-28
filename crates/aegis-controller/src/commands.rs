@@ -4,6 +4,7 @@ use crate::clarification::{ClarificationRequest, ClarificationService, Clarifier
 use crate::messaging::{MessageDeliveryReceipt, MessageInbox, MessageInboxSummary, MessageRouter};
 use aegis_core::{
     AegisError, Agent, AgentRegistry, LogQuery, Recorder, Result, TaskCreator, TaskQueue,
+    TaskRegistry,
 };
 use aegis_design::RenderedTemplate;
 use aegis_taskflow::model::{Milestone, ProjectIndex, TaskDraft, TaskPatch};
@@ -227,11 +228,12 @@ impl ControllerCommands {
         tf.get_milestone(milestone_id)
     }
 
-    pub fn taskflow_assign(&self, roadmap_id: &str, task_id: Uuid) -> Result<()> {
+    pub fn taskflow_assign(&self, roadmap_id: &str, task_or_agent_id: Uuid) -> Result<()> {
         let tf = self.taskflow.as_ref().ok_or_else(|| AegisError::Config {
             field: "taskflow".to_string(),
             reason: "Taskflow engine is not initialized".to_string(),
         })?;
+        let task_id = resolve_registry_task_id_for_assignment(self.registry.as_ref(), task_or_agent_id)?;
         tf.links().assign(roadmap_id.to_string(), task_id)
     }
 
@@ -380,10 +382,29 @@ fn resolve_agent_id_from_agents(agents: &[Agent], raw: &str) -> Result<Uuid> {
     }
 }
 
+fn resolve_registry_task_id_for_assignment(
+    registry: &FileRegistry,
+    task_or_agent_id: Uuid,
+) -> Result<Uuid> {
+    if TaskRegistry::get(registry, task_or_agent_id)?.is_some() {
+        return Ok(task_or_agent_id);
+    }
+
+    if let Some(agent) = AgentRegistry::get(registry, task_or_agent_id)? {
+        return agent.task_id.ok_or_else(|| AegisError::IpcProtocol {
+            reason: format!("Agent {task_or_agent_id} does not have an assigned task"),
+        });
+    }
+
+    Err(AegisError::TaskNotFound {
+        task_id: task_or_agent_id,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use aegis_core::{AgentKind, AgentStatus};
+    use aegis_core::{AgentKind, AgentStatus, Task, TaskStatus};
     use chrono::Utc;
     use tempfile::tempdir;
     use uuid::Uuid;
@@ -439,6 +460,34 @@ mod tests {
         let err = resolve_agent_id_from_agents(&[], &agent_id.to_string()).unwrap_err();
 
         assert!(matches!(err, AegisError::AgentNotFound { agent_id: id } if id == agent_id));
+    }
+
+    #[test]
+    fn assignment_id_resolves_splinter_agent_to_registry_task() {
+        let dir = tempdir().unwrap();
+        let (registry, _router) = setup(dir.path());
+        let agent_id = Uuid::parse_str("aaaaaaaa-0000-0000-0000-000000000005").unwrap();
+        let task_id = Uuid::parse_str("bbbbbbbb-0000-0000-0000-000000000005").unwrap();
+        let now = Utc::now();
+        let task = Task {
+            task_id,
+            description: "Implement task".to_string(),
+            status: TaskStatus::Active,
+            assigned_agent_id: Some(agent_id),
+            created_by: TaskCreator::System,
+            created_at: now,
+            completed_at: None,
+            receipt_path: None,
+        };
+        let mut splinter = agent(agent_id);
+        splinter.task_id = Some(task_id);
+
+        TaskRegistry::insert(registry.as_ref(), &task).unwrap();
+        AgentRegistry::insert(registry.as_ref(), &splinter).unwrap();
+
+        let resolved = resolve_registry_task_id_for_assignment(registry.as_ref(), agent_id).unwrap();
+
+        assert_eq!(resolved, task_id);
     }
 
     // --- notify_active_bastions tests ---

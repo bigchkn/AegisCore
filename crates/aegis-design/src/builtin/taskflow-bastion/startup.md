@@ -56,6 +56,9 @@ aegis message send <SPLINTER_AGENT_ID> task \
   '{"lld_path":"<LLD_PATH>","task_id":"<TASK_ID>","acceptance_criteria":"<FROM LLD>"}'
 ```
 
+`taskflow assign` accepts the Splinter agent ID and links the roadmap task to
+that Splinter's registry task.
+
 Then poll until all tasks resolve:
 
 ```

@@ -348,6 +348,8 @@ fn splinter_startup_contains_commit_step() {
     let startup = rendered.startup.as_deref().unwrap();
     assert!(startup.contains("git commit"));
     assert!(startup.contains("git add"));
+    assert!(startup.contains("AEGIS_AGENT_ID"));
+    assert!(startup.contains("aegis exit self"));
 }
 
 #[test]
@@ -367,4 +369,5 @@ fn bastion_loop_processes_two_milestones_sequence() {
     assert!(rendered.system_prompt.contains("LOOP"));
     assert!(rendered.system_prompt.contains("MERGE"));
     assert!(rendered.system_prompt.contains("PICK"));
+    assert!(rendered.startup.as_deref().unwrap().contains("Splinter agent ID"));
 }

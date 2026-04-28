@@ -1,6 +1,11 @@
 Your task: **{{task_description}}**
 LLD reference: `{{lld_path}}`
 Coordinator ID: `{{bastion_agent_id}}`
+Your Agent ID is available in `AEGIS_AGENT_ID`. Verify it before reporting:
+
+```
+test -n "$AEGIS_AGENT_ID" && echo "$AEGIS_AGENT_ID"
+```
 
 ---
 
@@ -30,7 +35,7 @@ git commit -m "<concise description of what changed>"
 ```
 aegis message send {{bastion_agent_id}} notification \
   '{"status":"done","task_id":"{{task_id}}","summary":"<one-line description>"}'
-aegis agent exit self
+aegis exit self
 ```
 
 If at any point you are blocked (missing context, failing tests you cannot fix, ambiguous requirements), commit any partial work, then send a blocked notification and stop:
@@ -38,4 +43,5 @@ If at any point you are blocked (missing context, failing tests you cannot fix, 
 ```
 aegis message send {{bastion_agent_id}} notification \
   '{"status":"blocked","task_id":"{{task_id}}","reason":"<explanation>"}'
+aegis exit self
 ```

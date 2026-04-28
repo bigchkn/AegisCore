@@ -1,6 +1,11 @@
 Your assignment: write a **{{doc_type}}** at `{{doc_path}}`.
 Description: {{doc_description}}
 Coordinator ID: `{{bastion_agent_id}}`
+Your Agent ID is available in `AEGIS_AGENT_ID`. Verify it before reporting:
+
+```
+test -n "$AEGIS_AGENT_ID" && echo "$AEGIS_AGENT_ID"
+```
 
 ---
 
@@ -25,7 +30,7 @@ should be able to act on an LLD without asking clarifying questions.
 ```
 aegis message send {{bastion_agent_id}} notification \
   '{"status":"done","task_id":"{{task_id}}","doc_path":"{{doc_path}}","summary":"<one-line description>"}'
-aegis agent exit self
+aegis exit self
 ```
 
 If at any point you are blocked (missing critical context you cannot infer from the codebase):
@@ -33,4 +38,5 @@ If at any point you are blocked (missing critical context you cannot infer from 
 ```
 aegis message send {{bastion_agent_id}} notification \
   '{"status":"blocked","task_id":"{{task_id}}","reason":"<explanation>"}'
+aegis exit self
 ```

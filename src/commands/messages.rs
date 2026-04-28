@@ -77,6 +77,7 @@ pub async fn inbox(
     client: &DaemonClient,
     anchor: &ProjectAnchor,
 ) -> Result<(), AegisCliError> {
+    let agent_id = resolve_self_agent_arg(agent_id)?;
     let payload = client
         .request(
             Some(&anchor.project_root),
@@ -93,7 +94,7 @@ pub async fn inbox(
     let agent_name = payload
         .get("agent_name")
         .and_then(|v| v.as_str())
-        .unwrap_or(agent_id);
+        .unwrap_or(&agent_id);
     let agent_status = payload
         .get("agent_status")
         .and_then(|v| v.as_str())
@@ -106,7 +107,7 @@ pub async fn inbox(
 
     printer.kv(&[
         ("Agent:", agent_name),
-        ("ID:", agent_id),
+        ("ID:", &agent_id),
         ("Status:", agent_status),
         ("Messages:", &messages.len().to_string()),
     ]);
@@ -285,4 +286,16 @@ fn render_payload(value: Option<&serde_json::Value>) -> String {
 
 fn short_id(raw: &str) -> &str {
     &raw[..raw.len().min(8)]
+}
+
+fn resolve_self_agent_arg(agent_id: &str) -> Result<String, AegisCliError> {
+    if agent_id != "self" {
+        return Ok(agent_id.to_string());
+    }
+
+    std::env::var("AEGIS_AGENT_ID").map_err(|_| {
+        AegisCliError::Unexpected(
+            "agent_id 'self' specified but AEGIS_AGENT_ID is not set".to_string(),
+        )
+    })
 }

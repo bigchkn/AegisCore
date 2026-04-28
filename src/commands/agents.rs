@@ -161,6 +161,7 @@ pub async fn terminate(
     client: &DaemonClient,
     anchor: &ProjectAnchor,
 ) -> Result<(), AegisCliError> {
+    let agent_id = resolve_self_agent_arg(agent_id)?;
     client
         .request(
             Some(&anchor.project_root),
@@ -170,6 +171,18 @@ pub async fn terminate(
         .await?;
     printer.line(&format!("Agent {agent_id} terminated."));
     Ok(())
+}
+
+fn resolve_self_agent_arg(agent_id: &str) -> Result<String, AegisCliError> {
+    if agent_id != "self" {
+        return Ok(agent_id.to_string());
+    }
+
+    std::env::var("AEGIS_AGENT_ID").map_err(|_| {
+        AegisCliError::Unexpected(
+            "agent_id 'self' specified but AEGIS_AGENT_ID is not set".to_string(),
+        )
+    })
 }
 
 pub async fn failover(

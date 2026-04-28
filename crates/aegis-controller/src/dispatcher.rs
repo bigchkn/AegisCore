@@ -3,7 +3,7 @@ use std::{path::PathBuf, sync::Arc};
 use aegis_core::{
     config::AgentEntry, AegisError, AegisEvent, Agent, AgentKind, AgentRegistry, AgentStatus,
     FailoverContext, InteractionModel, LogQuery, Recorder, Result, SandboxPolicy, SandboxProfile,
-    StorageBackend, Task, TaskRegistry,
+    StorageBackend, Task, TaskCreator, TaskRegistry, TaskStatus,
 };
 use aegis_design::{RenderedTemplate, TemplateKind};
 use aegis_providers::ProviderRegistry;
@@ -412,13 +412,28 @@ impl Dispatcher {
             inline_prompt.push_str(startup);
         }
 
+        let registry_task = if kind == AgentKind::Splinter {
+            rendered.task_description.as_ref().map(|description| Task {
+                task_id: Uuid::new_v4(),
+                description: description.clone(),
+                status: TaskStatus::Active,
+                assigned_agent_id: Some(agent_id),
+                created_by: TaskCreator::System,
+                created_at: Utc::now(),
+                completed_at: None,
+                receipt_path: None,
+            })
+        } else {
+            None
+        };
+
         let spec = AgentSpec {
             name: rendered.role.clone(),
             kind: kind.clone(),
             role: rendered.role.clone(),
             parent_id: None,
-            task_id: None,
-            task_description: None,
+            task_id: registry_task.as_ref().map(|task| task.task_id),
+            task_description: rendered.task_description.clone(),
             cli_provider: rendered.cli_provider.clone(),
             fallback_cascade: rendered.fallback_cascade.clone(),
             system_prompt: None,
@@ -442,6 +457,9 @@ impl Dispatcher {
             .prepare_tmux_window(agent_id, kind, &rendered.role)
             .await?;
         let plan = self.build_spawn_plan(spec, agent_id, session, window, pane)?;
+        if let Some(task) = registry_task {
+            TaskRegistry::insert(self.registry.as_ref(), &task)?;
+        }
         self.launch_or_insert_plan(plan).await
     }
 
@@ -1794,6 +1812,8 @@ mod tests {
             name: "taskflow-bastion".into(),
             kind: TemplateKind::Bastion,
             role: "taskflow-coordinator".into(),
+            task_id: None,
+            task_description: None,
             cli_provider: "claude-code".into(),
             model: None,
             auto_cleanup: false,
@@ -1813,6 +1833,8 @@ mod tests {
             name: "taskflow-implementer".into(),
             kind: TemplateKind::Splinter,
             role: "taskflow-implementer".into(),
+            task_id: Some("20.1".into()),
+            task_description: Some("Implement task X".into()),
             cli_provider: "claude-code".into(),
             model: None,
             auto_cleanup: true,
@@ -1826,6 +1848,7 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(splinter.kind, AgentKind::Splinter);
+        assert!(splinter.task_id.is_some());
 
         // 3. Bastion sends a `task` message to the splinter.
         let receipt = router
@@ -1883,6 +1906,8 @@ mod tests {
             name: "test-template".into(),
             kind: TemplateKind::Bastion,
             role: "test-coordinator".into(),
+            task_id: None,
+            task_description: None,
             cli_provider: "claude-code".into(),
             model: None,
             auto_cleanup: false,

@@ -112,6 +112,12 @@ enum Commands {
     /// Alias for terminate (used by agents to exit gracefully)
     Exit { agent_id: String },
 
+    /// Agent self-management helpers
+    Agent {
+        #[command(subcommand)]
+        subcommand: AgentCommands,
+    },
+
     /// Channel management
     Channel {
         #[command(subcommand)]
@@ -333,6 +339,12 @@ enum TaskflowCommands {
 }
 
 #[derive(Subcommand)]
+enum AgentCommands {
+    /// Alias for exit, retained for template compatibility
+    Exit { agent_id: String },
+}
+
+#[derive(Subcommand)]
 enum MessageCommands {
     /// Send a message to an agent inbox
     Send {
@@ -344,7 +356,7 @@ enum MessageCommands {
         kind: commands::messages::MessageKindArg,
     },
     /// Inspect one agent inbox
-    Inbox { agent_id: String },
+    Inbox { agent_id: Option<String> },
     /// List inbox summaries or a specific inbox when an agent ID is supplied
     List { agent_id: Option<String> },
 }
@@ -471,6 +483,15 @@ async fn dispatch(cli: Cli, printer: &Printer, client: &DaemonClient) -> Result<
             commands::agents::terminate(&agent_id, printer, client, &anchor).await
         }
 
+        Commands::Agent { subcommand } => {
+            let anchor = require_anchor()?;
+            match subcommand {
+                AgentCommands::Exit { agent_id } => {
+                    commands::agents::terminate(&agent_id, printer, client, &anchor).await
+                }
+            }
+        }
+
         Commands::Channel { subcommand } => {
             let anchor = require_anchor()?;
             match subcommand {
@@ -544,7 +565,13 @@ async fn dispatch(cli: Cli, printer: &Printer, client: &DaemonClient) -> Result<
                     .await
                 }
                 MessageCommands::Inbox { agent_id } => {
-                    commands::messages::inbox(&agent_id, printer, client, &anchor).await
+                    commands::messages::inbox(
+                        agent_id.as_deref().unwrap_or("self"),
+                        printer,
+                        client,
+                        &anchor,
+                    )
+                    .await
                 }
                 MessageCommands::List { agent_id } => {
                     commands::messages::list(agent_id.as_deref(), printer, client, &anchor).await

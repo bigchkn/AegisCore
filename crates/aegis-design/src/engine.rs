@@ -10,6 +10,10 @@ pub struct RenderedTemplate {
     pub name: String,
     pub kind: TemplateKind,
     pub role: String,
+    #[serde(default)]
+    pub task_id: Option<String>,
+    #[serde(default)]
+    pub task_description: Option<String>,
     pub cli_provider: String,
     pub model: Option<String>,
     pub auto_cleanup: bool,
@@ -65,6 +69,12 @@ impl DesignEngine {
             name: template.metadata.name.clone(),
             kind: template.metadata.kind.clone(),
             role: template.agent.role.clone(),
+            task_id: resolved.get("task_id").filter(|v| !v.is_empty()).cloned(),
+            task_description: resolved
+                .get("task_description")
+                .or_else(|| resolved.get("doc_description"))
+                .filter(|v| !v.is_empty())
+                .cloned(),
             cli_provider: template.agent.cli_provider.clone(),
             model: template.agent.model.clone(),
             auto_cleanup: template.agent.auto_cleanup,
