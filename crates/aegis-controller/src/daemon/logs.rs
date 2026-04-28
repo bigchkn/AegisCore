@@ -47,9 +47,7 @@ impl LogTailer {
         let start = lines.len().saturating_sub(last_n);
 
         for line in &lines[start..] {
-            let stripped = strip_ansi_escapes::strip(line);
-            let line_clean = String::from_utf8_lossy(&stripped).into_owned();
-            out_tx.send(line_clean).await?;
+            out_tx.send(line.to_string()).await?;
         }
 
         // 2. Continuous tail
@@ -83,9 +81,7 @@ impl LogTailer {
 
                 let new_text = String::from_utf8_lossy(&new_bytes);
                 for line in new_text.lines() {
-                    let stripped = strip_ansi_escapes::strip(line);
-                    let line_clean = String::from_utf8_lossy(&stripped).into_owned();
-                    out_tx.send(line_clean).await?;
+                    out_tx.send(line.to_string()).await?;
                 }
 
                 pos = metadata.len();
@@ -147,7 +143,7 @@ impl PaneRelay {
 
         // 1. Initial burst: capture current tmux pane state
         if let Ok(snapshot) = self.tmux.capture_pane(&target, 2000).await {
-            out_tx.send(snapshot.into_bytes()).await?;
+            out_tx.send(snapshot).await?;
         }
 
         loop {

@@ -28,8 +28,14 @@ impl TmuxClient {
     // ── internal ──────────────────────────────────────────────────────────────
 
     async fn run_tmux(&self, args: &[&str]) -> Result<String, TmuxError> {
+        let out = self.run_tmux_bin(args).await?;
+        Ok(String::from_utf8_lossy(&out).into_owned())
+    }
+
+    async fn run_tmux_bin(&self, args: &[&str]) -> Result<Vec<u8>, TmuxError> {
         debug!(bin = %self.tmux_bin, ?args, "tmux");
         let output = tokio::process::Command::new(&self.tmux_bin)
+            .env("TERM", "xterm-256color")
             .args(args)
             .output()
             .await
@@ -41,7 +47,7 @@ impl TmuxClient {
             })?;
 
         if output.status.success() {
-            Ok(String::from_utf8_lossy(&output.stdout).into_owned())
+            Ok(output.stdout)
         } else {
             Err(TmuxError::CommandFailed {
                 code: output.status.code().unwrap_or(-1),
@@ -199,25 +205,16 @@ impl TmuxClient {
         Ok(false)
     }
 
-    /// Clear the current line and type a prompt the way a human would.
+    /// Clear the current line and submit a prompt the way a human would.
     pub async fn send_interactive_text(
         &self,
         target: &TmuxTarget,
         text: &str,
     ) -> Result<(), TmuxError> {
-        self.send_key(target, "Escape").await?;
-        sleep(Duration::from_millis(100)).await;
         self.send_key(target, "C-u").await?;
         sleep(Duration::from_millis(200)).await;
-
-        for ch in text.chars() {
-            let literal = ch.to_string();
-            self.run_tmux(&["send-keys", "-t", target.as_str(), "-l", &literal])
-                .await?;
-            sleep(Duration::from_millis(20)).await;
-        }
-
-        sleep(Duration::from_millis(500)).await;
+        self.send_raw_input(target, text.as_bytes()).await?;
+        sleep(Duration::from_millis(100)).await;
         self.send_key(target, "Enter").await?;
         Ok(())
     }
@@ -309,9 +306,9 @@ impl TmuxClient {
         &self,
         target: &TmuxTarget,
         lines: usize,
-    ) -> Result<String, TmuxError> {
+    ) -> Result<Vec<u8>, TmuxError> {
         let start = format!("-{lines}");
-        self.run_tmux(&[
+        self.run_tmux_bin(&[
             "capture-pane",
             "-t",
             target.as_str(),
@@ -341,7 +338,7 @@ impl TmuxClient {
     pub async fn pipe_attach(&self, target: &TmuxTarget, log_path: &Path) -> Result<(), TmuxError> {
         let path_escaped = escape_for_send_keys(&log_path.to_string_lossy());
         let shell_cmd = format!("cat >> {path_escaped}");
-        self.run_tmux(&["pipe-pane", "-t", target.as_str(), "-o", &shell_cmd])
+        self.run_tmux(&["pipe-pane", "-t", target.as_str(), &shell_cmd])
             .await?;
         Ok(())
     }

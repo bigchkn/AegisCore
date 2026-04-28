@@ -78,6 +78,28 @@ async fn send_text_and_capture_plain_round_trip() -> Result<(), TmuxError> {
 }
 
 #[tokio::test]
+async fn send_interactive_text_pastes_and_submits() -> Result<(), TmuxError> {
+    if !tmux_available() {
+        eprintln!("skipping tmux integration test: tmux not installed");
+        return Ok(());
+    }
+
+    let client = TmuxClient::new();
+    let session = TmuxSession::new(&client).await?;
+    let target = session.target();
+
+    client
+        .send_interactive_text(&target, "printf 'aegis-interactive\\n'")
+        .await?;
+    sleep(Duration::from_millis(200)).await;
+
+    let captured = client.capture_pane_plain(&target, 20).await?;
+    assert!(captured.contains("aegis-interactive"), "{captured}");
+
+    Ok(())
+}
+
+#[tokio::test]
 async fn pipe_attach_writes_log_and_detach_stops() -> Result<(), TmuxError> {
     if !tmux_available() {
         eprintln!("skipping tmux integration test: tmux not installed");

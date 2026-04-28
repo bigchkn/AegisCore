@@ -203,6 +203,20 @@ impl MessageRouter {
             TmuxTarget::parse(&agent.tmux_target()).map_err(|e| AegisError::IpcProtocol {
                 reason: e.to_string(),
             })?;
+        let pane = tmux
+            .capture_pane_plain(&target, 30)
+            .await
+            .map_err(|e| AegisError::IpcConnection {
+                source: std::io::Error::new(std::io::ErrorKind::Other, e.to_string()),
+            })?;
+        if !pane_looks_ready_for_nudge(&pane) {
+            tracing::debug!(
+                agent_id = %agent.agent_id,
+                "agent pane is not idle; leaving inbox nudge queued without TUI injection"
+            );
+            return Ok(false);
+        }
+
         let prompt = inbox_nudge_prompt(agent.agent_id);
         append_tmux_send(&self.storage.agent_log_path(agent.agent_id), &prompt)?;
 
@@ -220,6 +234,32 @@ fn inbox_nudge_prompt(agent_id: Uuid) -> String {
     format!(
         "You have queued Aegis inbox messages. Run `aegis message inbox {agent_id}` now. If you find a notification payload with event `roadmap_updated`, immediately return to taskflow PICK by running `aegis taskflow next` and process the next available work."
     )
+}
+
+fn pane_looks_ready_for_nudge(capture: &str) -> bool {
+    let recent = capture
+        .lines()
+        .rev()
+        .take(15)
+        .collect::<Vec<_>>()
+        .into_iter()
+        .rev()
+        .collect::<Vec<_>>()
+        .join("\n");
+    let lower = recent.to_lowercase();
+
+    let busy_markers = [
+        "thinking with",
+        "almost done thinking",
+        "running…",
+        "running...",
+        "inferring…",
+        "inferring...",
+        "what should claude do instead",
+        "interrupted ·",
+    ];
+
+    recent.contains('❯') && !busy_markers.iter().any(|marker| lower.contains(marker))
 }
 
 #[cfg(test)]
@@ -317,6 +357,37 @@ cli_provider = "claude-code"
         assert!(prompt.contains("roadmap_updated"));
         assert!(prompt.contains("aegis taskflow next"));
         assert!(!prompt.starts_with("aegis message inbox"));
+    }
+
+    #[test]
+    fn pane_ready_for_nudge_rejects_busy_claude_tui() {
+        let capture = r#"
+⏺ Bash(aegis message inbox 62a059c1-5f35-4a17-877d-5621e7a55b0d)
+  ⎿  Agent:     bastion
+
+✢ Discombobulating… (10s · ↑ 403 tokens · thinking with medium effort)
+
+────────────────────────────────────────────────────────────────────────────────
+❯
+────────────────────────────────────────────────────────────────────────────────
+  ⏵⏵ bypass permissions on (shift+tab to cycle) · esc to interrupt
+"#;
+
+        assert!(!pane_looks_ready_for_nudge(capture));
+    }
+
+    #[test]
+    fn pane_ready_for_nudge_accepts_idle_claude_tui() {
+        let capture = r#"
+⏺ Done checking status.
+
+────────────────────────────────────────────────────────────────────────────────
+❯
+────────────────────────────────────────────────────────────────────────────────
+  ⏵⏵ bypass permissions on (shift+tab to cycle) · esc to interrupt
+"#;
+
+        assert!(pane_looks_ready_for_nudge(capture));
     }
 
     #[test]

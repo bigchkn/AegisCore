@@ -32,7 +32,8 @@ id = "B5"
 uid = "b0c6ee5d-0c5a-4487-a218-09e82e975407"
 task = "New milestone, and new bug functions in taskflow web-ui pane do not function with json error from backend"
 task_type = "bug"
-status = "pending"
+status = "done"
+notes = "Added taskflow.create_milestone to HTTP dispatch handler and #[serde(default)] to TaskDraft.id; both omissions caused 200 OK plain-text responses that the frontend tried to JSON.parse, failing with a parse error"
 
 [[tasks]]
 id = "B6"
@@ -47,11 +48,20 @@ id = "B7"
 uid = "6190853b-6e31-4612-b8b3-bc0d1cbe8883"
 task = "Active and non-active tasks have a highlight on left hand side. The icon highlight works correctly."
 task_type = "feature"
-status = "pending"
+status = "done"
+notes = "Added green left-side border indicator for active tasks via data-status attribute; colored task icons per status; non-active tasks have no left-side highlight"
 
 [[tasks]]
 id = "B8"
 uid = "97d76e5a-c8ed-41cb-9937-6b79819ab262"
 task = "When reopening pane on web-ui, text is scrambled. Over time it will correct. Identify with tests first then fix."
+task_type = "feature"
+status = "done"
+notes = "Defer xterm fitAddon.fit() to requestAnimationFrame so the container has real dimensions on pane open/reopen; add Terminal.test.tsx with two tests pinning the contract"
+
+[[tasks]]
+id = "B9"
+uid = "c830f64e-368b-4723-98d3-eccd1b21b0cf"
+task = "UI has issue where slight scroll provided on pane page when window is large enough to fit."
 task_type = "feature"
 status = "pending"

@@ -9,10 +9,11 @@ use aegis_core::{AegisError, Result};
 const CHUNK_SIZE: u64 = 4096;
 
 pub fn read_all_lines(path: &Path) -> Result<Vec<String>> {
-    let content = std::fs::read_to_string(path).map_err(|source| AegisError::StorageIo {
+    let bytes = std::fs::read(path).map_err(|source| AegisError::StorageIo {
         path: path.to_owned(),
         source,
     })?;
+    let content = String::from_utf8_lossy(&bytes);
     Ok(content.lines().map(str::to_owned).collect())
 }
 
