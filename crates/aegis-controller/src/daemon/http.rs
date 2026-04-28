@@ -239,6 +239,21 @@ async fn dispatch_command(
             commands.kill(agent_id).await.map_err(|e| e.to_string())?;
             Ok(Json(serde_json::json!({ "status": "ok" })))
         }
+        "taskflow.create_milestone" => {
+            let id = params
+                .get("id")
+                .and_then(|v| v.as_str())
+                .ok_or("Missing id")?;
+            let name = params
+                .get("name")
+                .and_then(|v| v.as_str())
+                .ok_or("Missing name")?;
+            let lld = params.get("lld").and_then(|v| v.as_str());
+            commands
+                .taskflow_create_milestone(id, name, lld)
+                .map_err(|e| e.to_string())?;
+            Ok(Json(serde_json::json!({ "message": "Milestone created" })))
+        }
         "taskflow.create_task" => {
             let milestone_id = params
                 .get("milestone_id")

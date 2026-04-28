@@ -13,6 +13,7 @@ vi.mock('../api/rest', () => ({
     taskflowMilestone: vi.fn(),
     taskflowCreateTask: vi.fn(),
     taskflowUpdateTask: vi.fn(),
+    taskflowCreateMilestone: vi.fn(),
   },
 }));
 
@@ -186,6 +187,71 @@ describe('TaskflowView Refactored Filters', () => {
 
     await waitFor(() =>
       expect(screen.getByText('No active bastion was available to notify.')).toBeDefined(),
+    );
+  });
+
+  it('creates a new milestone', async () => {
+    mockTaskflowData();
+    (api.taskflowCreateMilestone as any).mockResolvedValue({ message: 'Milestone created' });
+
+    renderWithStore();
+
+    await waitFor(() => expect(screen.getByText('Milestone 1')).toBeDefined());
+    fireEvent.click(screen.getByText('New Milestone'));
+
+    const dialog = screen.getByRole('dialog');
+    fireEvent.change(within(dialog).getByLabelText('Milestone ID'), { target: { value: 'M35' } });
+    fireEvent.change(within(dialog).getByLabelText('Name'), { target: { value: 'My New Milestone' } });
+    fireEvent.click(within(dialog).getByText('Create'));
+
+    await waitFor(() =>
+      expect(api.taskflowCreateMilestone).toHaveBeenCalledWith(
+        'proj-1',
+        'M35',
+        'My New Milestone',
+        undefined,
+      ),
+    );
+  });
+
+  it('creates a new bug with no task id', async () => {
+    mockTaskflowData();
+    (api.taskflowCreateTask as any).mockResolvedValue({
+      task: {
+        id: 'B2',
+        uid: '55555555-5555-5555-5555-555555555555',
+        task: 'Regression in login flow',
+        status: 'pending',
+        task_type: 'bug',
+        crate_name: null,
+        notes: null,
+        registry_task_id: null,
+      },
+      notified: 0,
+      warning: null,
+    });
+
+    renderWithStore();
+
+    await waitFor(() => expect(screen.getByText('Milestone 1')).toBeDefined());
+    fireEvent.click(screen.getByText('New Bug'));
+
+    const dialog = screen.getByRole('dialog');
+    fireEvent.change(within(dialog).getByLabelText(/^Task$/), {
+      target: { value: 'Regression in login flow' },
+    });
+    fireEvent.click(within(dialog).getByText('Save'));
+
+    await waitFor(() =>
+      expect(api.taskflowCreateTask).toHaveBeenCalledWith(
+        'proj-1',
+        'backlog',
+        expect.objectContaining({
+          task: 'Regression in login flow',
+          task_type: 'bug',
+          target_milestone_id: 'backlog',
+        }),
+      ),
     );
   });
 });

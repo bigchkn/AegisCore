@@ -179,6 +179,7 @@ pub struct ProjectTask {
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct TaskDraft {
+    #[serde(default)]
     pub id: Option<String>,
     pub task: String,
     #[serde(default)]
