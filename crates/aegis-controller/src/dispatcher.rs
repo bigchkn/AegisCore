@@ -836,8 +836,8 @@ impl Dispatcher {
             let target = TmuxTarget::parse(&launch_agent.tmux_target())?;
 
             let sys_prompt_path =
-                std::env::temp_dir().join(format!("aegis_failover_{}.txt", agent_id));
-            std::fs::write(&sys_prompt_path, &recovery_prompt).map_err(|source| {
+                std::env::temp_dir().join(format!("aegis_sysprompt_{}.txt", agent_id));
+            std::fs::write(&sys_prompt_path, &system_prompt).map_err(|source| {
                 AegisError::StorageIo {
                     path: sys_prompt_path.clone(),
                     source,
@@ -846,8 +846,6 @@ impl Dispatcher {
 
             let mut launch_cmd_with_prompt = launch_command.clone();
             let mut env_vars = vec![("AEGIS_AGENT_ID".to_string(), launch_agent.agent_id.to_string())];
-
-            let trigger_text = "Continue.";
 
             if let Some(i_flag) = provider.interactive_flag() {
                 launch_cmd_with_prompt.push(i_flag.to_string());
@@ -864,7 +862,7 @@ impl Dispatcher {
             }
 
             let launch_shell =
-                launch_shell_command_with_env(&agent.worktree_path, &launch_cmd_with_prompt, &env_vars);
+                launch_shell_command_with_env(&launch_agent.worktree_path, &launch_cmd_with_prompt, &env_vars);
             let launch_script =
                 write_launch_script("failover", launch_agent.agent_id, &launch_shell)?;
             let launch_script_cmd = shell_command(&[
@@ -876,12 +874,13 @@ impl Dispatcher {
             let launch_script_input = format!("{launch_script_cmd}\n");
             tmux.send_raw_input(&target, launch_script_input.as_bytes())
                 .await?;
+            let launch_agent = self.activate_agent(launch_agent)?;
             if matches!(provider.interaction_model(), InteractionModel::InjectedTui) {
                 self.submit_interactive_prompt(
                     &launch_agent,
                     provider,
                     &target,
-                    trigger_text,
+                    &recovery_prompt,
                     provider.config().startup_delay_ms,
                 )
                 .await?;
@@ -1192,21 +1191,49 @@ impl FailoverExecutor for Dispatcher {
             .replace_tmux_session_for_relaunch(relaunched_agent)
             .await?;
 
+        let system_prompt = self.resolve_agent_system_prompt(&relaunched_agent)?;
+        let sys_prompt_path =
+            std::env::temp_dir().join(format!("aegis_sysprompt_{}.txt", relaunched_agent.agent_id));
+        std::fs::write(&sys_prompt_path, &system_prompt).map_err(|source| {
+            AegisError::StorageIo {
+                path: sys_prompt_path.clone(),
+                source,
+            }
+        })?;
+
         let mut launch_command = Vec::new();
         if !DISABLE_AGENT_SANDBOX {
             if let Some(sandbox) = &self.sandbox {
                 launch_command.extend(sandbox.exec_prefix(&relaunched_agent.sandbox_profile));
             }
         }
-        launch_command.extend(resolved_command_parts(
+
+        let mut provider_parts = resolved_command_parts(
             &provider_command,
             &provider.config().binary,
-        ));
+        );
+        let mut env_vars = vec![("AEGIS_AGENT_ID".to_string(), relaunched_agent.agent_id.to_string())];
+
+        if let Some(i_flag) = provider.interactive_flag() {
+            provider_parts.push(i_flag.to_string());
+        }
+
+        match provider.system_prompt_mechanism() {
+            aegis_core::SystemPromptMechanism::Flag { arg } => {
+                provider_parts.push(arg);
+                provider_parts.push(sys_prompt_path.to_string_lossy().into_owned());
+            }
+            aegis_core::SystemPromptMechanism::Env { var } => {
+                env_vars.push((var, sys_prompt_path.to_string_lossy().into_owned()));
+            }
+        }
+
+        launch_command.extend(provider_parts);
 
         if let Some(tmux) = &self.tmux {
             let target = TmuxTarget::parse(&relaunched_agent.tmux_target())?;
             let launch_shell =
-                launch_shell_command(&relaunched_agent.worktree_path, &launch_command);
+                launch_shell_command_with_env(&relaunched_agent.worktree_path, &launch_command, &env_vars);
             let launch_script =
                 write_launch_script("failover", relaunched_agent.agent_id, &launch_shell)?;
             let launch_script_cmd = shell_command(&[
@@ -1236,7 +1263,6 @@ impl FailoverExecutor for Dispatcher {
             }
             None => None,
         };
-        let system_prompt = self.resolve_agent_system_prompt(&updated)?;
 
         let context = FailoverContext {
             agent_id: updated.agent_id,
