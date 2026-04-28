@@ -220,6 +220,7 @@ impl Dispatcher {
             sandbox_policy: spec.sandbox,
             startup_delay_ms: provider.config().startup_delay_ms,
             is_resume: spec.resume_session.is_some(),
+            override_trigger: None,
         })
     }
 
@@ -510,7 +511,9 @@ impl Dispatcher {
             let mut env_vars = vec![("AEGIS_AGENT_ID".to_string(), agent.agent_id.to_string())];
             let provider = self.providers.get(&agent.cli_provider)?;
 
-            let trigger_text = if plan.is_resume {
+            let trigger_text = if let Some(ot) = &plan.override_trigger {
+                ot.as_str()
+            } else if plan.is_resume {
                 "Continue where you left off."
             } else {
                 "Begin."
@@ -584,7 +587,9 @@ impl Dispatcher {
             let mut env_vars = vec![("AEGIS_AGENT_ID".to_string(), agent.agent_id.to_string())];
             let provider = self.providers.get(&agent.cli_provider)?;
 
-            let trigger_text = if plan.is_resume {
+            let trigger_text = if let Some(ot) = &plan.override_trigger {
+                ot.as_str()
+            } else if plan.is_resume {
                 "Continue where you left off."
             } else {
                 "Begin."
@@ -776,10 +781,10 @@ impl Dispatcher {
         Ok(())
     }
 
-    pub async fn failover_agent(&self, agent_id: Uuid) -> Result<(Agent, PathBuf)> {
+    pub async fn failover_agent(&self, agent_id: Uuid) -> Result<Agent> {
         let agent = self.require_agent(agent_id)?;
         self.ensure_transition(&agent.status, &AgentStatus::Cooling)?;
-        let next_provider = self.next_provider_name(&agent)?;
+        let next_provider_name = self.next_provider_name(&agent)?;
         let old_status = agent.status.clone();
 
         AgentRegistry::update_status(self.registry.as_ref(), agent_id, AgentStatus::Cooling)?;
@@ -805,117 +810,43 @@ impl Dispatcher {
 
         let system_prompt = self.resolve_agent_system_prompt(&agent)?;
 
-        let _ = AgentRegistry::update_provider(self.registry.as_ref(), agent_id, &next_provider);
-        let provider = self.providers.get(&next_provider)?;
-        let provider_command = provider.spawn_command(&agent.worktree_path, None, None);
-        let mut launch_command = Vec::new();
-        if !DISABLE_AGENT_SANDBOX {
-            if let Some(sandbox) = &self.sandbox {
-                launch_command.extend(sandbox.exec_prefix(&agent.sandbox_profile));
-            }
-        }
-        launch_command.extend(resolved_command_parts(
-            &provider_command,
-            &provider.config().binary,
-        ));
-
         let context = FailoverContext {
             agent_id,
             task_id: agent.task_id,
             previous_provider: agent.cli_provider.clone(),
-            system_prompt: system_prompt.clone(),
+            system_prompt,
             terminal_context,
-            task_description,
+            task_description: task_description.clone(),
             worktree_path: agent.worktree_path.clone(),
             role: agent.role.clone(),
         };
-        let recovery_prompt = provider.failover_handoff_prompt(&context);
+        
+        let next_provider = self.providers.get(&next_provider_name)?;
+        let recovery_prompt = next_provider.failover_handoff_prompt(&context);
 
-        let mut launch_script = PathBuf::new();
-
-        if let Some(tmux) = &self.tmux {
-            let mut launch_agent = agent.clone();
-            launch_agent.cli_provider = next_provider.clone();
-            let launch_agent = self.replace_tmux_session_for_relaunch(launch_agent).await
-                .unwrap_or_else(|e| {
-                    tracing::warn!(%e, "failed to replace tmux session during failover (continuing)");
-                    agent.clone()
-                });
+        // Prepare unified spawn plan
+        let mut spec = spec_from_agent(&agent);
+        spec.cli_provider = next_provider_name.clone();
+        spec.task_description = task_description;
+        
+        // We reuse the existing tmux session name but will replace it
+        let (session, window, pane) = self
+            .prepare_tmux_window(agent.agent_id, agent.kind.clone(), &agent.role)
+            .await?;
             
-            let target_result = TmuxTarget::parse(&launch_agent.tmux_target());
+        let mut plan = self.build_spawn_plan(spec, agent.agent_id, session, window, pane)?;
+        plan.override_trigger = Some(recovery_prompt);
 
-            let sys_prompt_path =
-                std::env::temp_dir().join(format!("aegis_sysprompt_{}.txt", agent_id));
-            std::fs::write(&sys_prompt_path, &system_prompt).map_err(|source| {
-                AegisError::StorageIo {
-                    path: sys_prompt_path.clone(),
-                    source,
-                }
-            })?;
-
-            let mut launch_cmd_with_prompt = launch_command.clone();
-            let mut env_vars = vec![("AEGIS_AGENT_ID".to_string(), launch_agent.agent_id.to_string())];
-
-            if let Some(i_flag) = provider.interactive_flag() {
-                launch_cmd_with_prompt.push(i_flag.to_string());
-            }
-
-            match provider.system_prompt_mechanism() {
-                aegis_core::SystemPromptMechanism::Flag { arg } => {
-                    launch_cmd_with_prompt.push(arg);
-                    launch_cmd_with_prompt.push(sys_prompt_path.to_string_lossy().into_owned());
-                }
-                aegis_core::SystemPromptMechanism::Env { var } => {
-                    env_vars.push((var, sys_prompt_path.to_string_lossy().into_owned()));
-                }
-            }
-
-            let launch_shell =
-                launch_shell_command_with_env(&launch_agent.worktree_path, &launch_cmd_with_prompt, &env_vars);
-            launch_script =
-                write_launch_script("failover", launch_agent.agent_id, &launch_shell)?;
-            let launch_script_cmd = shell_command(&[
-                "/bin/sh".to_string(),
-                launch_script.to_string_lossy().into_owned(),
-            ]);
-            append_tmux_send(&launch_agent.log_path, &launch_script_cmd)?;
-            
-            if let Ok(target) = target_result {
-                // Try to send keys, but don't fail hard
-                let _ = tmux.send_key(&target, "C-u").await;
-                sleep(Duration::from_millis(500)).await;
-                let _ = tmux.send_key(&target, "C-u").await;
-                
-                let launch_script_input = format!("{launch_script_cmd}\n");
-                let _ = tmux.send_raw_input(&target, launch_script_input.as_bytes()).await;
-                
-                let launch_agent = self.activate_agent(launch_agent)?;
-                if matches!(provider.interaction_model(), InteractionModel::InjectedTui) {
-                    let _ = self.submit_interactive_prompt(
-                        &launch_agent,
-                        provider,
-                        &target,
-                        &recovery_prompt,
-                        provider.config().startup_delay_ms,
-                    )
-                    .await;
-                }
-            } else {
-                tracing::warn!(target = %launch_agent.tmux_target(), "invalid tmux target during failover; script written but not sent");
-                let _ = self.activate_agent(launch_agent)?;
-            }
-        }
-
-        let mut updated = self.require_agent(agent_id)?;
-        updated.status = AgentStatus::Active;
-        updated.updated_at = Utc::now();
-        AgentRegistry::update(self.registry.as_ref(), &updated)?;
-        self.events.publish(AegisEvent::AgentStatusChanged {
-            agent_id,
-            old_status: AgentStatus::Cooling,
-            new_status: AgentStatus::Active,
+        // Use unified launch logic
+        let updated = self.launch_or_insert_plan(plan).await?;
+        
+        self.events.publish(AegisEvent::FailoverInitiated {
+            agent_id: updated.agent_id,
+            from_provider: agent.cli_provider,
+            to_provider: next_provider_name,
         });
-        Ok((updated, launch_script))
+
+        Ok(updated)
     }
 
     fn next_provider_name(&self, agent: &Agent) -> Result<String> {
@@ -1397,6 +1328,26 @@ impl FailoverExecutor for Dispatcher {
 #[derive(Debug, Deserialize)]
 struct CompletionReceipt {
     task_id: Uuid,
+}
+
+fn spec_from_agent(agent: &Agent) -> AgentSpec {
+    AgentSpec {
+        name: agent.name.clone(),
+        kind: agent.kind.clone(),
+        role: agent.role.clone(),
+        parent_id: agent.parent_id,
+        task_id: agent.task_id,
+        task_description: None, // Will be resolved if needed
+        cli_provider: agent.cli_provider.clone(),
+        fallback_cascade: agent.fallback_cascade.clone(),
+        system_prompt: None,
+        inline_prompt: None,
+        worktree_override: Some(agent.worktree_path.clone()),
+        sandbox: SandboxPolicy::default(), // Will be resolved by build_spawn_plan from config
+        auto_cleanup: false,
+        model_override: None,
+        resume_session: None,
+    }
 }
 
 fn spec_from_agent_entry(

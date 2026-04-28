@@ -43,6 +43,7 @@ pub struct SpawnPlan {
     pub sandbox_policy: SandboxPolicy,
     pub startup_delay_ms: u64,
     pub is_resume: bool,
+    pub override_trigger: Option<String>,
 }
 
 #[derive(Debug, Clone)]
