@@ -20,6 +20,8 @@ pub struct RecoveryResult {
     pub snapshot_used: Option<PathBuf>,
     pub agents_recovered: usize,
     pub agents_marked_failed: usize,
+    pub tasks_marked_failed: usize,
+    pub tasks_requeued: usize,
 }
 
 impl StateManager {
@@ -89,6 +91,8 @@ impl StateManager {
             snapshot_used: None,
             agents_recovered: 0,
             agents_marked_failed: 0,
+            tasks_marked_failed: 0,
+            tasks_requeued: 0,
         };
 
         let mut needs_restore = false;
@@ -147,6 +151,7 @@ impl StateManager {
                 source: e,
             })?;
 
+        let mut failed_splinter_ids = HashSet::new();
         for agent in &mut store.agents {
             match agent.status {
                 AgentStatus::Starting
@@ -160,6 +165,7 @@ impl StateManager {
                     } else {
                         agent.status = AgentStatus::Failed;
                         agent.updated_at = Utc::now();
+                        failed_splinter_ids.insert(agent.agent_id);
                         result.agents_marked_failed += 1;
                     }
                 }
@@ -183,8 +189,10 @@ impl StateManager {
             source: e,
         })?;
 
-        // 3. Reset orphaned Active tasks: any task still Active whose assigned agent
-        //    is no longer live gets returned to Queued so the drain loop can retry it.
+        // 3. Clean up Active task assignments after daemon restart. Splinter-backed
+        //    tasks are terminal when their Splinter died with the daemon; returning
+        //    them to Queued would cause the scheduler to respawn replacement Splinters.
+        //    Only genuinely unassigned/orphaned tasks are requeued.
         let tasks_path = self.storage.tasks_path();
         if tasks_path.exists() {
             let live_agent_ids: HashSet<_> = store
@@ -204,20 +212,29 @@ impl StateManager {
                 source: e,
             })?;
             if let Ok(mut task_store) = parse_task_store(&content) {
-                let mut tasks_reset = 0usize;
+                let now = Utc::now();
                 for task in &mut task_store.tasks {
                     if task.status == TaskStatus::Active {
-                        let orphaned = task
-                            .assigned_agent_id
-                            .map_or(true, |id| !live_agent_ids.contains(&id));
-                        if orphaned {
-                            task.status = TaskStatus::Queued;
-                            task.assigned_agent_id = None;
-                            tasks_reset += 1;
+                        match task.assigned_agent_id {
+                            Some(agent_id) if failed_splinter_ids.contains(&agent_id) => {
+                                task.status = TaskStatus::Failed;
+                                task.completed_at = Some(now);
+                                result.tasks_marked_failed += 1;
+                            }
+                            Some(agent_id) if !live_agent_ids.contains(&agent_id) => {
+                                task.status = TaskStatus::Queued;
+                                task.assigned_agent_id = None;
+                                result.tasks_requeued += 1;
+                            }
+                            None => {
+                                task.status = TaskStatus::Queued;
+                                result.tasks_requeued += 1;
+                            }
+                            _ => {}
                         }
                     }
                 }
-                if tasks_reset > 0 {
+                if result.tasks_marked_failed > 0 || result.tasks_requeued > 0 {
                     let json = serde_json::to_string_pretty(&task_store).map_err(|e| {
                         AegisError::RegistryCorrupted {
                             path: tasks_path.clone(),
@@ -228,7 +245,11 @@ impl StateManager {
                         path: tasks_path.clone(),
                         source: e,
                     })?;
-                    info!(count = tasks_reset, "Reset orphaned Active tasks to Queued");
+                    info!(
+                        failed = result.tasks_marked_failed,
+                        requeued = result.tasks_requeued,
+                        "Cleaned up Active tasks after daemon restart"
+                    );
                 }
             } else {
                 warn!("tasks.json could not be parsed during recovery — skipping task reset");
@@ -253,6 +274,7 @@ mod tests {
     use crate::registry::agents::AgentStore;
     use aegis_core::agent::{Agent, AgentKind, AgentStatus};
     use aegis_core::storage::StorageBackend;
+    use aegis_core::task::{Task, TaskCreator};
     use chrono::Utc;
     use std::fs;
     use std::path::{Path, PathBuf};
@@ -300,6 +322,19 @@ mod tests {
         }
     }
 
+    fn active_task(task_id: Uuid, assigned_agent_id: Option<Uuid>) -> Task {
+        Task {
+            task_id,
+            description: "test task".to_string(),
+            status: TaskStatus::Active,
+            assigned_agent_id,
+            created_by: TaskCreator::System,
+            created_at: Utc::now(),
+            completed_at: None,
+            receipt_path: None,
+        }
+    }
+
     #[test]
     fn parse_task_store_accepts_empty_content() {
         let store = parse_task_store("").unwrap();
@@ -334,5 +369,99 @@ mod tests {
         assert!(!result.registry_restored);
         assert_eq!(result.agents_marked_failed, 1);
         assert_eq!(result.agents_recovered, 0);
+    }
+
+    #[test]
+    fn recover_marks_tasks_for_failed_splinters_failed() {
+        let dir = tempdir().unwrap();
+        let storage = TestStorage::new(dir.path().to_path_buf());
+        fs::create_dir_all(storage.state_dir()).unwrap();
+        fs::create_dir_all(storage.snapshots_dir()).unwrap();
+
+        let agent_id = Uuid::new_v4();
+        let task_id = Uuid::new_v4();
+        let registry = AgentStore {
+            version: 1,
+            agents: vec![agent(agent_id)],
+            archived: vec![],
+        };
+        let tasks = TaskStore {
+            version: 1,
+            tasks: vec![active_task(task_id, Some(agent_id))],
+        };
+        fs::write(
+            storage.registry_path(),
+            serde_json::to_string_pretty(&registry).unwrap(),
+        )
+        .unwrap();
+        fs::write(
+            storage.tasks_path(),
+            serde_json::to_string_pretty(&tasks).unwrap(),
+        )
+        .unwrap();
+
+        let manager = StateManager::new(Arc::new(storage.clone()));
+        let result = manager.recover().unwrap();
+
+        assert_eq!(result.agents_marked_failed, 1);
+        assert_eq!(result.tasks_marked_failed, 1);
+        assert_eq!(result.tasks_requeued, 0);
+
+        let recovered_tasks: TaskStore =
+            serde_json::from_str(&fs::read_to_string(storage.tasks_path()).unwrap()).unwrap();
+        let task = recovered_tasks
+            .tasks
+            .iter()
+            .find(|task| task.task_id == task_id)
+            .unwrap();
+        assert_eq!(task.status, TaskStatus::Failed);
+        assert_eq!(task.assigned_agent_id, Some(agent_id));
+        assert!(task.completed_at.is_some());
+    }
+
+    #[test]
+    fn recover_requeues_unassigned_active_tasks() {
+        let dir = tempdir().unwrap();
+        let storage = TestStorage::new(dir.path().to_path_buf());
+        fs::create_dir_all(storage.state_dir()).unwrap();
+        fs::create_dir_all(storage.snapshots_dir()).unwrap();
+
+        let registry = AgentStore {
+            version: 1,
+            agents: vec![],
+            archived: vec![],
+        };
+        let task_id = Uuid::new_v4();
+        let tasks = TaskStore {
+            version: 1,
+            tasks: vec![active_task(task_id, None)],
+        };
+        fs::write(
+            storage.registry_path(),
+            serde_json::to_string_pretty(&registry).unwrap(),
+        )
+        .unwrap();
+        fs::write(
+            storage.tasks_path(),
+            serde_json::to_string_pretty(&tasks).unwrap(),
+        )
+        .unwrap();
+
+        let manager = StateManager::new(Arc::new(storage.clone()));
+        let result = manager.recover().unwrap();
+
+        assert_eq!(result.tasks_marked_failed, 0);
+        assert_eq!(result.tasks_requeued, 1);
+
+        let recovered_tasks: TaskStore =
+            serde_json::from_str(&fs::read_to_string(storage.tasks_path()).unwrap()).unwrap();
+        let task = recovered_tasks
+            .tasks
+            .iter()
+            .find(|task| task.task_id == task_id)
+            .unwrap();
+        assert_eq!(task.status, TaskStatus::Queued);
+        assert_eq!(task.assigned_agent_id, None);
+        assert!(task.completed_at.is_none());
     }
 }
