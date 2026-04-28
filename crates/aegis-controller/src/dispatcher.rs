@@ -821,7 +821,7 @@ impl Dispatcher {
             agent_id,
             task_id: agent.task_id,
             previous_provider: agent.cli_provider.clone(),
-            system_prompt,
+            system_prompt: system_prompt.clone(),
             terminal_context,
             task_description,
             worktree_path: agent.worktree_path.clone(),
@@ -1268,7 +1268,7 @@ impl FailoverExecutor for Dispatcher {
             agent_id: updated.agent_id,
             task_id: updated.task_id,
             previous_provider: agent.cli_provider.clone(),
-            system_prompt,
+            system_prompt: system_prompt.clone(),
             terminal_context,
             task_description,
             worktree_path: updated.worktree_path.clone(),
@@ -1423,10 +1423,6 @@ fn shell_command(parts: &[String]) -> String {
         .map(|part| shell_quote(part))
         .collect::<Vec<_>>()
         .join(" ")
-}
-
-fn launch_shell_command(worktree_path: &std::path::Path, parts: &[String]) -> String {
-    launch_shell_command_with_env(worktree_path, parts, &[])
 }
 
 fn launch_shell_command_with_env(
