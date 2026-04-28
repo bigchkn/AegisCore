@@ -63,6 +63,7 @@ function renderWithStore() {
     selectedAgentId: null,
     error: null,
     connectionState: 'connected',
+    sidebarOpen: true,
   };
 
   const store = configureStore({

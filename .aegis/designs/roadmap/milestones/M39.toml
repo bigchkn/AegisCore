@@ -1,0 +1,33 @@
+id = 39
+name = "MUI Integration & UX Improvements"
+status = "done"
+lld = ".aegis/designs/lld/mui-integration.md"
+depends_on = []
+
+[[tasks]]
+id = "39.1"
+uid = "084ad9f1-f483-4b5b-811e-92e72cd1b506"
+task = "Setup MUI infrastructure and theme"
+task_type = "feature"
+status = "done"
+
+[[tasks]]
+id = "39.2"
+uid = "fcf91602-daeb-4f17-9f26-2840b32b795b"
+task = "Refactor Sidebar to MUI Drawer"
+task_type = "feature"
+status = "done"
+
+[[tasks]]
+id = "39.3"
+uid = "be6a2c3b-e1d5-4cbb-8205-8869ad26dc7d"
+task = "Implement AppBar and Sidebar toggle"
+task_type = "feature"
+status = "done"
+
+[[tasks]]
+id = "39.4"
+uid = "10b6d99d-80fc-45c8-bf42-44839d6caa11"
+task = "Update views with MUI components"
+task_type = "feature"
+status = "done"

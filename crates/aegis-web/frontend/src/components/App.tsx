@@ -1,9 +1,20 @@
 import { useEffect } from 'react';
 import { Routes, Route, Navigate, useLocation, useParams } from 'react-router-dom';
 import { Toaster } from 'sonner';
+import { 
+  Box, 
+  AppBar, 
+  Toolbar, 
+  Typography, 
+  IconButton, 
+  Chip,
+  Container,
+  Paper
+} from '@mui/material';
+import { Menu as MenuIcon } from '@mui/icons-material';
 
 import { fetchProjectData, fetchProjects } from '../api/thunks';
-import { setActiveProject } from '../store/uiSlice';
+import { setActiveProject, toggleSidebar } from '../store/uiSlice';
 import { useAppDispatch, useAppSelector } from '../store/hooks';
 import { agentRoute } from '../lib/agentRoutes';
 import { AgentsView } from '../views/AgentsView';
@@ -20,14 +31,13 @@ export function App() {
   const location = useLocation();
   const activeProjectId = useAppSelector((state) => state.ui.activeProjectId);
   const connectionState = useAppSelector((state) => state.ui.connectionState);
+  const sidebarOpen = useAppSelector((state) => state.ui.sidebarOpen);
   const error = useAppSelector((state) => state.ui.error);
   const projects = useAppSelector((state) => state.projects.items);
   const activeProject = projects.find((project) => project.id === activeProjectId);
 
   // Derive active view from path for the title
   const pathParts = location.pathname.split('/').filter(Boolean);
-  // /projects/:id/:view -> parts are ["projects", ":id", ":view"]
-  // /:view -> parts are [":view"]
   const activeViewPath = pathParts.includes('projects') ? pathParts[2] : pathParts[0] || 'agents';
 
   useEffect(() => {
@@ -47,36 +57,95 @@ export function App() {
   }, [activeProjectId, dispatch, projects, location.pathname]);
 
   return (
-    <main className="app-shell">
+    <Box sx={{ display: 'flex', minHeight: '100vh', bgcolor: 'background.default' }}>
+      <Toaster position="bottom-right" richColors />
       <Sidebar />
-      <section className="workspace">
-        <Toaster position="bottom-right" richColors />
-        <header className="topbar">
-          <div>
-            <h1>{titleForView(activeViewPath)}</h1>
-            <p>{activeProject ? activeProject.root_path : 'No active project'}</p>
-          </div>
-          <span className="connection-pill">{connectionState}</span>
-        </header>
-        {error ? <div className="banner">{error}</div> : null}
-        
-        <Routes>
-          <Route path="/" element={<ProjectRedirect projects={projects} />} />
-          <Route path="/projects/:projectId/*" element={<ProjectRoutes />} />
-          
-          {/* Legacy/Direct routes */}
-          <Route path="/agents" element={<AgentsView />} />
-          <Route path="/pane/:agentId?" element={<PaneView />} />
-          <Route path="/logs/:agentId?" element={<LogView />} />
-          <Route path="/tasks" element={<TasksView />} />
-          <Route path="/channels" element={<ChannelsView />} />
-          <Route path="/taskflow" element={<TaskflowView />} />
-          <Route path="/clarifications" element={<ClarificationsView />} />
-          
-          <Route path="*" element={<Navigate to="/agents" replace />} />
-        </Routes>
-      </section>
-    </main>
+      
+      <Box
+        component="main"
+        sx={{
+          flexGrow: 1,
+          display: 'flex',
+          flexDirection: 'column',
+          width: { sm: `calc(100% - ${sidebarOpen ? 240 : 64}px)` },
+          transition: (theme) => theme.transitions.create(['width', 'margin'], {
+            easing: theme.transitions.easing.sharp,
+            duration: theme.transitions.duration.leavingScreen,
+          }),
+        }}
+      >
+        <AppBar 
+          position="sticky" 
+          elevation={0}
+          sx={{ 
+            backgroundColor: 'background.paper',
+            borderBottom: '1px solid',
+            borderColor: 'divider',
+            color: 'text.primary'
+          }}
+        >
+          <Toolbar>
+            <IconButton
+              color="inherit"
+              aria-label="open drawer"
+              onClick={() => dispatch(toggleSidebar())}
+              edge="start"
+              sx={{ mr: 2, display: sidebarOpen ? 'none' : 'flex' }}
+            >
+              <MenuIcon />
+            </IconButton>
+            
+            <Box sx={{ flexGrow: 1 }}>
+              <Typography variant="h6" noWrap component="div" sx={{ fontWeight: 600 }}>
+                {titleForView(activeViewPath)}
+              </Typography>
+              <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block', mt: -0.5 }}>
+                {activeProject ? activeProject.root_path : 'No active project'}
+              </Typography>
+            </Box>
+
+            <Chip 
+              label={connectionState} 
+              size="small" 
+              color={connectionState === 'connected' ? 'success' : 'warning'}
+              variant="outlined"
+              sx={{ fontWeight: 'bold', textTransform: 'uppercase', fontSize: '0.65rem' }}
+            />
+          </Toolbar>
+        </AppBar>
+
+        {error && (
+          <Paper 
+            square 
+            sx={{ 
+              p: 1.5, 
+              bgcolor: 'error.main', 
+              color: 'error.contrastText',
+              textAlign: 'center'
+            }}
+          >
+            <Typography variant="body2" sx={{ fontWeight: 500 }}>{error}</Typography>
+          </Paper>
+        )}
+
+        <Container maxWidth={false} sx={{ mt: 3, mb: 3, flexGrow: 1, display: 'flex', flexDirection: 'column' }}>
+          <Routes>
+            <Route path="/" element={<ProjectRedirect projects={projects} />} />
+            <Route path="/projects/:projectId/*" element={<ProjectRoutes />} />
+            
+            <Route path="/agents" element={<AgentsView />} />
+            <Route path="/pane/:agentId?" element={<PaneView />} />
+            <Route path="/logs/:agentId?" element={<LogView />} />
+            <Route path="/tasks" element={<TasksView />} />
+            <Route path="/channels" element={<ChannelsView />} />
+            <Route path="/taskflow" element={<TaskflowView />} />
+            <Route path="/clarifications" element={<ClarificationsView />} />
+            
+            <Route path="*" element={<Navigate to="/agents" replace />} />
+          </Routes>
+        </Container>
+      </Box>
+    </Box>
   );
 }
 
@@ -101,7 +170,6 @@ function ProjectRoutes() {
     }
   }, [projectId, activeProjectId, dispatch]);
 
-  // Handle auto-attach redirect on initial project load (only if landing on the root project path)
   if (
     activeProject?.last_attached_agent_id &&
     (location.pathname === `/projects/${projectId}` || location.pathname === `/projects/${projectId}/`)

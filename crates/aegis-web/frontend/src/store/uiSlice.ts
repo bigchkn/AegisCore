@@ -8,6 +8,7 @@ export type UIState = {
   selectedAgentId: string | null;
   error: string | null;
   connectionState: ConnectionState;
+  sidebarOpen: boolean;
 };
 
 const initialState: UIState = {
@@ -16,6 +17,7 @@ const initialState: UIState = {
   selectedAgentId: null,
   error: null,
   connectionState: 'disconnected',
+  sidebarOpen: true,
 };
 
 const uiSlice = createSlice({
@@ -39,6 +41,12 @@ const uiSlice = createSlice({
     setConnectionState(state, action: PayloadAction<ConnectionState>) {
       state.connectionState = action.payload;
     },
+    setSidebarOpen(state, action: PayloadAction<boolean>) {
+      state.sidebarOpen = action.payload;
+    },
+    toggleSidebar(state) {
+      state.sidebarOpen = !state.sidebarOpen;
+    },
   },
 });
 
@@ -48,5 +56,7 @@ export const {
   setSelectedAgent,
   setError,
   setConnectionState,
+  setSidebarOpen,
+  toggleSidebar,
 } = uiSlice.actions;
 export const uiReducer = uiSlice.reducer;
