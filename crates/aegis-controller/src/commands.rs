@@ -110,8 +110,8 @@ impl ControllerCommands {
     }
 
     pub async fn failover(&self, agent_id: Uuid) -> Result<Agent> {
-
-        self.dispatcher.failover_agent(agent_id).await
+        let (agent, _) = self.dispatcher.failover_agent(agent_id).await?;
+        Ok(agent)
     }
 
     pub fn resolve_agent_id(&self, raw: &str) -> Result<Uuid> {

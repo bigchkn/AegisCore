@@ -724,8 +724,9 @@ impl Dispatcher {
         let agent = self.require_agent(agent_id)?;
         self.ensure_transition(&agent.status, &AgentStatus::Paused)?;
         if let Some(tmux) = &self.tmux {
-            let target = TmuxTarget::parse(&agent.tmux_target())?;
-            tmux.interrupt(&target).await?;
+            if let Ok(target) = TmuxTarget::parse(&agent.tmux_target()) {
+                let _ = tmux.interrupt(&target).await;
+            }
         }
         AgentRegistry::update_status(self.registry.as_ref(), agent_id, AgentStatus::Paused)?;
         self.events.publish(AegisEvent::AgentStatusChanged {
@@ -775,7 +776,7 @@ impl Dispatcher {
         Ok(())
     }
 
-    pub async fn failover_agent(&self, agent_id: Uuid) -> Result<Agent> {
+    pub async fn failover_agent(&self, agent_id: Uuid) -> Result<(Agent, PathBuf)> {
         let agent = self.require_agent(agent_id)?;
         self.ensure_transition(&agent.status, &AgentStatus::Cooling)?;
         let next_provider = self.next_provider_name(&agent)?;
@@ -789,8 +790,9 @@ impl Dispatcher {
         });
 
         if let Some(tmux) = &self.tmux {
-            let target = TmuxTarget::parse(&agent.tmux_target())?;
-            tmux.interrupt(&target).await?;
+            if let Ok(target) = TmuxTarget::parse(&agent.tmux_target()) {
+                let _ = tmux.interrupt(&target).await;
+            }
         }
 
         let terminal_context = self.capture_failover_context(agent_id)?;
@@ -803,7 +805,7 @@ impl Dispatcher {
 
         let system_prompt = self.resolve_agent_system_prompt(&agent)?;
 
-        AgentRegistry::update_provider(self.registry.as_ref(), agent_id, &next_provider)?;
+        let _ = AgentRegistry::update_provider(self.registry.as_ref(), agent_id, &next_provider);
         let provider = self.providers.get(&next_provider)?;
         let provider_command = provider.spawn_command(&agent.worktree_path, None, None);
         let mut launch_command = Vec::new();
@@ -829,11 +831,18 @@ impl Dispatcher {
         };
         let recovery_prompt = provider.failover_handoff_prompt(&context);
 
+        let mut launch_script = PathBuf::new();
+
         if let Some(tmux) = &self.tmux {
             let mut launch_agent = agent.clone();
             launch_agent.cli_provider = next_provider.clone();
-            let launch_agent = self.replace_tmux_session_for_relaunch(launch_agent).await?;
-            let target = TmuxTarget::parse(&launch_agent.tmux_target())?;
+            let launch_agent = self.replace_tmux_session_for_relaunch(launch_agent).await
+                .unwrap_or_else(|e| {
+                    tracing::warn!(%e, "failed to replace tmux session during failover (continuing)");
+                    agent.clone()
+                });
+            
+            let target_result = TmuxTarget::parse(&launch_agent.tmux_target());
 
             let sys_prompt_path =
                 std::env::temp_dir().join(format!("aegis_sysprompt_{}.txt", agent_id));
@@ -863,7 +872,7 @@ impl Dispatcher {
 
             let launch_shell =
                 launch_shell_command_with_env(&launch_agent.worktree_path, &launch_cmd_with_prompt, &env_vars);
-            let launch_script =
+            launch_script =
                 write_launch_script("failover", launch_agent.agent_id, &launch_shell)?;
             let launch_script_cmd = shell_command(&[
                 "/bin/sh".to_string(),
@@ -871,23 +880,29 @@ impl Dispatcher {
             ]);
             append_tmux_send(&launch_agent.log_path, &launch_script_cmd)?;
             
-            // Ensure the shell is ready and the line is clear
-            sleep(Duration::from_millis(500)).await;
-            tmux.send_key(&target, "C-u").await?;
-            
-            let launch_script_input = format!("{launch_script_cmd}\n");
-            tmux.send_raw_input(&target, launch_script_input.as_bytes())
-                .await?;
-            let launch_agent = self.activate_agent(launch_agent)?;
-            if matches!(provider.interaction_model(), InteractionModel::InjectedTui) {
-                self.submit_interactive_prompt(
-                    &launch_agent,
-                    provider,
-                    &target,
-                    &recovery_prompt,
-                    provider.config().startup_delay_ms,
-                )
-                .await?;
+            if let Ok(target) = target_result {
+                // Try to send keys, but don't fail hard
+                let _ = tmux.send_key(&target, "C-u").await;
+                sleep(Duration::from_millis(500)).await;
+                let _ = tmux.send_key(&target, "C-u").await;
+                
+                let launch_script_input = format!("{launch_script_cmd}\n");
+                let _ = tmux.send_raw_input(&target, launch_script_input.as_bytes()).await;
+                
+                let launch_agent = self.activate_agent(launch_agent)?;
+                if matches!(provider.interaction_model(), InteractionModel::InjectedTui) {
+                    let _ = self.submit_interactive_prompt(
+                        &launch_agent,
+                        provider,
+                        &target,
+                        &recovery_prompt,
+                        provider.config().startup_delay_ms,
+                    )
+                    .await;
+                }
+            } else {
+                tracing::warn!(target = %launch_agent.tmux_target(), "invalid tmux target during failover; script written but not sent");
+                let _ = self.activate_agent(launch_agent)?;
             }
         }
 
@@ -900,7 +915,7 @@ impl Dispatcher {
             old_status: AgentStatus::Cooling,
             new_status: AgentStatus::Active,
         });
-        Ok(updated)
+        Ok((updated, launch_script))
     }
 
     fn next_provider_name(&self, agent: &Agent) -> Result<String> {
@@ -1109,32 +1124,36 @@ impl Dispatcher {
             return Ok(agent);
         };
 
-        if let Some(current) = AgentRegistry::get(self.registry.as_ref(), agent.agent_id)? {
+        if let Ok(Some(current)) = AgentRegistry::get(self.registry.as_ref(), agent.agent_id) {
             agent.status = current.status;
         }
 
-        if tmux.session_exists(&agent.tmux_session).await? {
-            tmux.kill_session(&agent.tmux_session).await?;
-        }
-        tmux.new_session(&agent.tmux_session).await?;
+        // Try to kill/new session, but ignore errors if session doesn't exist or tmux fails
+        let _ = tmux.kill_session(&agent.tmux_session).await;
+        let _ = tmux.new_session(&agent.tmux_session).await;
 
-        let window_target = TmuxTarget::parse(&format!("{}:", agent.tmux_session))?;
-        let pane = tmux
-            .list_panes(&window_target)
-            .await?
-            .into_iter()
-            .next()
-            .ok_or_else(|| AegisError::TmuxPaneNotFound {
-                target: agent.tmux_session.clone(),
-            })?;
-        let pane_target = TmuxTarget::parse(&pane)?;
-        tmux.harden_pane(&pane_target).await?;
+        let window_target_str = format!("{}:", agent.tmux_session);
+        if let Ok(window_target) = TmuxTarget::parse(&window_target_str) {
+            let panes = match tmux.list_panes(&window_target).await {
+                Ok(p) => p,
+                Err(e) => {
+                    tracing::warn!(%e, target = %window_target_str, "failed to list panes for relaunch");
+                    Vec::new()
+                }
+            };
+
+            if let Some(pane) = panes.into_iter().next() {
+                if let Ok(pane_target) = TmuxTarget::parse(&pane) {
+                    let _ = tmux.harden_pane(&pane_target).await;
+                }
+                agent.tmux_pane = pane;
+            }
+        }
 
         agent.tmux_window = 0;
-        agent.tmux_pane = pane;
         agent.updated_at = Utc::now();
-        AgentRegistry::update(self.registry.as_ref(), &agent)?;
-        self.attach_recorder(&agent)?;
+        let _ = AgentRegistry::update(self.registry.as_ref(), &agent);
+        let _ = self.attach_recorder(&agent);
         Ok(agent)
     }
 
@@ -1180,8 +1199,9 @@ impl Dispatcher {
 impl FailoverExecutor for Dispatcher {
     async fn pause_current(&self, agent: &Agent) -> Result<()> {
         if let Some(tmux) = &self.tmux {
-            let target = TmuxTarget::parse(&agent.tmux_target())?;
-            tmux.interrupt(&target).await?;
+            if let Ok(target) = TmuxTarget::parse(&agent.tmux_target()) {
+                let _ = tmux.interrupt(&target).await;
+            }
         }
         Ok(())
     }
