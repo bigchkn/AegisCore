@@ -1432,7 +1432,30 @@ fn write_launch_script(kind: &str, agent_id: Uuid, launch_shell: &str) -> Result
 }
 
 fn normalize_tui_prompt(prompt: &str) -> String {
-    prompt.split_whitespace().collect::<Vec<_>>().join(" ")
+    let mut result = String::with_capacity(prompt.len());
+    let mut last_was_space = false;
+    let mut newline_count = 0;
+
+    for c in prompt.chars() {
+        if c == '\n' || c == '\r' {
+            if newline_count < 2 {
+                result.push('\n');
+                newline_count += 1;
+            }
+            last_was_space = true; // treat newline as space for subsequent space collapsing
+        } else if c.is_whitespace() {
+            if !last_was_space {
+                result.push(' ');
+                last_was_space = true;
+            }
+        } else {
+            result.push(c);
+            last_was_space = false;
+            newline_count = 0;
+        }
+    }
+
+    result.trim().to_string()
 }
 
 fn shell_quote(value: &str) -> String {
@@ -1783,10 +1806,10 @@ mod tests {
     }
 
     #[test]
-    fn normalize_tui_prompt_collapses_multiline_text() {
+    fn normalize_tui_prompt_preserves_multiline_text() {
         assert_eq!(
             normalize_tui_prompt("Begin by checking status.\nThen inspect inbox.\n\nProceed."),
-            "Begin by checking status. Then inspect inbox. Proceed."
+            "Begin by checking status.\nThen inspect inbox.\n\nProceed."
         );
     }
 
@@ -2090,10 +2113,18 @@ mod tests {
     }
 
     #[test]
+    fn normalize_tui_prompt_collapses_excessive_newlines() {
+        assert_eq!(
+            normalize_tui_prompt("Line 1\n\n\n\nLine 2"),
+            "Line 1\n\nLine 2"
+        );
+    }
+
+    #[test]
     fn normalize_tui_prompt_collapses_whitespace() {
         assert_eq!(
             normalize_tui_prompt("  Begin.\n\tContinue    here  "),
-            "Begin. Continue here"
+            "Begin.\nContinue here"
         );
     }
 }
