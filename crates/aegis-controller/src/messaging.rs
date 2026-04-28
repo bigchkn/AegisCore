@@ -203,10 +203,10 @@ impl MessageRouter {
             TmuxTarget::parse(&agent.tmux_target()).map_err(|e| AegisError::IpcProtocol {
                 reason: e.to_string(),
             })?;
-        let command = format!("aegis message inbox {}", agent.agent_id);
-        append_tmux_send(&self.storage.agent_log_path(agent.agent_id), &command)?;
+        let prompt = inbox_nudge_prompt(agent.agent_id);
+        append_tmux_send(&self.storage.agent_log_path(agent.agent_id), &prompt)?;
 
-        tmux.send_text(&target, &command)
+        tmux.send_interactive_text(&target, &prompt)
             .await
             .map_err(|e| AegisError::IpcConnection {
                 source: std::io::Error::new(std::io::ErrorKind::Other, e.to_string()),
@@ -214,6 +214,12 @@ impl MessageRouter {
 
         Ok(true)
     }
+}
+
+fn inbox_nudge_prompt(agent_id: Uuid) -> String {
+    format!(
+        "You have queued Aegis inbox messages. Run `aegis message inbox {agent_id}` now. If you find a notification payload with event `roadmap_updated`, immediately return to taskflow PICK by running `aegis taskflow next` and process the next available work."
+    )
 }
 
 #[cfg(test)]
@@ -300,6 +306,17 @@ cli_provider = "claude-code"
             inbox.messages[0].payload,
             serde_json::json!({"text": "hello"})
         );
+    }
+
+    #[test]
+    fn inbox_nudge_prompt_instructs_agent_to_process_roadmap_updates() {
+        let agent_id = Uuid::parse_str("603685e0-1111-2222-3333-444444444444").unwrap();
+        let prompt = inbox_nudge_prompt(agent_id);
+
+        assert!(prompt.contains(&format!("aegis message inbox {agent_id}")));
+        assert!(prompt.contains("roadmap_updated"));
+        assert!(prompt.contains("aegis taskflow next"));
+        assert!(!prompt.starts_with("aegis message inbox"));
     }
 
     #[test]
