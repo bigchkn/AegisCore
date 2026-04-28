@@ -50,6 +50,8 @@ pub struct FailoverContext {
     pub agent_id: Uuid,
     pub task_id: Option<Uuid>,
     pub previous_provider: String,
+    /// The original system prompt or task instructions.
+    pub system_prompt: String,
     /// Last N lines from the Flight Recorder log.
     pub terminal_context: String,
     pub task_description: Option<String>,

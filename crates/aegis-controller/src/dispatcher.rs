@@ -801,6 +801,8 @@ impl Dispatcher {
             None => None,
         };
 
+        let system_prompt = self.resolve_agent_system_prompt(&agent)?;
+
         AgentRegistry::update_provider(self.registry.as_ref(), agent_id, &next_provider)?;
         let provider = self.providers.get(&next_provider)?;
         let provider_command = provider.spawn_command(&agent.worktree_path, None, None);
@@ -819,6 +821,7 @@ impl Dispatcher {
             agent_id,
             task_id: agent.task_id,
             previous_provider: agent.cli_provider.clone(),
+            system_prompt,
             terminal_context,
             task_description,
             worktree_path: agent.worktree_path.clone(),
@@ -1131,6 +1134,43 @@ impl Dispatcher {
         self.attach_recorder(&agent)?;
         Ok(agent)
     }
+
+    fn resolve_agent_system_prompt(&self, agent: &Agent) -> Result<String> {
+        let (prompt_type, role_override) = match agent.kind {
+            AgentKind::Bastion => {
+                let entry = self
+                    .config
+                    .agents
+                    .get(&agent.name)
+                    .ok_or_else(|| AegisError::Config {
+                        field: format!("agent.{}", agent.name),
+                        reason: "configured agent not found during failover".to_string(),
+                    })?;
+                (PromptType::System, entry.system_prompt.as_deref())
+            }
+            AgentKind::Splinter => (PromptType::Task, None),
+        };
+
+        let task_description = match agent.task_id {
+            Some(task_id) => {
+                TaskRegistry::get(self.registry.as_ref(), task_id)?.map(|task| task.description)
+            }
+            None => None,
+        };
+
+        let prompt_context = PromptContext {
+            agent_id: agent.agent_id,
+            role: agent.role.clone(),
+            task_id: agent.task_id,
+            task_description,
+            context_snippet: None,
+            worktree_path: agent.worktree_path.clone(),
+            previous_cli: None,
+        };
+
+        self.prompts
+            .resolve_prompt(prompt_type, &prompt_context, role_override)
+    }
 }
 
 #[async_trait]
@@ -1188,6 +1228,29 @@ impl FailoverExecutor for Dispatcher {
         let mut updated = self.require_agent(relaunched_agent.agent_id)?;
         updated.cli_provider = provider_name.to_string();
         updated.updated_at = Utc::now();
+
+        let terminal_context = self.capture_failover_context(updated.agent_id)?;
+        let task_description = match updated.task_id {
+            Some(task_id) => {
+                TaskRegistry::get(self.registry.as_ref(), task_id)?.map(|task| task.description)
+            }
+            None => None,
+        };
+        let system_prompt = self.resolve_agent_system_prompt(&updated)?;
+
+        let context = FailoverContext {
+            agent_id: updated.agent_id,
+            task_id: updated.task_id,
+            previous_provider: agent.cli_provider.clone(),
+            system_prompt,
+            terminal_context,
+            task_description,
+            worktree_path: updated.worktree_path.clone(),
+            role: updated.role.clone(),
+        };
+        let recovery_prompt = provider.failover_handoff_prompt(&context);
+        self.inject_recovery(&updated, &recovery_prompt).await?;
+
         self.events.publish(AegisEvent::FailoverInitiated {
             agent_id: relaunched_agent.agent_id,
             from_provider: agent.cli_provider.clone(),

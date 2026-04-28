@@ -152,6 +152,7 @@ impl FailoverCoordinator {
             agent_id,
             task_id: agent.task_id,
             previous_provider: agent.cli_provider.clone(),
+            system_prompt: "Original instructions not available in watchdog context.".to_string(),
             terminal_context,
             task_description,
             worktree_path: agent.worktree_path.clone(),
