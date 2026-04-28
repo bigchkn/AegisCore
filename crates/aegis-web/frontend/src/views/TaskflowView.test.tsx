@@ -34,8 +34,8 @@ const mockMilestone1 = {
   name: 'Milestone 1',
   status: 'in-progress',
   tasks: [
-    { id: '1.1', uid: '11111111-1111-1111-1111-111111111111', task: 'Active Feature', status: 'pending', task_type: 'feature', crate_name: null, notes: null, registry_task_id: null },
-    { id: '1.2', uid: '22222222-2222-2222-2222-222222222222', task: 'Active Bug', status: 'pending', task_type: 'bug', crate_name: null, notes: null, registry_task_id: null },
+    { id: '1.1', uid: '11111111-1111-1111-1111-111111111111', task: 'Active Feature', status: 'in-progress', task_type: 'feature', crate_name: null, notes: null, registry_task_id: null },
+    { id: '1.2', uid: '22222222-2222-2222-2222-222222222222', task: 'Pending Bug', status: 'pending', task_type: 'bug', crate_name: null, notes: null, registry_task_id: null },
   ],
 };
 
@@ -113,10 +113,10 @@ describe('TaskflowView Refactored Filters', () => {
     
     // Should see flat list of bugs (Active + Completed because default state was Active, but Bugs shows ALL loaded until Active is clicked?)
     // Actually, showAll defaults to false. So "Completed Bug" should be hidden.
-    await waitFor(() => expect(screen.getByText('Active Bug')).toBeDefined());
+    await waitFor(() => expect(screen.getByText('Pending Bug')).toBeDefined());
     await waitFor(() => expect(screen.getByText('Backlog Bug')).toBeDefined());
-    expect(screen.queryByText('Completed Bug')).toBeNull(); 
-    
+    expect(screen.queryByText('Completed Bug')).toBeNull();
+
     // Milestones should NOT be headers anymore (they are context labels now)
     // In our implementation, context labels have class 'task-context-label'
     expect(screen.getByText('Milestone 1', { selector: '.task-context-label' })).toBeDefined();
@@ -152,7 +152,7 @@ describe('TaskflowView Refactored Filters', () => {
       task: {
         id: '1.2',
         uid: '22222222-2222-2222-2222-222222222222',
-        task: 'Active Bug',
+        task: 'Pending Bug',
         status: 'pending',
         task_type: 'bug',
         crate_name: null,
@@ -167,7 +167,7 @@ describe('TaskflowView Refactored Filters', () => {
 
     await waitFor(() => expect(screen.getByText('Milestone 1')).toBeDefined());
     fireEvent.click(screen.getByText('Milestone 1', { selector: '.milestone-name' }).closest('button')!);
-    await waitFor(() => expect(screen.getByText('Active Bug')).toBeDefined());
+    await waitFor(() => expect(screen.getByText('Active Feature')).toBeDefined());
     fireEvent.click(screen.getAllByText('Edit')[1]);
 
     fireEvent.change(screen.getByLabelText('Notes'), { target: { value: 'updated notes' } });
@@ -253,5 +253,20 @@ describe('TaskflowView Refactored Filters', () => {
         }),
       ),
     );
+  });
+
+  it('applies left-side highlight to active tasks but not non-active tasks', async () => {
+    mockTaskflowData();
+    renderWithStore();
+
+    await waitFor(() => expect(screen.getByText('Milestone 1')).toBeDefined());
+    fireEvent.click(screen.getByText('Milestone 1', { selector: '.milestone-name' }).closest('button')!);
+    await waitFor(() => expect(screen.getByText('Active Feature')).toBeDefined());
+
+    const activeTask = screen.getByText('Active Feature').closest('.taskflow-task');
+    const pendingTask = screen.getByText('Pending Bug').closest('.taskflow-task');
+
+    expect(activeTask?.getAttribute('data-status')).toBe('in-progress');
+    expect(pendingTask?.getAttribute('data-status')).toBe('pending');
   });
 });

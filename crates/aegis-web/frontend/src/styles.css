@@ -897,6 +897,35 @@ tbody tr:hover {
   font-size: 0.75rem;
 }
 
+/* Left-side active highlight: only in-progress tasks get a colored bar */
+.taskflow-task[data-status="in-progress"],
+.taskflow-task[data-status="lld-in-progress"] {
+  border-left: 3px solid #7ce2ab;
+  padding-left: 5px;
+}
+
+/* Icon colors by task status */
+.task-icon.task-in-progress,
+.task-icon.task-lld-in-progress {
+  background: #143b2a;
+  color: #7ce2ab;
+}
+
+.task-icon.task-done {
+  background: #1f3d57;
+  color: #9bd2f8;
+}
+
+.task-icon.task-blocked {
+  background: #461f25;
+  color: #f08b98;
+}
+
+.task-icon.task-lld-done {
+  background: #34311c;
+  color: #e4cf75;
+}
+
 .task-context-label {
   margin-left: auto;
   padding: 1px 6px;

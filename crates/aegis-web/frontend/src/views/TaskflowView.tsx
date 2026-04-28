@@ -567,7 +567,7 @@ function TaskItem({
   ) => void;
 }) {
   return (
-    <div className="taskflow-task">
+    <div className="taskflow-task" data-status={task.status}>
       <span className={`task-icon task-${task.status}`}>{symbolForStatus(task.status)}</span>
       <div className="task-content">
         <div className="task-row">
