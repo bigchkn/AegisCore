@@ -38,7 +38,13 @@ export function Terminal({
     const fitAddon = new FitAddon();
     terminal.loadAddon(fitAddon);
     terminal.open(containerRef.current);
-    fitAddon.fit();
+    // Defer fit until after the first paint so the container has its actual
+    // layout dimensions. Calling fit() synchronously here yields 0×0 in jsdom
+    // and an unsized container in the browser, which scrambles xterm's initial
+    // render until the next window-resize event corrects it.
+    const rafId = requestAnimationFrame(() => {
+      if (active) fitAddon.fit();
+    });
 
     let active = true;
 
@@ -109,6 +115,7 @@ export function Terminal({
 
     return () => {
       active = false;
+      cancelAnimationFrame(rafId);
       window.removeEventListener('resize', onResize);
       dataSubscription.dispose();
       if (reconnectTimerRef.current !== null) {
