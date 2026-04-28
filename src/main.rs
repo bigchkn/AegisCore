@@ -299,12 +299,13 @@ enum TaskflowCommands {
     },
     /// Add a task to a milestone
     AddTask {
-        /// Short unique ID (e.g., 13.1)
-        id: String,
         /// Task description
         task: String,
         /// Milestone ID (defaults to 'backlog' if omitted)
         milestone_id: Option<String>,
+        /// Short unique ID (e.g., 13.1) — auto-assigned if omitted
+        #[arg(long)]
+        id: Option<String>,
         /// Mark as a bug
         #[arg(long)]
         bug: bool,
@@ -668,10 +669,20 @@ async fn dispatch(cli: Cli, printer: &Printer, client: &DaemonClient) -> Result<
                         aegis_taskflow::model::TaskType::Feature
                     };
 
-                    commands::taskflow::add_task(
-                        &m_id, &id, &task, task_type, printer, client, &anchor,
-                    )
-                    .await
+                    match id {
+                        Some(id) => {
+                            commands::taskflow::add_task(
+                                &m_id, &id, &task, task_type, printer, client, &anchor,
+                            )
+                            .await
+                        }
+                        None => {
+                            commands::taskflow::add_task_auto(
+                                &m_id, &task, task_type, printer, client, &anchor,
+                            )
+                            .await
+                        }
+                    }
                 }
                 TaskflowCommands::SetTaskStatus {
                     milestone_id,

@@ -226,6 +226,41 @@ pub async fn add_task(
     Ok(())
 }
 
+pub async fn add_task_auto(
+    milestone_id: &str,
+    task: &str,
+    task_type: aegis_taskflow::model::TaskType,
+    printer: &Printer,
+    client: &DaemonClient,
+    anchor: &ProjectAnchor,
+) -> Result<(), AegisCliError> {
+    let payload = client
+        .request(
+            Some(&anchor.project_root),
+            "taskflow.create_task",
+            serde_json::json!({
+                "milestone_id": milestone_id,
+                "draft": {
+                    "task": task,
+                    "task_type": task_type,
+                },
+            }),
+        )
+        .await?;
+
+    let auto_id = payload
+        .get("task")
+        .and_then(|t| t.get("id"))
+        .and_then(|v| v.as_str())
+        .unwrap_or("(auto)");
+
+    printer.line(&format!(
+        "Task {} added to {} [{:?}].",
+        auto_id, milestone_id, task_type
+    ));
+    Ok(())
+}
+
 pub async fn set_task_status(
     milestone_id: &str,
     task_id: &str,
