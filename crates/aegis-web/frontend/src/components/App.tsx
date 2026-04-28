@@ -6,12 +6,10 @@ import {
   AppBar, 
   Toolbar, 
   Typography, 
-  IconButton, 
   Chip,
   Container,
   Paper
 } from '@mui/material';
-import { Menu as MenuIcon } from '@mui/icons-material';
 
 import { fetchProjectData, fetchProjects } from '../api/thunks';
 import { setActiveProject, toggleSidebar } from '../store/uiSlice';
@@ -85,16 +83,6 @@ export function App() {
           }}
         >
           <Toolbar>
-            <IconButton
-              color="inherit"
-              aria-label="open drawer"
-              onClick={() => dispatch(toggleSidebar())}
-              edge="start"
-              sx={{ mr: 2, display: sidebarOpen ? 'none' : 'flex' }}
-            >
-              <MenuIcon />
-            </IconButton>
-            
             <Box sx={{ flexGrow: 1 }}>
               <Typography variant="h6" noWrap component="div" sx={{ fontWeight: 600 }}>
                 {titleForView(activeViewPath)}
