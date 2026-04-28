@@ -26,7 +26,7 @@ pub fn mime_for_path(path: &str) -> &'static str {
         Some("css") => "text/css; charset=utf-8",
         Some("html") => "text/html; charset=utf-8",
         Some("js") => "application/javascript; charset=utf-8",
-        Some("json") => "application/json; charset=utf-8",
+        Some("json") | Some("webmanifest") => "application/manifest+json; charset=utf-8",
         Some("map") => "application/json; charset=utf-8",
         Some("svg") => "image/svg+xml",
         Some("ico") => "image/x-icon",
@@ -74,6 +74,10 @@ mod tests {
         assert_eq!(
             mime_for_path("/assets/index.css"),
             "text/css; charset=utf-8"
+        );
+        assert_eq!(
+            mime_for_path("/manifest.webmanifest"),
+            "application/manifest+json; charset=utf-8"
         );
     }
 }

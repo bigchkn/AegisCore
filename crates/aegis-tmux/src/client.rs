@@ -4,6 +4,7 @@ use std::{
 };
 
 use tracing::debug;
+use tokio::time::{sleep, Duration};
 
 use crate::{escape::escape_for_send_keys, TmuxError, TmuxTarget};
 
@@ -134,6 +135,91 @@ impl TmuxClient {
             .filter(|s| !s.is_empty())
             .map(str::to_owned)
             .collect())
+    }
+
+    /// Enable tmux options that reduce TUI interference for interactive panes.
+    pub async fn harden_pane(&self, target: &TmuxTarget) -> Result<(), TmuxError> {
+        self.run_tmux(&["set-option", "-pt", target.as_str(), "allow-passthrough", "on"])
+            .await?;
+        self.run_tmux(&["set-option", "-pt", target.as_str(), "extended-keys", "on"])
+            .await?;
+        Ok(())
+    }
+
+    /// Wait until the pane content and cursor stop changing for a sustained period.
+    pub async fn wait_for_stability(
+        &self,
+        target: &TmuxTarget,
+        stable_duration_ms: u64,
+        polling_interval_ms: u64,
+        timeout_ms: u64,
+    ) -> Result<bool, TmuxError> {
+        let required_checks = std::cmp::max(
+            1,
+            ((stable_duration_ms + polling_interval_ms - 1) / polling_interval_ms) as usize,
+        );
+        let mut last_signature = String::new();
+        let mut stable_checks = 0usize;
+        let deadline = std::time::Instant::now() + Duration::from_millis(timeout_ms);
+
+        while std::time::Instant::now() < deadline {
+            sleep(Duration::from_millis(polling_interval_ms)).await;
+
+            let content = match self.capture_pane_plain(target, 200).await {
+                Ok(content) => content,
+                Err(_) => continue,
+            };
+            let cursor = match self
+                .run_tmux(&[
+                    "display-message",
+                    "-t",
+                    target.as_str(),
+                    "-p",
+                    "#{cursor_x},#{cursor_y}",
+                ])
+                .await
+            {
+                Ok(cursor) => cursor.trim().to_string(),
+                Err(_) => continue,
+            };
+
+            let signature = format!("{content}\n__CURSOR__:{cursor}");
+            if signature == last_signature {
+                stable_checks += 1;
+            } else {
+                stable_checks = 0;
+                last_signature = signature;
+            }
+
+            if stable_checks >= required_checks {
+                return Ok(true);
+            }
+        }
+
+        Ok(false)
+    }
+
+    /// Clear the current line and type a prompt the way a human would.
+    pub async fn send_interactive_text(
+        &self,
+        target: &TmuxTarget,
+        text: &str,
+    ) -> Result<(), TmuxError> {
+        self.send_key(target, "Escape").await?;
+        sleep(Duration::from_millis(100)).await;
+        self.send_key(target, "C-u").await?;
+        sleep(Duration::from_millis(200)).await;
+
+        for ch in text.chars() {
+            let literal = ch.to_string();
+            self.run_tmux(&["send-keys", "-t", target.as_str(), "-l", &literal])
+                .await?;
+            sleep(Duration::from_millis(20)).await;
+        }
+
+        sleep(Duration::from_millis(500)).await;
+        self.send_key(target, "Enter").await?;
+        Ok(())
     }
 
     // ── send-keys ─────────────────────────────────────────────────────────────

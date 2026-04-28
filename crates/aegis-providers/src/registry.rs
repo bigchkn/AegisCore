@@ -30,6 +30,7 @@ impl ProviderRegistry {
                         .clone()
                         .or_else(|| definition.resume_flag.clone()),
                     model: entry.model.clone(),
+                    interaction_model: definition.interaction_model.clone(),
                     interactive_flag: definition.interactive_flag.clone(),
                     initial_prompt_arg: definition.initial_prompt_arg.clone(),
                     startup_delay_ms: entry
@@ -43,6 +44,7 @@ impl ProviderRegistry {
                     extra_args: Vec::new(),
                     resume_flag: definition.resume_flag.clone(),
                     model: None,
+                    interaction_model: definition.interaction_model.clone(),
                     interactive_flag: definition.interactive_flag.clone(),
                     initial_prompt_arg: definition.initial_prompt_arg.clone(),
                     startup_delay_ms: definition.startup_delay_ms,
@@ -193,6 +195,25 @@ mod tests {
         assert!(codex.is_auth_error("not logged in"));
     }
 
+    #[test]
+    fn test_interaction_models_are_loaded_from_manifest() {
+        let cfg = mock_config();
+        let registry = ProviderRegistry::from_config(&cfg).unwrap();
+
+        assert_eq!(
+            registry.get("claude-code").unwrap().interaction_model(),
+            aegis_core::InteractionModel::InjectedTui
+        );
+        assert_eq!(
+            registry.get("gemini-cli").unwrap().interaction_model(),
+            aegis_core::InteractionModel::InjectedTui
+        );
+        assert_eq!(
+            registry.get("codex").unwrap().interaction_model(),
+            aegis_core::InteractionModel::HeadlessIterative
+        );
+    }
+
     fn provider_with_model(model: Option<&str>) -> GenericProvider {
         let manifest = BuiltinManifest::load().unwrap();
         let definition = manifest.providers["claude-code"].clone();
@@ -204,7 +225,10 @@ mod tests {
                 extra_args: vec![],
                 resume_flag: None,
                 model: model.map(str::to_owned),
+                interaction_model: aegis_core::InteractionModel::InjectedTui,
                 startup_delay_ms: 0,
+                interactive_flag: None,
+                initial_prompt_arg: None,
             },
         )
     }
@@ -221,7 +245,10 @@ mod tests {
                 extra_args: vec!["--verbose".into(), "--debug".into()],
                 resume_flag: None,
                 model: None,
+                interaction_model: aegis_core::InteractionModel::InjectedTui,
                 startup_delay_ms: 0,
+                interactive_flag: None,
+                initial_prompt_arg: None,
             },
         );
 

@@ -1,0 +1,19 @@
+id = 38
+name = "PWA Integration"
+status = "done"
+lld = "lld/pwa-integration.md"
+depends_on = []
+
+[[tasks]]
+id = "38.1"
+uid = "b2a3cc52-3067-4390-9c3a-2050d85efd0e"
+task = "Frontend PWA setup (Vite plugin, manifest, icons)"
+task_type = "feature"
+status = "done"
+
+[[tasks]]
+id = "38.2"
+uid = "0e6a2bf2-2c20-44d4-8d79-a819f730e43b"
+task = "Backend MIME type support for .webmanifest"
+task_type = "feature"
+status = "done"

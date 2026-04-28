@@ -7,7 +7,7 @@ depends_on = []
 [[tasks]]
 id = "36.1"
 task = "Create LLD document and M36 tracking"
-task_type = "design"
+task_type = "feature"
 status = "done"
 
 [[tasks]]

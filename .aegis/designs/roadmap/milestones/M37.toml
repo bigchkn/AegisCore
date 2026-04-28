@@ -1,29 +1,40 @@
 id = 37
 name = "Robust Orchestration & TUI Interaction"
-status = "pending"
+status = "done"
 lld = "lld/M37-robust-orchestration.md"
 depends_on = ["M36"]
 
 [[tasks]]
 id = "37.1"
-task = "Refactor Provider trait and manifest for Interaction models"
+uid = "2460a689-69f5-4908-835a-689dd73809d2"
+task = "Finalize provider launch contract for interactive Gemini and injected Claude sessions"
 task_type = "feature"
-status = "pending"
+status = "done"
 
 [[tasks]]
 id = "37.2"
-task = "Implement 'direct' vs 'injected' launch logic in Dispatcher"
+uid = "3d41f9e6-09a1-43ee-b005-74863fc8b582"
+task = "Add tmux stability, session replacement, and safe input helpers"
 task_type = "feature"
-status = "pending"
+status = "done"
 
 [[tasks]]
 id = "37.3"
-task = "Enable tmux passthrough and extended-keys for agent panes"
+uid = "9a55fbc6-4ab8-43c0-9b16-7ac7368296ad"
+task = "Refine dispatcher launch and failover flows to use managed tmux sessions"
 task_type = "feature"
-status = "pending"
+status = "done"
 
 [[tasks]]
 id = "37.4"
-task = "Add mock TUI integration test for orchestration validation"
-task_type = "test"
-status = "pending"
+uid = "ee89dff8-a615-407c-8e48-ef69e0c1c0c9"
+task = "Wire runtime watchdog and shutdown lifecycle into controller-owned sessions"
+task_type = "feature"
+status = "done"
+
+[[tasks]]
+id = "37.5"
+uid = "b554abc2-919c-4b68-9f73-4da764494395"
+task = "Add provider, tmux, and dispatcher tests for interactive launch and relaunch behavior"
+task_type = "maintenance"
+status = "done"

@@ -12,6 +12,15 @@ pub enum SystemPromptMechanism {
     Env { var: String },
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum InteractionModel {
+    /// Agent runs in headless mode; Aegis launches new processes with --resume for each input.
+    HeadlessIterative,
+    /// Agent runs in a TUI; Aegis uses tmux send-keys/raw-input to drive it.
+    InjectedTui,
+}
+
 #[derive(Debug, Clone)]
 pub struct ProviderConfig {
     pub name: String,
@@ -19,6 +28,7 @@ pub struct ProviderConfig {
     pub extra_args: Vec<String>,
     pub resume_flag: Option<String>,
     pub model: Option<String>,
+    pub interaction_model: InteractionModel,
     pub interactive_flag: Option<String>,
     pub initial_prompt_arg: Option<String>,
     /// How long to wait after injecting the launch command before injecting the initial prompt.
@@ -50,6 +60,7 @@ pub struct FailoverContext {
 pub trait Provider: Send + Sync {
     fn name(&self) -> &str;
     fn config(&self) -> &ProviderConfig;
+    fn interaction_model(&self) -> InteractionModel;
 
     /// How this provider expects system prompts to be injected at startup.
     fn system_prompt_mechanism(&self) -> SystemPromptMechanism;

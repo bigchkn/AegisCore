@@ -27,6 +27,10 @@ impl Provider for GenericProvider {
         &self.user_config
     }
 
+    fn interaction_model(&self) -> aegis_core::InteractionModel {
+        self.user_config.interaction_model.clone()
+    }
+
     fn system_prompt_mechanism(&self) -> aegis_core::SystemPromptMechanism {
         self.definition.system_prompt_mechanism.clone()
     }

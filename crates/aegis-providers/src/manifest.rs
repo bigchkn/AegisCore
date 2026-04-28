@@ -1,4 +1,5 @@
 use aegis_core::SystemPromptMechanism;
+use aegis_core::InteractionModel;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -29,6 +30,7 @@ pub struct ProviderDefinition {
     pub model_flag: Option<String>,
     pub interactive_flag: Option<String>,
     pub initial_prompt_arg: Option<String>,
+    pub interaction_model: InteractionModel,
     pub system_prompt_mechanism: SystemPromptMechanism,
     pub error_patterns: ErrorPatterns,
     #[serde(default)]

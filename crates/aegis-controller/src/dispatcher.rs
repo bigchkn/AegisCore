@@ -2,8 +2,8 @@ use std::{path::PathBuf, sync::Arc};
 
 use aegis_core::{
     config::AgentEntry, AegisError, AegisEvent, Agent, AgentKind, AgentRegistry, AgentStatus,
-    FailoverContext, LogQuery, Recorder, Result, SandboxPolicy, SandboxProfile, StorageBackend,
-    Task, TaskRegistry,
+    FailoverContext, InteractionModel, LogQuery, Recorder, Result, SandboxPolicy, SandboxProfile,
+    StorageBackend, Task, TaskRegistry,
 };
 use aegis_design::{RenderedTemplate, TemplateKind};
 use aegis_providers::ProviderRegistry;
@@ -12,6 +12,7 @@ use aegis_watchdog::FailoverExecutor;
 use async_trait::async_trait;
 use chrono::Utc;
 use serde::Deserialize;
+use tokio::time::{sleep, Duration};
 use uuid::Uuid;
 
 use crate::{
@@ -273,6 +274,8 @@ impl Dispatcher {
             .ok_or_else(|| AegisError::TmuxPaneNotFound {
                 target: agent.tmux_session.clone(),
             })?;
+        let pane_target = TmuxTarget::parse(&pane)?;
+        tmux.harden_pane(&pane_target).await?;
         agent.tmux_window = 0;
         agent.tmux_pane = pane;
         agent.status = AgentStatus::Starting;
@@ -299,18 +302,8 @@ impl Dispatcher {
             &provider.config().binary,
         ));
 
-        let trigger_text = "Continue where you left off.";
-        let mut use_tmux_trigger = true;
-
         if let Some(i_flag) = provider.interactive_flag() {
             launch_command.push(i_flag.to_string());
-            if let Some(p_arg) = provider.initial_prompt_arg() {
-                if p_arg != i_flag {
-                    launch_command.push(p_arg.to_string());
-                }
-                launch_command.push(trigger_text.to_string());
-                use_tmux_trigger = false;
-            }
         }
 
         let target = TmuxTarget::parse(&agent.tmux_target())?;
@@ -334,16 +327,15 @@ impl Dispatcher {
             role: agent.role.clone(),
         });
 
-        let startup_delay = provider.config().startup_delay_ms;
-        if startup_delay > 0 {
-            tokio::time::sleep(std::time::Duration::from_millis(startup_delay)).await;
-        }
-
-        if use_tmux_trigger {
-            let trigger = normalize_tui_prompt(trigger_text);
-            tmux.send_raw_input(&target, trigger.as_bytes()).await?;
-            tmux.send_key(&target, "Enter").await?;
-            append_tmux_send(&agent.log_path, &trigger)?;
+        if matches!(provider.interaction_model(), InteractionModel::InjectedTui) {
+            self.submit_interactive_prompt(
+                &agent,
+                provider,
+                &target,
+                "Continue where you left off.",
+                provider.config().startup_delay_ms,
+            )
+            .await?;
         }
 
         Ok(agent)
@@ -491,6 +483,8 @@ impl Dispatcher {
             .ok_or_else(|| AegisError::TmuxPaneNotFound {
                 target: session.clone(),
             })?;
+        let pane_target = TmuxTarget::parse(&pane)?;
+        tmux.harden_pane(&pane_target).await?;
 
         tracing::debug!(%agent_id, session, pane, "prepared tmux window");
         Ok((session, 0, pane))
@@ -545,17 +539,8 @@ impl Dispatcher {
                 "Begin."
             };
 
-            let mut use_tmux_trigger = true;
-
             if let Some(i_flag) = provider.interactive_flag() {
                 launch_cmd.push(i_flag.to_string());
-                if let Some(p_arg) = provider.initial_prompt_arg() {
-                    if p_arg != i_flag {
-                        launch_cmd.push(p_arg.to_string());
-                    }
-                    launch_cmd.push(trigger_text.to_string());
-                    use_tmux_trigger = false;
-                }
             }
 
             match provider.system_prompt_mechanism() {
@@ -581,15 +566,15 @@ impl Dispatcher {
             tmux.send_raw_input(&target, launch_script_input.as_bytes())
                 .await?;
             let agent = self.activate_agent(agent)?;
-            if plan.startup_delay_ms > 0 {
-                tokio::time::sleep(std::time::Duration::from_millis(plan.startup_delay_ms)).await;
-            }
-
-            if use_tmux_trigger {
-                let trigger = normalize_tui_prompt(trigger_text);
-                tmux.send_raw_input(&target, trigger.as_bytes()).await?;
-                tmux.send_key(&target, "Enter").await?;
-                append_tmux_send(&agent.log_path, &trigger)?;
+            if matches!(provider.interaction_model(), InteractionModel::InjectedTui) {
+                self.submit_interactive_prompt(
+                    &agent,
+                    provider,
+                    &target,
+                    trigger_text,
+                    plan.startup_delay_ms,
+                )
+                .await?;
             }
 
             Ok(agent)
@@ -598,6 +583,40 @@ impl Dispatcher {
             self.attach_recorder(&agent)?;
             self.activate_agent(agent)
         }
+    }
+
+    async fn submit_interactive_prompt(
+        &self,
+        agent: &Agent,
+        provider: &dyn aegis_core::provider::Provider,
+        target: &TmuxTarget,
+        prompt: &str,
+        startup_delay_ms: u64,
+    ) -> Result<()> {
+        let Some(tmux) = &self.tmux else {
+            return Ok(());
+        };
+
+        if startup_delay_ms > 0 {
+            sleep(Duration::from_millis(startup_delay_ms)).await;
+        }
+
+        let stable = tmux
+            .wait_for_stability(target, 1000, 250, startup_delay_ms.saturating_add(20_000))
+            .await?;
+        if !stable {
+            tracing::warn!(
+                agent_id = %agent.agent_id,
+                provider = %provider.name(),
+                target = %target.as_str(),
+                "tmux pane did not stabilize before prompt injection"
+            );
+        }
+
+        let trigger = normalize_tui_prompt(prompt);
+        tmux.send_interactive_text(target, &trigger).await?;
+        append_tmux_send(&agent.log_path, &trigger)?;
+        Ok(())
     }
 
     fn write_sandbox_profile(&self, plan: &SpawnPlan) -> Result<()> {
@@ -774,17 +793,9 @@ impl Dispatcher {
             let mut env_vars = vec![("AEGIS_AGENT_ID".to_string(), launch_agent.agent_id.to_string())];
 
             let trigger_text = "Continue.";
-            let mut use_tmux_trigger = true;
 
             if let Some(i_flag) = provider.interactive_flag() {
                 launch_cmd_with_prompt.push(i_flag.to_string());
-                if let Some(p_arg) = provider.initial_prompt_arg() {
-                    if p_arg != i_flag {
-                        launch_cmd_with_prompt.push(p_arg.to_string());
-                    }
-                    launch_cmd_with_prompt.push(trigger_text.to_string());
-                    use_tmux_trigger = false;
-                }
             }
 
             match provider.system_prompt_mechanism() {
@@ -810,15 +821,15 @@ impl Dispatcher {
             let launch_script_input = format!("{launch_script_cmd}\n");
             tmux.send_raw_input(&target, launch_script_input.as_bytes())
                 .await?;
-            let startup_delay = provider.config().startup_delay_ms;
-            if startup_delay > 0 {
-                tokio::time::sleep(std::time::Duration::from_millis(startup_delay)).await;
-            }
-            if use_tmux_trigger {
-                let trigger = normalize_tui_prompt(trigger_text);
-                tmux.send_raw_input(&target, trigger.as_bytes()).await?;
-                tmux.send_key(&target, "Enter").await?;
-                append_tmux_send(&launch_agent.log_path, &trigger)?;
+            if matches!(provider.interaction_model(), InteractionModel::InjectedTui) {
+                self.submit_interactive_prompt(
+                    &launch_agent,
+                    provider,
+                    &target,
+                    trigger_text,
+                    provider.config().startup_delay_ms,
+                )
+                .await?;
             }
         }
 
@@ -1058,6 +1069,8 @@ impl Dispatcher {
             .ok_or_else(|| AegisError::TmuxPaneNotFound {
                 target: agent.tmux_session.clone(),
             })?;
+        let pane_target = TmuxTarget::parse(&pane)?;
+        tmux.harden_pane(&pane_target).await?;
 
         agent.tmux_window = 0;
         agent.tmux_pane = pane;
@@ -1132,21 +1145,23 @@ impl FailoverExecutor for Dispatcher {
     }
 
     async fn inject_recovery(&self, agent: &Agent, prompt: &str) -> Result<()> {
-        let Some(tmux) = &self.tmux else {
+        if self.tmux.is_none() {
             return Ok(());
-        };
-
-        let provider = self.providers.get(&agent.cli_provider)?;
-        let startup_delay = provider.config().startup_delay_ms;
-        if startup_delay > 0 {
-            tokio::time::sleep(std::time::Duration::from_millis(startup_delay)).await;
         }
 
+        let provider = self.providers.get(&agent.cli_provider)?;
+
         let target = TmuxTarget::parse(&agent.tmux_target())?;
-        let trigger = normalize_tui_prompt(prompt);
-        tmux.send_raw_input(&target, trigger.as_bytes()).await?;
-        tmux.send_key(&target, "Enter").await?;
-        append_tmux_send(&agent.log_path, &trigger)?;
+        if matches!(provider.interaction_model(), InteractionModel::InjectedTui) {
+            self.submit_interactive_prompt(
+                agent,
+                provider,
+                &target,
+                prompt,
+                provider.config().startup_delay_ms,
+            )
+            .await?;
+        }
         Ok(())
     }
 
@@ -1727,7 +1742,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn process_receipt_missing_receipt_marks_task_and_agent_failed() {
+    async fn process_receipt_missing_receipt_marks_task_complete_and_terminates_agent() {
         let (dispatcher, _dir) = dispatcher();
         let task = Task {
             task_id: Uuid::new_v4(),
@@ -1747,17 +1762,16 @@ mod tests {
             .await
             .unwrap();
 
-        let error = dispatcher.process_receipt(agent_id).await.unwrap_err();
-
-        assert!(matches!(error, AegisError::ReceiptNotFound { .. }));
+        dispatcher.process_receipt(agent_id).await.unwrap();
         let stored_task = TaskRegistry::get(dispatcher.registry.as_ref(), task.task_id)
             .unwrap()
             .unwrap();
-        assert_eq!(stored_task.status, TaskStatus::Failed);
+        assert_eq!(stored_task.status, TaskStatus::Complete);
+        assert!(stored_task.receipt_path.is_none());
         let stored_agent = AgentRegistry::get(dispatcher.registry.as_ref(), agent_id)
             .unwrap()
             .unwrap();
-        assert_eq!(stored_agent.status, AgentStatus::Failed);
+        assert_eq!(stored_agent.status, AgentStatus::Terminated);
         assert!(agent.worktree_path.exists());
     }
 
@@ -1911,5 +1925,13 @@ mod tests {
             .unwrap();
         assert_eq!(plan.initial_prompt, "TEMPLATE PROMPT");
         assert!(!plan.initial_prompt.contains("Project Context"));
+    }
+
+    #[test]
+    fn normalize_tui_prompt_collapses_whitespace() {
+        assert_eq!(
+            normalize_tui_prompt("  Begin.\n\tContinue    here  "),
+            "Begin. Continue here"
+        );
     }
 }

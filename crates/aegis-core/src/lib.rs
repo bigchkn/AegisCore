@@ -17,7 +17,9 @@ pub use channel::{
 pub use config::{ConfigError, EffectiveConfig, RawConfig};
 pub use error::{AegisError, Result};
 pub use lock::LockedFile;
-pub use provider::{FailoverContext, Provider, ProviderConfig, SessionRef, SystemPromptMechanism};
+pub use provider::{
+    FailoverContext, InteractionModel, Provider, ProviderConfig, SessionRef, SystemPromptMechanism,
+};
 pub use recorder::{LogQuery, Recorder};
 pub use sandbox::{SandboxNetworkPolicy, SandboxPolicy, SandboxProfile};
 pub use storage::StorageBackend;

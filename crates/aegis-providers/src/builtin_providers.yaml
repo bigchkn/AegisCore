@@ -7,6 +7,8 @@ providers:
     resume_flag: "--resume"
     export_command: "/export"
     model_flag: "--model"
+    interaction_model:
+      type: "injected_tui"
     system_prompt_mechanism:
       type: "flag"
       arg: "--append-system-prompt-file"
@@ -19,11 +21,13 @@ providers:
     auto_approve_flags: ["--yolo"]
     startup_delay_ms: 8000
     interactive_flag: "-i"
-    initial_prompt_arg: "-i"
+    initial_prompt_arg: null
     resume_mechanism: "injection"
     resume_command: "/resume {session_id}"
     export_command: "/checkpoint save aegis-handoff"
     model_flag: "--model"
+    interaction_model:
+      type: "injected_tui"
     system_prompt_mechanism:
       type: "env"
       var: "GEMINI_SYSTEM_MD"
@@ -38,6 +42,8 @@ providers:
     resume_command: "resume {session_id}"
     export_command: null
     model_flag: "--model"
+    interaction_model:
+      type: "headless_iterative"
     system_prompt_mechanism:
       type: "flag"
       arg: "--system-prompt-file"

@@ -17,56 +17,69 @@ The current orchestration logic in `dispatcher.rs` is **procedural and brittle**
 
 ---
 
-## 2. Proposed Solution: Structured Interaction Models
+## 2. Proposed Solution: Managed Interactive Sessions
 
-Instead of "guessing" how to start an agent, we categorize providers into two distinct **Interaction Models**.
+The tmux layer should own the session lifecycle. The child CLI should not discover tmux; the controller creates the session, records the pane identity, and decides when input is safe to send.
 
 ### 2.1 Interaction Models (The "Why")
 
-1.  **Headless Iterative Model (e.g., Gemini CLI):**
-    *   **Mechanism:** Uses the `--prompt <goal>` flag for headless execution. For subsequent steps (like clarifications), Aegis launches a new headless process with `--resume latest --prompt <response>`.
-    *   **Benefit:** **Deterministic.** No TUI synchronization, buffering, or `send-keys` issues. Output is captured directly from stdout.
-    *   **Context Preservation:** Using `--resume latest` ensures the agent maintains full conversation history across multiple Aegis-triggered steps.
-2.  **Injected TUI Model (e.g., Claude Code):**
-    *   **Mechanism:** Boots into a "Waiting for Input" state. Requires a simulated Enter key.
-    *   **Benefit:** Standardizes the "Wait then Enter" sequence into a reusable workflow with explicit `startup_delay_ms` and `C-m` (Carriage Return) handling.
-    *   **Requirement:** Tmux hardening (`harden_pane`) is critical here to prevent escape sequence conflicts.
+1.  **Interactive Gemini Session:**
+    *   **Mechanism:** Gemini stays in its TUI and receives the first goal only after the controller confirms the pane is stable.
+    *   **Benefit:** Gemini remains interactive for follow-up prompts, clarifications, and resume flow without switching to a headless mode.
+    *   **Input Rule:** Prefer human-like typed input with explicit clear-line handling and an Enter key at the end. Avoid raw paste for the first prompt when the pane is still settling.
+2.  **Injected TUI Session (e.g., Claude Code):**
+    *   **Mechanism:** Boots into a waiting-for-input state and receives a normalized trigger after `startup_delay_ms`.
+    *   **Benefit:** Keeps the existing `Begin.` / `Continue.` flow, but makes it explicit that the controller, not the provider, decides when to submit.
 
-### 2.2 Environmental Injection (The "Where")
+### 2.2 Prompt Delivery (The "Where")
 
-We will shift from CLI arguments to **Environment Variables** for core metadata.
+Prompt transport is already split in the codebase and should stay that way:
 
-*   **Location:** `crates/aegis-controller/src/dispatcher.rs`
-*   **Change:** Instead of appending `--append-system-prompt-file` to the CLI, we will always set `AEGIS_SYSTEM_PROMPT_PATH`. Providers will be configured in `builtin_providers.yaml` to either use a flag or look for this env var.
-*   **Reason:** Environment variables are safer for passing paths and long strings than CLI arguments, which can be truncated or mis-parsed by shell wrappers.
+*   `crates/aegis-core/src/provider.rs` defines `SystemPromptMechanism`, `InteractionModel`, `SessionRef`, and `ProviderConfig`.
+*   `crates/aegis-providers/src/manifest.rs` and `builtin_providers.yaml` define per-provider interactive flags, initial prompt arguments, resume behavior, and prompt injection mechanism.
+*   `crates/aegis-controller/src/dispatcher.rs` uses those provider capabilities to build the launch command.
+
+For M37, the refinement is not "always use env vars" or "always use flags". It is:
+
+*   Gemini should use the provider-defined interactive path and remain in the TUI.
+*   Claude should continue using the injected prompt-file path.
+*   The controller should normalize the prompt string before submission and choose the right launch shape from provider metadata.
 
 ---
 
 ## 3. Location of Changes
 
 ### 3.1 `crates/aegis-core` (Data Structures)
-*   **`provider.rs`**: Add `InteractionModel` enum (`Direct` | `Injected`). Add `startup_delay_ms` to `ProviderConfig`.
-*   **Reason:** Formalizes the contract between the Controller and the AI Providers.
+*   **`provider.rs`**: Keep `SystemPromptMechanism`, `InteractionModel`, `SessionRef`, and `ProviderConfig` as the provider contract surface.
+*   **Reason:** This is where the controller learns whether a provider is interactive, how to inject prompts, and how to resume.
 
 ### 3.2 `crates/aegis-providers` (Manifest & YAML)
-*   **`manifest.rs`**: Add fields for `interaction_model`, `interactive_flag`, and `initial_prompt_arg`.
-*   **`builtin_providers.yaml`**: Define these for `claude-code` (Injected), `gemini-cli` (Direct), and `codex` (Injected).
-*   **Reason:** Moves orchestration logic into configuration, allowing new AI tools to be added without code changes.
+*   **`manifest.rs`**: Keep the provider manifest fields for `system_prompt_mechanism`, `interactive_flag`, `initial_prompt_arg`, and `resume_mechanism`.
+*   **`builtin_providers.yaml`**: Gemini should stay interactive, with `interactive_flag` / `initial_prompt_arg` set for its TUI flow; Claude keeps the injected prompt-file path.
+*   **Reason:** The provider manifest is the source of truth for launch behavior, so the controller does not need provider-specific branching sprinkled throughout the orchestration code.
 
 ### 3.3 `crates/aegis-tmux` (Pane Hardening)
-*   **`client.rs`**: Add `harden_pane(target)` method. 
-*   **Implementation:** Executes `tmux set-window-option allow-passthrough on` and `tmux set-option extended-keys on`.
-*   **Reason:** This is the **primary change for long-term stability**. It ensures that the TUI has direct, un-interrupted communication with the terminal, preventing "stuck" prompts or broken rendering.
+*   **`client.rs`**: Add the missing tmux helpers needed for safe interactive Gemini input:
+    *   pane stability polling using `capture_pane_plain` plus cursor state;
+    *   serialized send helper for one writer at a time;
+    *   `harden_pane(target)` for tmux options that improve TUI passthrough.
+*   **Reason:** The current client already has `new_session`, `kill_session`, `list_panes`, `send_raw_input`, `send_key`, `capture_pane_plain`, and `pane_has_agent`. What it does not yet have is a stability-aware send path.
 
 ### 3.4 `crates/aegis-controller` (The Orchestrator)
-*   **`dispatcher.rs`**: Rewrite `launch_or_insert_plan` to use a match statement on `provider.interaction_model()`.
-    *   **Case Headless Iterative:** Prepend `AEGIS_AGENT_ID=...` and use `--prompt "Begin."`. For future inputs (clarifications), re-launch with `--resume latest --prompt "..."`.
-    *   **Case Injected TUI:** Launch binary -> `harden_pane` -> `sleep` -> `send_raw_input("Begin.")` -> `send_key("C-m")`.
+*   **`dispatcher.rs`**: Refine `launch_or_insert_plan`, `spawn_bastion`, `relaunch_bastion_in_place`, and failover relaunch so they all use the same managed-session tmux flow.
+    *   Gemini path: create or reuse the controller-owned session, wait for tmux stability, harden the pane, then type the initial prompt interactively.
+    *   Claude path: keep the injected trigger flow, but only submit after the startup delay and with normalized prompt text.
+    *   Session replacement path: if the pane is stale or in a terminal modal, kill and recreate the tmux session, update `tmux_window` / `tmux_pane`, and reattach the recorder before launching.
+
+### 3.5 `crates/aegis-controller/src/runtime/mod.rs` (Lifecycle)
+*   **`start_background_tasks`**: keep the watchdog and scheduler running under controller ownership.
+*   **`shutdown`**: stop background tasks and terminate agent sessions cleanly.
+*   **Reason:** tmux session management belongs to the runtime boundary, not the agent binary.
 
 ---
 
 ## 4. Expected Long-term Outcomes
 
-1.  **Deterministic Startup:** Agents using the `Direct` model will succeed 100% of the time regardless of system load.
-2.  **Platform Parity:** Standardizing on `C-m` and `extended-keys` ensures the orchestration works identically on Linux and macOS.
-3.  **Extensibility:** Adding a local LLM via `ollama` or `llama.cpp` will only require a YAML update to specify it uses the `Direct` model with a specific CLI flag.
+1.  **Deterministic Startup:** Gemini stays interactive, but the first prompt is only sent once the pane is stable enough to accept it.
+2.  **Controller-Owned Sessions:** Session and pane identity stay in the registry, so restarts and failovers can adopt the same tmux resources instead of rediscovering them.
+3.  **Extensibility:** New providers only need manifest updates for prompt injection, resume style, and interactive behavior; the tmux safety model stays in one place.
