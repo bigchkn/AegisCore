@@ -2,7 +2,7 @@ import { createSlice, type PayloadAction } from '@reduxjs/toolkit';
 
 import type { Agent } from '../types/Agent';
 import type { AgentStatus } from '../types/AgentStatus';
-import { fetchAgents } from '../api/thunks';
+import { fetchAgents, killAgent, pauseAgent, resumeAgent } from '../api/thunks';
 
 type AgentStatusPatch = {
   agent_id: string;
@@ -59,6 +59,21 @@ const agentsSlice = createSlice({
       })
       .addCase(fetchAgents.rejected, (state) => {
         state.loading = false;
+      })
+      .addCase(killAgent.fulfilled, (state, action) => {
+        state.items = state.items.filter((agent) => agent.agent_id !== action.meta.arg.agentId);
+      })
+      .addCase(pauseAgent.fulfilled, (state, action) => {
+        const agent = state.items.find((item) => item.agent_id === action.meta.arg.agentId);
+        if (agent) {
+          agent.status = 'paused';
+        }
+      })
+      .addCase(resumeAgent.fulfilled, (state, action) => {
+        const agent = state.items.find((item) => item.agent_id === action.meta.arg.agentId);
+        if (agent) {
+          agent.status = 'active';
+        }
       });
   },
 });

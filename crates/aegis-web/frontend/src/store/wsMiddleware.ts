@@ -4,7 +4,9 @@ import { updateAgentStatus, removeAgent } from './agentsSlice';
 import { addChannelByEvent, removeChannel } from './channelsSlice';
 import { setConnectionState, setError } from './uiSlice';
 import { assignTask, markTaskComplete } from './tasksSlice';
+import { fetchAgents } from '../api/thunks';
 import type { AegisEvent } from '../types/AegisEvent';
+import type { RootState } from './index';
 
 const WS_EVENTS_URL =
   `${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${window.location.host}/ws/events`;
@@ -52,6 +54,13 @@ export const wsMiddleware: Middleware = (store) => {
         );
         break;
       case 'agent_spawned':
+        {
+          const state = store.getState() as RootState;
+          const projectId = state.ui.activeProjectId;
+          if (projectId) {
+            (store.dispatch as any)(fetchAgents(projectId));
+          }
+        }
         break;
     }
   };
