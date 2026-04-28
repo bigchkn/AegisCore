@@ -870,7 +870,11 @@ impl Dispatcher {
                 launch_script.to_string_lossy().into_owned(),
             ]);
             append_tmux_send(&launch_agent.log_path, &launch_script_cmd)?;
+            
+            // Ensure the shell is ready and the line is clear
+            sleep(Duration::from_millis(500)).await;
             tmux.send_key(&target, "C-u").await?;
+            
             let launch_script_input = format!("{launch_script_cmd}\n");
             tmux.send_raw_input(&target, launch_script_input.as_bytes())
                 .await?;
@@ -1241,7 +1245,11 @@ impl FailoverExecutor for Dispatcher {
                 launch_script.to_string_lossy().into_owned(),
             ]);
             append_tmux_send(&relaunched_agent.log_path, &launch_script_cmd)?;
+
+            // Ensure the shell is ready and the line is clear
+            sleep(Duration::from_millis(500)).await;
             tmux.send_key(&target, "C-u").await?;
+
             let launch_script_input = format!("{launch_script_cmd}\n");
             tmux.send_raw_input(&target, launch_script_input.as_bytes())
                 .await?;
