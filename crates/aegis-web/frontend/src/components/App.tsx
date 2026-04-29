@@ -49,6 +49,14 @@ export function App() {
   }, [activeProjectId, dispatch]);
 
   useEffect(() => {
+    if (!activeProjectId) return;
+    const id = setInterval(() => {
+      void dispatch(fetchProjectData(activeProjectId));
+    }, 5_000);
+    return () => clearInterval(id);
+  }, [activeProjectId, dispatch]);
+
+  useEffect(() => {
     if (!activeProjectId && projects.length > 0 && !location.pathname.includes('/projects/')) {
       dispatch(setActiveProject(projects[0].id));
     }
