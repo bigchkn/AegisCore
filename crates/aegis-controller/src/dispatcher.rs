@@ -568,8 +568,7 @@ impl Dispatcher {
                 }
             })?;
 
-            let mut launch_cmd = plan.launch_command.clone();
-            let mut env_vars = vec![("AEGIS_AGENT_ID".to_string(), agent.agent_id.to_string())];
+            let env_vars = vec![("AEGIS_AGENT_ID".to_string(), agent.agent_id.to_string())];
             let provider = self.providers.get(&agent.cli_provider)?;
 
             let trigger_text = if let Some(ot) = &plan.override_trigger {
@@ -580,19 +579,12 @@ impl Dispatcher {
                 "Begin."
             };
 
-            if let Some(i_flag) = provider.interactive_flag() {
-                launch_cmd.push(i_flag.to_string());
-            }
-
-            match provider.system_prompt_mechanism() {
-                aegis_core::SystemPromptMechanism::Flag { arg } => {
-                    launch_cmd.push(arg);
-                    launch_cmd.push(sys_prompt_path.to_string_lossy().into_owned());
-                }
-                aegis_core::SystemPromptMechanism::Env { var } => {
-                    env_vars.push((var, sys_prompt_path.to_string_lossy().into_owned()));
-                }
-            }
+            let (launch_cmd, env_vars) = prepare_provider_launch(
+                provider,
+                plan.launch_command.clone(),
+                env_vars,
+                &sys_prompt_path,
+            );
 
             let launch_shell =
                 launch_shell_command_with_env(&agent.worktree_path, &launch_cmd, &env_vars);
@@ -1320,6 +1312,28 @@ fn launch_shell_command_with_env(
     )
 }
 
+fn prepare_provider_launch(
+    provider: &dyn aegis_core::provider::Provider,
+    mut launch_cmd: Vec<String>,
+    mut env_vars: Vec<(String, String)>,
+    sys_prompt_path: &std::path::Path,
+) -> (Vec<String>, Vec<(String, String)>) {
+    // Injected-TUI providers receive the initial prompt after startup via tmux input.
+    // Do not append CLI prompt flags like Gemini's `-i` here; those require an
+    // inline argument and break startup when the prompt is typed later.
+    match provider.system_prompt_mechanism() {
+        aegis_core::SystemPromptMechanism::Flag { arg } => {
+            launch_cmd.push(arg);
+            launch_cmd.push(sys_prompt_path.to_string_lossy().into_owned());
+        }
+        aegis_core::SystemPromptMechanism::Env { var } => {
+            env_vars.push((var, sys_prompt_path.to_string_lossy().into_owned()));
+        }
+    }
+
+    (launch_cmd, env_vars)
+}
+
 fn write_launch_script(kind: &str, agent_id: Uuid, launch_shell: &str) -> Result<PathBuf> {
     let script_path = std::env::temp_dir().join(format!("aegis_{kind}_{}.sh", short_id(agent_id)));
     let script = format!("#!/bin/sh\n{}\n", launch_shell);
@@ -1710,6 +1724,27 @@ mod tests {
             normalize_tui_prompt("Begin by checking status.\nThen inspect inbox.\n\nProceed."),
             "Begin by checking status.\nThen inspect inbox.\n\nProceed."
         );
+    }
+
+    #[test]
+    fn gemini_launch_command_does_not_append_bare_interactive_flag() {
+        let (dispatcher, _dir) = dispatcher();
+        let provider = dispatcher.providers.get("gemini-cli").unwrap();
+        let env_vars = vec![("AEGIS_AGENT_ID".to_string(), Uuid::nil().to_string())];
+
+        let (launch_cmd, env_vars) = prepare_provider_launch(
+            provider,
+            vec!["gemini".to_string(), "--yolo".to_string()],
+            env_vars,
+            Path::new("/tmp/aegis-system.md"),
+        );
+
+        assert!(!launch_cmd.iter().any(|part| part == "-i"));
+        assert!(launch_cmd.iter().any(|part| part == "--yolo"));
+        assert!(env_vars
+            .iter()
+            .any(|(key, value)| key == "GEMINI_SYSTEM_MD"
+                && value == "/tmp/aegis-system.md"));
     }
 
     #[tokio::test]
