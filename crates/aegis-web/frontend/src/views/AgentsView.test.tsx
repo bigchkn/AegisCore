@@ -73,7 +73,15 @@ describe('AgentsView', () => {
         '/projects/project-1/commands',
         expect.objectContaining({
           method: 'POST',
-          body: JSON.stringify({ command: 'spawn', params: 'Investigate the queue' }),
+          body: JSON.stringify({
+            command: 'spawn',
+            params: {
+              task: 'Investigate the queue',
+              kind: 'splinter',
+              provider: 'claude-code',
+              fallback_cascade: [],
+            },
+          }),
         }),
       ),
     );

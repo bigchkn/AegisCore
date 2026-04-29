@@ -36,6 +36,12 @@ type DesignTemplateListResponse = {
   templates: DesignTemplate[];
 };
 
+export type CustomSpawnOptions = {
+  kind: 'bastion' | 'splinter';
+  provider: string;
+  fallbackCascade: string[];
+};
+
 type TaskMutationResponse = {
   task: TaskflowMilestone['tasks'][number];
   notified: number;
@@ -106,7 +112,19 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ command, params }),
     }),
-  spawn: (projectId: string, task: string) => api.command(projectId, 'spawn', task),
+  spawn: (projectId: string, task: string, options?: CustomSpawnOptions) =>
+    api.command(
+      projectId,
+      'spawn',
+      options
+        ? {
+            task,
+            kind: options.kind,
+            provider: options.provider,
+            fallback_cascade: options.fallbackCascade,
+          }
+        : task,
+    ),
   listDesignTemplates: (projectId: string) =>
     api.command<DesignTemplateListResponse>(projectId, 'design.list'),
   spawnDesignTemplate: (

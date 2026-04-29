@@ -2,8 +2,11 @@ use crate::daemon::logs::PaneEvent;
 use crate::daemon::projects::{ProjectRecord, ProjectRegistry};
 use crate::events::EventBus;
 use crate::runtime::AegisRuntime;
-use aegis_core::Result;
-use aegis_design::{BootstrapContext, DesignEngine, TemplateLayer, TemplateRegistry};
+use crate::scheduler::SpawnOverrides;
+use aegis_core::{Result, SandboxNetworkPolicy};
+use aegis_design::{
+    BootstrapContext, DesignEngine, RenderedTemplate, TemplateKind, TemplateLayer, TemplateRegistry,
+};
 use axum::{
     extract::ws::{Message, WebSocket},
     extract::{Path, Query, State, WebSocketUpgrade},
@@ -227,9 +230,77 @@ async fn dispatch_command(
 
     match cmd {
         "spawn" => {
-            let task = params.as_str().ok_or("Missing task string in params")?;
-            let task_id = commands.spawn(task).await.map_err(|e| e.to_string())?;
-            Ok(Json(serde_json::json!({ "task_id": task_id })))
+            if let Some(task) = params.as_str() {
+                let task_id = commands.spawn(task).await.map_err(|e| e.to_string())?;
+                Ok(Json(serde_json::json!({ "task_id": task_id })))
+            } else {
+                let task = params
+                    .get("task")
+                    .and_then(|v| v.as_str())
+                    .ok_or("Missing task")?;
+                let kind = params
+                    .get("kind")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("splinter");
+                let provider = params
+                    .get("provider")
+                    .and_then(|v| v.as_str())
+                    .ok_or("Missing provider")?;
+                let provider_names = configured_provider_names(&runtime);
+                validate_provider(&provider_names, provider)?;
+                let fallback_cascade = parse_fallback_cascade(params, &provider_names)?;
+
+                match kind {
+                    "splinter" => {
+                        let role = params
+                            .get("role")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("splinter");
+                        let task_id = commands
+                            .spawn_with_options(
+                                task,
+                                role,
+                                Some(SpawnOverrides {
+                                    cli_provider: Some(provider.to_owned()),
+                                    fallback_cascade: Some(fallback_cascade),
+                                }),
+                            )
+                            .await
+                            .map_err(|e| e.to_string())?;
+                        Ok(Json(serde_json::json!({ "task_id": task_id })))
+                    }
+                    "bastion" => {
+                        let role = params
+                            .get("role")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("bastion");
+                        let rendered = RenderedTemplate {
+                            name: "custom-prompt".to_string(),
+                            kind: TemplateKind::Bastion,
+                            role: role.to_owned(),
+                            task_id: None,
+                            task_description: None,
+                            cli_provider: provider.to_owned(),
+                            model: None,
+                            auto_cleanup: false,
+                            fallback_cascade,
+                            sandbox_network: SandboxNetworkPolicy::OutboundOnly,
+                            system_prompt: task.to_owned(),
+                            startup: None,
+                        };
+                        let agent = commands
+                            .spawn_from_template(rendered)
+                            .await
+                            .map_err(|e| e.to_string())?;
+                        Ok(Json(serde_json::json!({
+                            "agent_id": agent.agent_id,
+                            "role": agent.role,
+                            "kind": format!("{:?}", agent.kind),
+                        })))
+                    }
+                    other => Err(format!("Unknown spawn type: {other}")),
+                }
+            }
         }
         "design.list" => {
             let registry = TemplateRegistry::load(&runtime.root_path);
@@ -288,9 +359,8 @@ async fn dispatch_command(
                 rendered.model = Some(model.to_owned());
             }
             if let Some(provider) = provider_override {
-                if !runtime.config.providers.contains_key(provider) {
-                    return Err(format!("Unknown provider: {provider}"));
-                }
+                let provider_names = configured_provider_names(&runtime);
+                validate_provider(&provider_names, provider)?;
                 rendered.cli_provider = provider.to_owned();
             }
 
@@ -498,6 +568,40 @@ fn resolve_agent_id_param(
         .ok_or_else(|| format!("Missing {}", name))?;
 
     commands.resolve_agent_id(raw).map_err(|e| e.to_string())
+}
+
+fn configured_provider_names(runtime: &AegisRuntime) -> Vec<String> {
+    runtime.config.providers.keys().cloned().collect()
+}
+
+fn validate_provider(provider_names: &[String], provider: &str) -> std::result::Result<(), String> {
+    if provider_names.iter().any(|name| name == provider) {
+        Ok(())
+    } else {
+        Err(format!("Unknown provider: {provider}"))
+    }
+}
+
+fn parse_fallback_cascade(
+    params: &serde_json::Value,
+    provider_names: &[String],
+) -> std::result::Result<Vec<String>, String> {
+    let Some(fallbacks) = params.get("fallback_cascade") else {
+        return Ok(Vec::new());
+    };
+    let Some(items) = fallbacks.as_array() else {
+        return Err("fallback_cascade must be an array".to_string());
+    };
+
+    let mut parsed = Vec::new();
+    for item in items {
+        let provider = item
+            .as_str()
+            .ok_or("fallback_cascade entries must be strings")?;
+        validate_provider(provider_names, provider)?;
+        parsed.push(provider.to_owned());
+    }
+    Ok(parsed)
 }
 
 async fn taskflow_status(
@@ -760,4 +864,46 @@ async fn ws_pane_handler(
                 .await;
         }
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn providers() -> Vec<String> {
+        vec![
+            "claude-code".to_string(),
+            "codex".to_string(),
+            "dirac".to_string(),
+        ]
+    }
+
+    #[test]
+    fn parse_fallback_cascade_accepts_configured_providers() {
+        let params = serde_json::json!({
+            "fallback_cascade": ["codex", "dirac"],
+        });
+
+        let parsed = parse_fallback_cascade(&params, &providers()).unwrap();
+
+        assert_eq!(parsed, vec!["codex", "dirac"]);
+    }
+
+    #[test]
+    fn parse_fallback_cascade_rejects_unknown_provider() {
+        let params = serde_json::json!({
+            "fallback_cascade": ["not-installed"],
+        });
+
+        let err = parse_fallback_cascade(&params, &providers()).unwrap_err();
+
+        assert_eq!(err, "Unknown provider: not-installed");
+    }
+
+    #[test]
+    fn validate_provider_rejects_unknown_primary_provider() {
+        let err = validate_provider(&providers(), "not-installed").unwrap_err();
+
+        assert_eq!(err, "Unknown provider: not-installed");
+    }
 }

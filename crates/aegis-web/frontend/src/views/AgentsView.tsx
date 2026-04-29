@@ -27,6 +27,8 @@ import {
   InputLabel,
   Select,
   MenuItem,
+  Checkbox,
+  ListItemText,
   RadioGroup,
   FormControlLabel,
   Radio,
@@ -74,6 +76,9 @@ export function AgentsView() {
   const [selectedKind, setSelectedKind] = useState<'bastion' | 'splinter'>('splinter');
   const [selectedTemplateName, setSelectedTemplateName] = useState('');
   const [selectedProvider, setSelectedProvider] = useState('');
+  const [customKind, setCustomKind] = useState<'bastion' | 'splinter'>('splinter');
+  const [customProvider, setCustomProvider] = useState('');
+  const [customFallbacks, setCustomFallbacks] = useState<string[]>([]);
   const [templateVars, setTemplateVars] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
   const [spawnError, setSpawnError] = useState<string | null>(null);
@@ -92,6 +97,11 @@ export function AgentsView() {
     const all = new Set([...providers, ...templates.map((template) => template.provider)]);
     return Array.from(all).filter(Boolean).sort();
   }, [providers, templates]);
+
+  const customFallbackOptions = useMemo(
+    () => providerOptions.filter((provider) => provider !== customProvider),
+    [customProvider, providerOptions],
+  );
 
   const templateVariableNames = useMemo(() => {
     if (!selectedTemplate) {
@@ -120,6 +130,7 @@ export function AgentsView() {
         setSelectedKind(initialTemplate?.kind ?? 'splinter');
         setSelectedTemplateName((current) => current || initialTemplate?.name || '');
         setSelectedProvider((current) => current || initialTemplate?.provider || result.providers[0] || '');
+        setCustomProvider((current) => current || initialTemplate?.provider || result.providers[0] || '');
       })
       .catch((error) => {
         const msg = error instanceof Error ? error.message : 'Unable to load templates.';
@@ -138,6 +149,9 @@ export function AgentsView() {
     setSelectedKind('splinter');
     setSelectedTemplateName('');
     setSelectedProvider('');
+    setCustomKind('splinter');
+    setCustomProvider('');
+    setCustomFallbacks([]);
     setTemplateVars({});
   }, [activeProjectId]);
 
@@ -147,6 +161,19 @@ export function AgentsView() {
     }
     setSelectedProvider((current) => current || selectedTemplate.provider);
   }, [selectedTemplate]);
+
+  useEffect(() => {
+    if (!customProvider || providerOptions.includes(customProvider)) {
+      return;
+    }
+    setCustomProvider(providerOptions[0] ?? '');
+  }, [customProvider, providerOptions]);
+
+  useEffect(() => {
+    setCustomFallbacks((current) =>
+      current.filter((provider) => provider !== customProvider && providerOptions.includes(provider)),
+    );
+  }, [customProvider, providerOptions]);
 
   function attachAgent(agentId: string) {
     if (!activeProjectId) {
@@ -193,7 +220,21 @@ export function AgentsView() {
           setSpawnError('Enter a task prompt before spawning an agent.');
           return;
         }
-        await dispatch(spawnTask({ projectId: activeProjectId, task: prompt })).unwrap();
+        if (!customProvider) {
+          setSpawnError('Select a provider before spawning an agent.');
+          return;
+        }
+        await dispatch(
+          spawnTask({
+            projectId: activeProjectId,
+            task: prompt,
+            options: {
+              kind: customKind,
+              provider: customProvider,
+              fallbackCascade: customFallbacks,
+            },
+          }),
+        ).unwrap();
       }
 
       toast.success('Agent spawned successfully');
@@ -379,17 +420,74 @@ export function AgentsView() {
                 )}
               </Stack>
             ) : (
-              <TextField
-                fullWidth
-                multiline
-                rows={4}
-                variant="outlined"
-                placeholder="Describe the task for the new agent..."
-                value={taskPrompt}
-                onChange={(e) => setTaskPrompt(e.target.value)}
-                disabled={submitting}
-                autoFocus
-              />
+              <Stack spacing={2}>
+                <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
+                  <FormControl fullWidth>
+                    <InputLabel id="custom-spawn-type-label">Type</InputLabel>
+                    <Select
+                      labelId="custom-spawn-type-label"
+                      label="Type"
+                      value={customKind}
+                      onChange={(event) => setCustomKind(event.target.value as 'bastion' | 'splinter')}
+                      disabled={submitting}
+                    >
+                      <MenuItem value="splinter">Splinter</MenuItem>
+                      <MenuItem value="bastion">Bastion</MenuItem>
+                    </Select>
+                  </FormControl>
+                  <FormControl fullWidth>
+                    <InputLabel id="custom-spawn-provider-label">Provider</InputLabel>
+                    <Select
+                      labelId="custom-spawn-provider-label"
+                      label="Provider"
+                      value={customProvider}
+                      onChange={(event) => setCustomProvider(event.target.value)}
+                      disabled={submitting || providerOptions.length === 0}
+                    >
+                      {providerOptions.map((provider) => (
+                        <MenuItem key={provider} value={provider}>
+                          {provider}
+                        </MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+                </Stack>
+                <FormControl fullWidth>
+                  <InputLabel id="custom-spawn-fallback-label">Fallbacks</InputLabel>
+                  <Select
+                    labelId="custom-spawn-fallback-label"
+                    label="Fallbacks"
+                    multiple
+                    value={customFallbacks}
+                    onChange={(event) => {
+                      const value = event.target.value;
+                      setCustomFallbacks(typeof value === 'string' ? value.split(',') : value);
+                    }}
+                    renderValue={(selected) =>
+                      selected.length === 0 ? 'None' : selected.join(', ')
+                    }
+                    disabled={submitting || customFallbackOptions.length === 0}
+                  >
+                    {customFallbackOptions.map((provider) => (
+                      <MenuItem key={provider} value={provider}>
+                        <Checkbox checked={customFallbacks.includes(provider)} />
+                        <ListItemText primary={provider} />
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+                <TextField
+                  fullWidth
+                  multiline
+                  rows={4}
+                  variant="outlined"
+                  placeholder="Describe the task for the new agent..."
+                  value={taskPrompt}
+                  onChange={(e) => setTaskPrompt(e.target.value)}
+                  disabled={submitting}
+                  autoFocus
+                />
+              </Stack>
             )}
           </DialogContent>
           <DialogActions sx={{ px: 3, pb: 2 }}>
@@ -401,7 +499,7 @@ export function AgentsView() {
               variant="contained"
               disabled={
                 submitting ||
-                (spawnMode === 'custom' && taskPrompt.trim().length === 0) ||
+                (spawnMode === 'custom' && (taskPrompt.trim().length === 0 || !customProvider)) ||
                 (spawnMode === 'template' && (!selectedTemplate || !selectedProvider || templatesLoading))
               }
               startIcon={submitting && <CircularProgress size={20} color="inherit" />}

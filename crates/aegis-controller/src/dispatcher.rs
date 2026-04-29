@@ -22,6 +22,7 @@ use crate::{
     lifecycle::{sandbox_policy_from_config, validate_transition, AgentSpec, SpawnPlan},
     prompts::{PromptContext, PromptManager, PromptType},
     registry::FileRegistry,
+    scheduler::SpawnOverrides,
     storage::ProjectStorage,
     transcript::append_tmux_send,
 };
@@ -362,8 +363,28 @@ impl Dispatcher {
         task: &Task,
         parent_id: Option<Uuid>,
     ) -> Result<Agent> {
+        self.spawn_splinter_with_id_and_overrides(agent_id, role, task, parent_id, None)
+            .await
+    }
+
+    pub async fn spawn_splinter_with_id_and_overrides(
+        &self,
+        agent_id: Uuid,
+        role: &str,
+        task: &Task,
+        parent_id: Option<Uuid>,
+        overrides: Option<SpawnOverrides>,
+    ) -> Result<Agent> {
         tracing::info!(%agent_id, task_id = %task.task_id, %role, "spawning splinter");
-        let spec = self.build_splinter_spec(role, task, parent_id);
+        let mut spec = self.build_splinter_spec(role, task, parent_id);
+        if let Some(overrides) = overrides {
+            if let Some(provider) = overrides.cli_provider {
+                spec.cli_provider = provider;
+            }
+            if let Some(fallbacks) = overrides.fallback_cascade {
+                spec.fallback_cascade = fallbacks;
+            }
+        }
 
         tracing::debug!(%agent_id, "preparing worktree");
         self.prepare_splinter_worktree(agent_id, role).await?;

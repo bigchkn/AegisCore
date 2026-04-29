@@ -1,5 +1,6 @@
 import { createAsyncThunk } from '@reduxjs/toolkit';
 
+import type { CustomSpawnOptions } from './rest';
 import { api } from './rest';
 
 export const fetchProjects = createAsyncThunk('projects/fetchProjects', api.listProjects);
@@ -64,8 +65,15 @@ export const fetchDesignTemplates = createAsyncThunk(
 
 export const spawnTask = createAsyncThunk(
   'tasks/spawnTask',
-  async ({ projectId, task }: { projectId: string; task: string }) =>
-    api.spawn(projectId, task),
+  async ({
+    projectId,
+    task,
+    options,
+  }: {
+    projectId: string;
+    task: string;
+    options?: CustomSpawnOptions;
+  }) => api.spawn(projectId, task, options),
 );
 
 export const spawnDesignTemplate = createAsyncThunk(

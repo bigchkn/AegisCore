@@ -12,7 +12,11 @@ use aegis_taskflow::TaskflowEngine;
 use serde::Serialize;
 use uuid::Uuid;
 
-use crate::{dispatcher::Dispatcher, registry::FileRegistry, scheduler::Scheduler};
+use crate::{
+    dispatcher::Dispatcher,
+    registry::FileRegistry,
+    scheduler::{Scheduler, SpawnOverrides},
+};
 
 #[derive(Debug, Clone, Serialize)]
 #[cfg_attr(feature = "ts-export", derive(ts_rs::TS))]
@@ -78,12 +82,25 @@ impl ControllerCommands {
     }
 
     pub async fn spawn(&self, task: &str) -> Result<Uuid> {
+        self.spawn_with_options(task, "splinter", None).await
+    }
+
+    pub async fn spawn_with_options(
+        &self,
+        task: &str,
+        role: &str,
+        overrides: Option<SpawnOverrides>,
+    ) -> Result<Uuid> {
         let task_id = self
             .scheduler
             .enqueue_splinter_task(task, TaskCreator::System)?;
         // Attempt immediate dispatch; if max_splinters is saturated the task
         // stays queued until a slot opens (no-op on None return).
-        if let Err(e) = self.scheduler.dispatch_once("splinter").await {
+        if let Err(e) = self
+            .scheduler
+            .dispatch_once_with_overrides(role, overrides)
+            .await
+        {
             tracing::error!(task_id = %task_id, error = %e, "dispatch failed after enqueue — task remains queued");
         }
         Ok(task_id)

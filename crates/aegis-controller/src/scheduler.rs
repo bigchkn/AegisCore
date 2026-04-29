@@ -8,6 +8,12 @@ use crate::{dispatcher::Dispatcher, registry::FileRegistry};
 
 const DRAIN_POLL_MS: u64 = 500;
 
+#[derive(Debug, Clone, Default)]
+pub struct SpawnOverrides {
+    pub cli_provider: Option<String>,
+    pub fallback_cascade: Option<Vec<String>>,
+}
+
 pub struct Scheduler {
     registry: Arc<FileRegistry>,
     dispatcher: Arc<Dispatcher>,
@@ -36,6 +42,14 @@ impl Scheduler {
     }
 
     pub async fn dispatch_once(&self, role: &str) -> Result<Option<Uuid>> {
+        self.dispatch_once_with_overrides(role, None).await
+    }
+
+    pub async fn dispatch_once_with_overrides(
+        &self,
+        role: &str,
+        overrides: Option<SpawnOverrides>,
+    ) -> Result<Option<Uuid>> {
         let permit = match self.permits.clone().try_acquire_owned() {
             Ok(permit) => permit,
             Err(_) => return Ok(None),
@@ -49,7 +63,7 @@ impl Scheduler {
 
         if let Err(e) = self
             .dispatcher
-            .spawn_splinter_with_id(agent_id, role, &task, None)
+            .spawn_splinter_with_id_and_overrides(agent_id, role, &task, None, overrides.clone())
             .await
         {
             tracing::error!(
