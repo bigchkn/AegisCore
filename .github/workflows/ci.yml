@@ -17,10 +17,19 @@ jobs:
       - uses: actions/checkout@v4
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: crates/aegis-web/frontend/package-lock.json
       - name: Cache dependencies
         uses: Swatinem/rust-cache@v2
       - name: Install dependencies
         run: brew install tmux
+      - name: Install frontend dependencies
+        working-directory: crates/aegis-web/frontend
+        run: npm ci
       - name: Build
         run: cargo build --verbose
       - name: Run tests

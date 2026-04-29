@@ -18,6 +18,15 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: crates/aegis-web/frontend/package-lock.json
+      - name: Install frontend dependencies
+        working-directory: crates/aegis-web/frontend
+        run: npm ci
       - name: Build release
         run: cargo build --release --target ${{ matrix.target }}
       - name: Package
