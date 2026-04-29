@@ -454,9 +454,10 @@ tbody tr:hover {
 }
 
 .terminal-root {
+  height: 100%;
   min-width: 0;
   min-height: 0;
-  padding: 10px;
+  overflow: hidden;
   background: #101316;
 }
 
