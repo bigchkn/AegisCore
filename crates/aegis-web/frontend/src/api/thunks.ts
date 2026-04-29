@@ -57,8 +57,28 @@ export const failoverAgent = createAsyncThunk(
     api.failover(projectId, agentId),
 );
 
+export const fetchDesignTemplates = createAsyncThunk(
+  'agents/fetchDesignTemplates',
+  async (projectId: string) => api.listDesignTemplates(projectId),
+);
+
 export const spawnTask = createAsyncThunk(
   'tasks/spawnTask',
   async ({ projectId, task }: { projectId: string; task: string }) =>
     api.spawn(projectId, task),
+);
+
+export const spawnDesignTemplate = createAsyncThunk(
+  'tasks/spawnDesignTemplate',
+  async ({
+    projectId,
+    name,
+    vars,
+    model,
+  }: {
+    projectId: string;
+    name: string;
+    vars: Record<string, string>;
+    model?: string;
+  }) => api.spawnDesignTemplate(projectId, name, vars, model),
 );

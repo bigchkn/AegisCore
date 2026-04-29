@@ -13,6 +13,26 @@ import type {
 type CommandResponse = {
   status?: string;
   task_id?: string;
+  agent_id?: string;
+  role?: string;
+  kind?: string;
+};
+
+export type DesignTemplate = {
+  name: string;
+  description: string;
+  kind: 'bastion' | 'splinter';
+  version: string;
+  tags: string[];
+  role: string;
+  provider: string;
+  model: string | null;
+  required: string[];
+  optional: string[];
+};
+
+type DesignTemplateListResponse = {
+  templates: DesignTemplate[];
 };
 
 type TaskMutationResponse = {
@@ -86,6 +106,19 @@ export const api = {
       body: JSON.stringify({ command, params }),
     }),
   spawn: (projectId: string, task: string) => api.command(projectId, 'spawn', task),
+  listDesignTemplates: (projectId: string) =>
+    api.command<DesignTemplateListResponse>(projectId, 'design.list'),
+  spawnDesignTemplate: (
+    projectId: string,
+    name: string,
+    vars: Record<string, string>,
+    model?: string,
+  ) =>
+    api.command(projectId, 'design.spawn_template', {
+      name,
+      vars,
+      model: model || null,
+    }),
   taskflowCreateTask: (projectId: string, milestoneId: string, draft: TaskDraftPayload) =>
     api.command<TaskMutationResponse>(projectId, 'taskflow.create_task', {
       milestone_id: milestoneId,

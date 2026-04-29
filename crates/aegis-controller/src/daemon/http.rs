@@ -3,6 +3,7 @@ use crate::daemon::projects::{ProjectRecord, ProjectRegistry};
 use crate::events::EventBus;
 use crate::runtime::AegisRuntime;
 use aegis_core::Result;
+use aegis_design::{BootstrapContext, DesignEngine, TemplateLayer, TemplateRegistry};
 use axum::{
     extract::ws::{Message, WebSocket},
     extract::{Path, Query, State, WebSocketUpgrade},
@@ -229,6 +230,67 @@ async fn dispatch_command(
             let task = params.as_str().ok_or("Missing task string in params")?;
             let task_id = commands.spawn(task).await.map_err(|e| e.to_string())?;
             Ok(Json(serde_json::json!({ "task_id": task_id })))
+        }
+        "design.list" => {
+            let registry = TemplateRegistry::load(&runtime.root_path);
+            let templates: Vec<_> = registry
+                .list()
+                .into_iter()
+                .filter(|resolved| resolved.layer == TemplateLayer::BuiltIn)
+                .map(|resolved| {
+                    serde_json::json!({
+                        "name": resolved.name,
+                        "description": resolved.template.metadata.description,
+                        "kind": format!("{:?}", resolved.template.metadata.kind).to_lowercase(),
+                        "version": resolved.template.metadata.version,
+                        "tags": resolved.template.metadata.tags,
+                        "role": resolved.template.agent.role,
+                        "provider": resolved.template.agent.cli_provider,
+                        "model": resolved.template.agent.model,
+                        "required": resolved.template.variables.required,
+                        "optional": resolved.template.variables.optional,
+                    })
+                })
+                .collect();
+            Ok(Json(serde_json::json!({ "templates": templates })))
+        }
+        "design.spawn_template" => {
+            let name = params
+                .get("name")
+                .and_then(|v| v.as_str())
+                .ok_or("Missing template name")?;
+            let vars_value = params
+                .get("vars")
+                .cloned()
+                .unwrap_or_else(|| serde_json::json!({}));
+            let cli_vars = serde_json::from_value::<HashMap<String, String>>(vars_value)
+                .map_err(|e| e.to_string())?;
+            let model_override = params.get("model").and_then(|v| v.as_str());
+
+            let registry = TemplateRegistry::load(&runtime.root_path);
+            let resolved = registry.get(name).map_err(|e| e.to_string())?;
+            if resolved.layer != TemplateLayer::BuiltIn {
+                return Err(format!("Template is not built in: {name}"));
+            }
+
+            let vars =
+                BootstrapContext::build(&resolved.template, &runtime.root_path, &cli_vars, None)
+                    .map_err(|e| e.to_string())?;
+            let mut rendered =
+                DesignEngine::render(&resolved.template, &vars).map_err(|e| e.to_string())?;
+            if let Some(model) = model_override {
+                rendered.model = Some(model.to_owned());
+            }
+
+            let agent = commands
+                .spawn_from_template(rendered)
+                .await
+                .map_err(|e| e.to_string())?;
+            Ok(Json(serde_json::json!({
+                "agent_id": agent.agent_id,
+                "role": agent.role,
+                "kind": format!("{:?}", agent.kind),
+            })))
         }
         "pause" => {
             let agent_id = resolve_agent_id_param(&commands, params, "agent_id")?;

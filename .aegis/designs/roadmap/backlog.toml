@@ -116,7 +116,7 @@ id = "B16"
 uid = "26430f18-eccc-4c7e-abdb-431e1565ca95"
 task = "Add support to select from built-in templates into the spawn agent modal instead of custom prompt"
 task_type = "feature"
-status = "pending"
+status = "done"
 
 [[tasks]]
 id = "B17"

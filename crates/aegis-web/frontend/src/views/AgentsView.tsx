@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import {
@@ -20,7 +20,15 @@ import {
   Dialog,
   DialogTitle,
   DialogContent,
-  DialogActions
+  DialogActions,
+  Tabs,
+  Tab,
+  FormControl,
+  RadioGroup,
+  FormControlLabel,
+  Radio,
+  Chip,
+  Alert
 } from '@mui/material';
 import {
   PlayArrow as ResumeIcon,
@@ -31,7 +39,17 @@ import {
   Add as AddIcon
 } from '@mui/icons-material';
 
-import { failoverAgent, killAgent, pauseAgent, resumeAgent, spawnTask, fetchAgents } from '../api/thunks';
+import type { DesignTemplate } from '../api/rest';
+import {
+  failoverAgent,
+  fetchAgents,
+  fetchDesignTemplates,
+  killAgent,
+  pauseAgent,
+  resumeAgent,
+  spawnDesignTemplate,
+  spawnTask
+} from '../api/thunks';
 import { StatusBadge } from '../components/StatusBadge';
 import { agentRoute } from '../lib/agentRoutes';
 import { useAppDispatch, useAppSelector } from '../store/hooks';
@@ -44,9 +62,60 @@ export function AgentsView() {
   const activeProjectId = useAppSelector((state) => state.ui.activeProjectId);
   
   const [modalOpen, setModalOpen] = useState(false);
+  const [spawnMode, setSpawnMode] = useState<'template' | 'custom'>('template');
   const [taskPrompt, setTaskPrompt] = useState('');
+  const [templates, setTemplates] = useState<DesignTemplate[]>([]);
+  const [templatesLoading, setTemplatesLoading] = useState(false);
+  const [templatesLoaded, setTemplatesLoaded] = useState(false);
+  const [selectedTemplateName, setSelectedTemplateName] = useState('');
+  const [templateVars, setTemplateVars] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
   const [spawnError, setSpawnError] = useState<string | null>(null);
+
+  const selectedTemplate = useMemo(
+    () => templates.find((template) => template.name === selectedTemplateName) ?? null,
+    [selectedTemplateName, templates],
+  );
+
+  const templateVariableNames = useMemo(() => {
+    if (!selectedTemplate) {
+      return [];
+    }
+    const hiddenVars = new Set(['project_root']);
+    return Array.from(new Set([...selectedTemplate.required, ...selectedTemplate.optional])).filter(
+      (name) => !hiddenVars.has(name),
+    );
+  }, [selectedTemplate]);
+
+  useEffect(() => {
+    if (!modalOpen || !activeProjectId || templatesLoaded) {
+      return;
+    }
+
+    setTemplatesLoading(true);
+    setSpawnError(null);
+    dispatch(fetchDesignTemplates(activeProjectId))
+      .unwrap()
+      .then((result) => {
+        setTemplates(result.templates);
+        setSelectedTemplateName((current) => current || result.templates[0]?.name || '');
+      })
+      .catch((error) => {
+        const msg = error instanceof Error ? error.message : 'Unable to load templates.';
+        setSpawnError(msg);
+      })
+      .finally(() => {
+        setTemplatesLoaded(true);
+        setTemplatesLoading(false);
+      });
+  }, [activeProjectId, dispatch, modalOpen, templatesLoaded]);
+
+  useEffect(() => {
+    setTemplates([]);
+    setTemplatesLoaded(false);
+    setSelectedTemplateName('');
+    setTemplateVars({});
+  }, [activeProjectId]);
 
   function attachAgent(agentId: string) {
     if (!activeProjectId) {
@@ -62,17 +131,42 @@ export function AgentsView() {
     }
 
     const prompt = taskPrompt.trim();
-    if (!prompt) {
-      setSpawnError('Enter a task prompt before spawning an agent.');
-      return;
-    }
 
     setSubmitting(true);
     setSpawnError(null);
     try {
-      await dispatch(spawnTask({ projectId: activeProjectId, task: prompt })).unwrap();
+      if (spawnMode === 'template') {
+        if (!selectedTemplate) {
+          setSpawnError('Select a template before spawning an agent.');
+          return;
+        }
+
+        const missingVariable = selectedTemplate.required
+          .filter((name) => name !== 'project_root')
+          .find((name) => !templateVars[name]?.trim());
+        if (missingVariable) {
+          setSpawnError(`Enter ${formatVariableName(missingVariable)} before spawning an agent.`);
+          return;
+        }
+
+        await dispatch(
+          spawnDesignTemplate({
+            projectId: activeProjectId,
+            name: selectedTemplate.name,
+            vars: compactVars(templateVars),
+          }),
+        ).unwrap();
+      } else {
+        if (!prompt) {
+          setSpawnError('Enter a task prompt before spawning an agent.');
+          return;
+        }
+        await dispatch(spawnTask({ projectId: activeProjectId, task: prompt })).unwrap();
+      }
+
       toast.success('Agent spawned successfully');
       setTaskPrompt('');
+      setTemplateVars({});
       setModalOpen(false);
       // Refresh agents list to show the new agent
       dispatch(fetchAgents(activeProjectId));
@@ -107,22 +201,112 @@ export function AgentsView() {
         <Box component="form" onSubmit={handleSpawn}>
           <DialogTitle>Spawn Agent</DialogTitle>
           <DialogContent>
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-              Submit a task prompt to create a new agent session.
-            </Typography>
-            <TextField
-              fullWidth
-              multiline
-              rows={4}
-              variant="outlined"
-              placeholder="Describe the task for the new agent..."
-              value={taskPrompt}
-              onChange={(e) => setTaskPrompt(e.target.value)}
-              disabled={submitting}
-              error={!!spawnError}
-              helperText={spawnError}
-              autoFocus
-            />
+            <Tabs
+              value={spawnMode}
+              onChange={(_, value) => {
+                setSpawnMode(value);
+                setSpawnError(null);
+              }}
+              sx={{ mb: 2 }}
+            >
+              <Tab value="template" label="Template" />
+              <Tab value="custom" label="Custom Prompt" />
+            </Tabs>
+
+            {spawnError && (
+              <Alert severity="error" sx={{ mb: 2 }}>
+                {spawnError}
+              </Alert>
+            )}
+
+            {spawnMode === 'template' ? (
+              <Stack spacing={2}>
+                {templatesLoading ? (
+                  <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+                    <CircularProgress />
+                  </Box>
+                ) : templates.length === 0 ? (
+                  <Typography variant="body2" color="text.secondary">
+                    No built-in templates are available.
+                  </Typography>
+                ) : (
+                  <FormControl fullWidth>
+                    <RadioGroup
+                      value={selectedTemplateName}
+                      onChange={(event) => {
+                        setSelectedTemplateName(event.target.value);
+                        setTemplateVars({});
+                        setSpawnError(null);
+                      }}
+                    >
+                      <Stack spacing={1}>
+                        {templates.map((template) => (
+                          <Paper
+                            key={template.name}
+                            variant="outlined"
+                            sx={{ p: 1.5, borderRadius: 1 }}
+                          >
+                            <FormControlLabel
+                              value={template.name}
+                              control={<Radio />}
+                              label={
+                                <Box>
+                                  <Typography variant="subtitle2">{template.name}</Typography>
+                                  <Typography variant="body2" color="text.secondary">
+                                    {template.description}
+                                  </Typography>
+                                  <Stack direction="row" spacing={1} sx={{ mt: 1, flexWrap: 'wrap', rowGap: 1 }}>
+                                    <Chip size="small" label={template.kind} />
+                                    <Chip size="small" label={template.role} />
+                                    <Chip size="small" label={template.provider} />
+                                  </Stack>
+                                </Box>
+                              }
+                              sx={{ alignItems: 'flex-start', m: 0, width: '100%' }}
+                            />
+                          </Paper>
+                        ))}
+                      </Stack>
+                    </RadioGroup>
+                  </FormControl>
+                )}
+
+                {selectedTemplate && templateVariableNames.length > 0 && (
+                  <Stack spacing={2}>
+                    {templateVariableNames.map((name) => (
+                      <TextField
+                        key={name}
+                        fullWidth
+                        multiline={isLongVariable(name)}
+                        rows={isLongVariable(name) ? 3 : 1}
+                        label={formatVariableName(name)}
+                        value={templateVars[name] ?? ''}
+                        onChange={(event) =>
+                          setTemplateVars((current) => ({
+                            ...current,
+                            [name]: event.target.value,
+                          }))
+                        }
+                        required={selectedTemplate.required.includes(name)}
+                        disabled={submitting}
+                      />
+                    ))}
+                  </Stack>
+                )}
+              </Stack>
+            ) : (
+              <TextField
+                fullWidth
+                multiline
+                rows={4}
+                variant="outlined"
+                placeholder="Describe the task for the new agent..."
+                value={taskPrompt}
+                onChange={(e) => setTaskPrompt(e.target.value)}
+                disabled={submitting}
+                autoFocus
+              />
+            )}
           </DialogContent>
           <DialogActions sx={{ px: 3, pb: 2 }}>
             <Button onClick={() => setModalOpen(false)} disabled={submitting}>
@@ -131,7 +315,11 @@ export function AgentsView() {
             <Button
               type="submit"
               variant="contained"
-              disabled={submitting || taskPrompt.trim().length === 0}
+              disabled={
+                submitting ||
+                (spawnMode === 'custom' && taskPrompt.trim().length === 0) ||
+                (spawnMode === 'template' && (!selectedTemplate || templatesLoading))
+              }
               startIcon={submitting && <CircularProgress size={20} color="inherit" />}
             >
               {submitting ? 'Spawning...' : 'Spawn'}
@@ -160,6 +348,7 @@ export function AgentsView() {
                       <IconButton 
                         size="small" 
                         color="primary"
+                        aria-label="Spawn New Agent"
                         onClick={() => setModalOpen(true)}
                         sx={{ border: '1px solid', borderColor: 'primary.main' }}
                       >
@@ -243,6 +432,25 @@ export function AgentsView() {
       )}
     </Stack>
   );
+}
+
+function compactVars(vars: Record<string, string>) {
+  return Object.fromEntries(
+    Object.entries(vars)
+      .map(([key, value]) => [key, value.trim()])
+      .filter(([, value]) => value.length > 0),
+  );
+}
+
+function formatVariableName(name: string) {
+  return name
+    .split('_')
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+}
+
+function isLongVariable(name: string) {
+  return name.includes('description') || name.endsWith('path');
 }
 
 function EmptyPanel({ title, body }: { title: string; body: string }) {
