@@ -15,6 +15,8 @@ pub struct ProjectRecord {
     pub auto_start: bool,
     pub last_seen: DateTime<Utc>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub status: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub last_attached_agent_id: Option<Uuid>,
@@ -114,6 +116,7 @@ impl ProjectRegistry {
             root_path: abs_path,
             auto_start: true,
             last_seen: Utc::now(),
+            name: None,
             status: None,
             last_attached_agent_id: None,
         };

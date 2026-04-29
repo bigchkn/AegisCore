@@ -9,6 +9,7 @@ export type ProjectRecord = {
   root_path: string;
   auto_start: boolean;
   last_seen: string;
+  name?: string;
   last_attached_agent_id?: string;
 };
 
