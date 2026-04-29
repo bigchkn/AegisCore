@@ -70,7 +70,7 @@ function renderWithStore() {
   const store = configureStore({
     reducer: {
       ui: uiReducer,
-      projects: () => ({ items: [{ id: 'proj-1', root_path: '/tmp' }], loading: false }),
+      projects: () => ({ items: [{ id: 'proj-1', root_path: '/tmp', auto_start: false, last_seen: new Date().toISOString() }], loading: false }),
     },
     preloadedState: {
       ui: initialState,

@@ -64,12 +64,27 @@ id = "B9"
 uid = "c830f64e-368b-4723-98d3-eccd1b21b0cf"
 task = "UI has issue where slight scroll provided on pane page when window is large enough to fit."
 task_type = "feature"
-status = "pending"
+status = "done"
 
 [[tasks]]
 id = "B10"
 uid = "b8b1aa47-c1e8-4dd3-b4fd-10a09ef265b6"
 task = "Setup web-ui to refresh data frequently in background using timer based refresh"
 task_type = "maintenance"
-status = "pending"
+status = "done"
 notes = "Key to prevent the user needing to refresh manually."
+
+[[tasks]]
+id = "B11"
+uid = "67abb3fa-848a-4ed0-a772-d5dbf3738150"
+task = "Convert project sidebar list to a drop down in the menubar at the top that displays the current project path. Add optional name field to project manifest to allow for alternative names"
+task_type = "maintenance"
+status = "pending"
+
+[[tasks]]
+id = "B12"
+uid = "745d2eb8-8133-457b-9b93-3ddff5bb3487"
+task = "Force pane to render an emulation of terminal in web-ui"
+task_type = "feature"
+status = "pending"
+notes = "Current approach causes odd overlapping text. Instead we should emulate a terminal. Search libraries online if needed."

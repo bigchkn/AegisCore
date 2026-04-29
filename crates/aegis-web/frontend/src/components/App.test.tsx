@@ -25,9 +25,10 @@ class MockWebSocket {
 
 const PROJECT = {
   id: 'project-1',
-  name: 'Test Project',
   root_path: '/tmp/project-1',
-  last_attached_agent_id: null,
+  auto_start: false,
+  last_seen: new Date().toISOString(),
+  last_attached_agent_id: undefined,
 };
 
 function makeStore() {
