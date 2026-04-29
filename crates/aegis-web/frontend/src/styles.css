@@ -422,8 +422,9 @@ tbody tr:hover {
 
 .pane-view {
   display: grid;
-  grid-template-rows: auto minmax(360px, calc(100vh - 168px));
-  min-height: calc(100vh - 112px);
+  grid-template-rows: auto minmax(0, 1fr);
+  flex: 1;
+  min-height: 0;
   border: 1px solid #303842;
   border-radius: 8px;
   overflow: hidden;
