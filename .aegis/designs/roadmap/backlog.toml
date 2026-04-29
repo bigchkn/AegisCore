@@ -109,4 +109,35 @@ id = "B15"
 uid = "3388b5a8-61f6-4b1f-a482-136225259223"
 task = "Terminal is still not rendering properly. Examine docs (https://xtermjs.org) to identify how to fix our implementation"
 task_type = "bug"
+status = "done"
+
+[[tasks]]
+id = "B16"
+uid = "26430f18-eccc-4c7e-abdb-431e1565ca95"
+task = "Add support to select from built-in templates into the spawn agent modal instead of custom prompt"
+task_type = "feature"
 status = "pending"
+
+[[tasks]]
+id = "B17"
+uid = "e66f7c2e-3bd1-4437-88f2-32af9ad3fc38"
+task = "Fix taskflow-bastion message inbox function inside aegis-design crate"
+task_type = "maintenance"
+status = "pending"
+notes = '''
+"""⎿  Error: Exit code 2                                                                                                                                         
+     error: the following required arguments were not provided:                                                                                                 
+       <AGENT_ID>                                             
+                                                                                                                                                                
+     Usage: aegis message inbox <AGENT_ID>                                                                                                                      
+  
+     For more information, try '--help'.                                                                                                                        
+                                                                  
+✢ Mustering… (8s · ↑ 303 tokens · thinking with medium effort)
+
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+· M                    6
+⏺─Bash(aegis message --help 2>&1)                              ─────────────────────────────────────────────────────────────────────────────────────────────────
+  ⎿  Send or inspectoagent-to-agentamessagesle) · esc to interrupt
+                                                                                                                                                                
+     Usage: aegis message [OPTIONS] <COMMAND>   """'''
