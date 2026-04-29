@@ -70,6 +70,8 @@ export function Terminal({
         const message = JSON.parse(event.data) as PaneMessage;
         if (message.type === 'output') {
           terminal.write(base64ToBytes(message.data));
+        } else if (message.type === 'resize') {
+          terminal.resize(message.cols, message.rows);
         }
       };
 

@@ -92,6 +92,13 @@ impl LogTailer {
     }
 }
 
+/// An event emitted by `PaneRelay::relay` to describe either a chunk of terminal
+/// output or a change in the tmux pane dimensions.
+pub enum PaneEvent {
+    Output(Vec<u8>),
+    Resize { cols: u16, rows: u16 },
+}
+
 pub struct PaneRelay {
     storage: Arc<ProjectStorage>,
     registry: Arc<FileRegistry>,
@@ -114,7 +121,7 @@ impl PaneRelay {
     pub async fn relay(
         &self,
         agent_id: Uuid,
-        mut out_tx: impl Sink<Vec<u8>, Error = AegisError> + Unpin,
+        mut out_tx: impl Sink<PaneEvent, Error = AegisError> + Unpin,
         mut in_rx: impl Stream<Item = Vec<u8>> + Unpin,
     ) -> Result<()> {
         let agent = AgentRegistry::get(self.registry.as_ref(), agent_id)?
@@ -141,14 +148,22 @@ impl PaneRelay {
                     source,
                 })?;
 
-        // 1. Initial burst: capture current tmux pane state
-        if let Ok(snapshot) = self.tmux.capture_pane(&target, 2000).await {
-            out_tx.send(snapshot).await?;
+        // 1. Send the current tmux pane dimensions so the web terminal can match exactly.
+        if let Ok((cols, rows)) = self.tmux.pane_size(&target).await {
+            out_tx.send(PaneEvent::Resize { cols, rows }).await?;
         }
+
+        // 2. Initial burst: capture current tmux pane state
+        if let Ok(snapshot) = self.tmux.capture_pane(&target, 2000).await {
+            out_tx.send(PaneEvent::Output(snapshot)).await?;
+        }
+
+        let mut last_size: Option<(u16, u16)> = None;
+        let mut size_check_ticks: u32 = 0;
 
         loop {
             tokio::select! {
-                // (a) Read from log file and stream to out_tx
+                // (a) Read from log file and stream to out_tx; periodically check pane size.
                 _ = sleep(Duration::from_millis(100)) => {
                     let metadata = std::fs::metadata(&log_path).map_err(|source| AegisError::StorageIo {
                         path: log_path.clone(),
@@ -167,8 +182,20 @@ impl PaneRelay {
                             source,
                         })?;
 
-                        out_tx.send(new_bytes).await?;
+                        out_tx.send(PaneEvent::Output(new_bytes)).await?;
                         log_pos = metadata.len();
+                    }
+
+                    // Every ~2 s re-query tmux for the pane size.
+                    size_check_ticks += 1;
+                    if size_check_ticks >= 20 {
+                        size_check_ticks = 0;
+                        if let Ok(size) = self.tmux.pane_size(&target).await {
+                            if last_size != Some(size) {
+                                last_size = Some(size);
+                                out_tx.send(PaneEvent::Resize { cols: size.0, rows: size.1 }).await?;
+                            }
+                        }
                     }
                 }
 

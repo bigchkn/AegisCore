@@ -3,9 +3,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { Terminal } from './Terminal';
 
-// Minimal xterm mocks — we only care about fit() timing.
+// Minimal xterm mocks — we only care about fit() timing and resize() calls.
 const mockFit = vi.fn();
 const mockWrite = vi.fn();
+const mockResize = vi.fn();
 const mockDispose = vi.fn();
 const mockOnData = vi.fn(() => ({ dispose: vi.fn() }));
 
@@ -16,6 +17,7 @@ vi.mock('@xterm/xterm', () => ({
     dispose: mockDispose,
     onData: mockOnData,
     write: mockWrite,
+    resize: mockResize,
     cols: 80,
     rows: 24,
   })),
@@ -27,24 +29,31 @@ vi.mock('@xterm/addon-fit', () => ({
 
 vi.mock('@xterm/xterm/css/xterm.css', () => ({}));
 
-const stubWebSocket = () =>
-  vi.stubGlobal(
-    'WebSocket',
-    class {
-      onopen: (() => void) | null = null;
-      onclose: (() => void) | null = null;
-      onerror: (() => void) | null = null;
-      onmessage: ((e: { data: string }) => void) | null = null;
-      readyState = 1; // OPEN
-      send = vi.fn();
-      close = vi.fn(() => this.onclose?.());
-    } as any,
-  );
+let lastSocket: InstanceType<typeof MockWebSocket> | null = null;
+
+class MockWebSocket {
+  onopen: (() => void) | null = null;
+  onclose: (() => void) | null = null;
+  onerror: (() => void) | null = null;
+  onmessage: ((e: { data: string }) => void) | null = null;
+  readyState = 1; // OPEN
+  send = vi.fn();
+  close = vi.fn(() => this.onclose?.());
+  constructor() {
+    lastSocket = this;
+  }
+}
+
+const stubWebSocket = () => {
+  lastSocket = null;
+  vi.stubGlobal('WebSocket', MockWebSocket as any);
+};
 
 describe('Terminal', () => {
   beforeEach(() => {
     mockFit.mockClear();
     mockWrite.mockClear();
+    mockResize.mockClear();
     mockDispose.mockClear();
     mockOnData.mockClear();
     stubWebSocket();
@@ -81,6 +90,25 @@ describe('Terminal', () => {
     });
 
     expect(mockFit).toHaveBeenCalledTimes(1);
+  });
+
+  it('calls terminal.resize when a resize message arrives from the server', async () => {
+    vi.useFakeTimers();
+
+    act(() => {
+      render(<Terminal agentId="agent-1" />);
+    });
+
+    await act(async () => {
+      vi.runAllTimers();
+    });
+
+    // Simulate the server pushing a resize event.
+    act(() => {
+      lastSocket?.onmessage?.({ data: JSON.stringify({ type: 'resize', cols: 220, rows: 50 }) });
+    });
+
+    expect(mockResize).toHaveBeenCalledWith(220, 50);
   });
 
   it('creates a fresh terminal when agentId changes (pane reopen)', async () => {
