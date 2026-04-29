@@ -179,7 +179,7 @@ impl AegisRuntime {
     pub async fn start(&self) -> Result<()> {
         for (name, entry) in &self.config.agents {
             if entry.kind == aegis_core::AgentKind::Bastion {
-                self.dispatcher.spawn_bastion(name).await?;
+                self.dispatcher.spawn_bastion(name, None).await?;
             }
         }
         self.start_background_tasks();

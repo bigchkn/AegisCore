@@ -11,7 +11,7 @@ use aegis_core::{
 use aegis_providers::ProviderRegistry;
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use tracing::warn;
+use tracing::{error, warn};
 use uuid::Uuid;
 
 use crate::BackoffPolicy;
@@ -160,10 +160,19 @@ impl FailoverCoordinator {
         };
 
         let provider = self.providers.get(&next_provider)?;
-        let relaunched = self
+        let relaunched = match self
             .executor
             .relaunch_with_provider(&agent, &next_provider)
-            .await?;
+            .await
+        {
+            Ok(r) => r,
+            Err(e) => {
+                error!(agent_id = %agent.agent_id, error = %e, "failover relaunch failed");
+                self.clear_attempt(agent_id);
+                let _ = self.executor.mark_failed(agent_id, &e.to_string()).await;
+                return Ok(());
+            }
+        };
 
         if !self.recorder.log_path(relaunched.agent_id).exists() {
             warn!(

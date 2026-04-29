@@ -275,7 +275,7 @@ async fn dispatch_command(
                     .iter()
                     .any(|agent| agent.kind == AgentKind::Bastion && agent.name == role);
                 if !already_running {
-                    let agent = runtime.dispatcher.spawn_bastion(role).await?;
+                    let agent = runtime.dispatcher.spawn_bastion(role, None).await?;
                     return Ok(serde_json::json!([agent]));
                 }
             }

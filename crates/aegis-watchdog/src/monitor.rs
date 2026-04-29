@@ -13,7 +13,7 @@ use aegis_providers::ProviderRegistry;
 use aegis_tmux::{TmuxClient, TmuxTarget};
 use async_trait::async_trait;
 use tokio::sync::watch;
-use tracing::warn;
+use tracing::{error, warn};
 use uuid::Uuid;
 
 use crate::{FailoverCoordinator, FailoverExecutor, PatternMatcher};
@@ -184,7 +184,10 @@ impl Watchdog {
         let action = self.sink.on_event(event.clone());
         match action {
             WatchdogAction::InitiateFailover if self.config.failover_enabled => {
-                self.failover.initiate(event).await
+                if let Err(e) = self.failover.initiate(event).await {
+                    error!(error = %e, "failover coordination failed");
+                }
+                Ok(())
             }
             WatchdogAction::PauseAndNotify => {
                 if let Some(agent) = self.agents.get(event.agent_id())? {

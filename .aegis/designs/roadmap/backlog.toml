@@ -65,3 +65,11 @@ uid = "c830f64e-368b-4723-98d3-eccd1b21b0cf"
 task = "UI has issue where slight scroll provided on pane page when window is large enough to fit."
 task_type = "feature"
 status = "pending"
+
+[[tasks]]
+id = "B10"
+uid = "b8b1aa47-c1e8-4dd3-b4fd-10a09ef265b6"
+task = "Setup web-ui to refresh data frequently in background using timer based refresh"
+task_type = "maintenance"
+status = "pending"
+notes = "Key to prevent the user needing to refresh manually."

@@ -224,24 +224,28 @@ impl Dispatcher {
         })
     }
 
-    pub async fn spawn_bastion(&self, name: &str) -> Result<Agent> {
+    pub async fn spawn_bastion(&self, name: &str, override_trigger: Option<String>) -> Result<Agent> {
         let active = self.registry.list_active()?;
         if let Some(existing) = active
             .into_iter()
             .find(|a| a.kind == AgentKind::Bastion && a.role == name)
         {
-            if let Some(tmux) = &self.tmux {
-                let target = TmuxTarget::parse(&existing.tmux_target())?;
-                if tmux.pane_has_agent(&target).await.unwrap_or(false) {
-                    tracing::info!(agent_id = %existing.agent_id, role = %name, "re-using existing active bastion");
-                    return Ok(existing);
+            let force_restart = existing.status == AgentStatus::Cooling;
+            
+            if !force_restart {
+                if let Some(tmux) = &self.tmux {
+                    let target = TmuxTarget::parse(&existing.tmux_target())?;
+                    if tmux.pane_has_agent(&target).await.unwrap_or(false) {
+                        tracing::info!(agent_id = %existing.agent_id, role = %name, "re-using existing active bastion");
+                        return Ok(existing);
+                    }
                 }
             }
-            // Pane is dead (daemon restarted or process exited). Restart in-place:
+            // Pane is dead (daemon restarted or process exited) or agent is cooling. Restart in-place:
             // reuse the registry identity and tmux session, but seed the normal
             // bastion prompt instead of resuming a potentially broken provider session.
             tracing::info!(agent_id = %existing.agent_id, role = %name, "restarting bastion in-place with fresh prompt");
-            return self.restart_bastion_in_place(name, existing).await;
+            return self.restart_bastion_in_place(name, existing, override_trigger).await;
         }
 
         let mut spec = self.build_bastion_spec(name)?;
@@ -250,14 +254,20 @@ impl Dispatcher {
         let (session, window, pane) = self
             .prepare_tmux_window(agent_id, AgentKind::Bastion, name)
             .await?;
-        let plan = self.build_spawn_plan(spec, agent_id, session, window, pane)?;
+        let mut plan = self.build_spawn_plan(spec, agent_id, session, window, pane)?;
+        plan.override_trigger = override_trigger;
         self.launch_or_insert_plan(plan).await
     }
 
     /// Restart an existing bastion agent in-place: kill the old tmux session, open a fresh one
     /// with the same session name, and launch it like a new bastion. The agent_id and registry
     /// record are preserved so inboxes and references keep working.
-    async fn restart_bastion_in_place(&self, name: &str, agent: Agent) -> Result<Agent> {
+    async fn restart_bastion_in_place(
+        &self,
+        name: &str,
+        agent: Agent,
+        override_trigger: Option<String>,
+    ) -> Result<Agent> {
         let Some(tmux) = &self.tmux else {
             return Ok(agent);
         };
@@ -278,7 +288,8 @@ impl Dispatcher {
             })?;
         let pane_target = TmuxTarget::parse(&pane)?;
         tmux.harden_pane(&pane_target).await?;
-        let plan = self.build_bastion_restart_plan(name, &agent, pane)?;
+        let mut plan = self.build_bastion_restart_plan(name, &agent, pane)?;
+        plan.override_trigger = override_trigger;
         self.launch_existing_plan(plan).await
     }
 
@@ -289,6 +300,8 @@ impl Dispatcher {
         pane: String,
     ) -> Result<SpawnPlan> {
         let mut spec = self.build_bastion_spec(name)?;
+        spec.cli_provider = existing.cli_provider.clone();
+        spec.fallback_cascade = existing.fallback_cascade.clone();
         spec.resume_session = None;
         let mut plan = self.build_spawn_plan(
             spec,
@@ -493,11 +506,25 @@ impl Dispatcher {
     }
 
     async fn launch_or_insert_plan(&self, plan: SpawnPlan) -> Result<Agent> {
+        self.perform_launch(plan, true).await
+    }
+
+    async fn launch_existing_plan(&self, plan: SpawnPlan) -> Result<Agent> {
+        self.perform_launch(plan, false).await
+    }
+
+    async fn perform_launch(&self, plan: SpawnPlan, is_new: bool) -> Result<Agent> {
         self.write_sandbox_profile(&plan)?;
 
         if let Some(tmux) = &self.tmux {
             let target = TmuxTarget::parse(&plan.agent.tmux_target())?;
-            let agent = self.insert_starting_agent(plan.agent)?;
+            let agent = if is_new {
+                self.insert_starting_agent(plan.agent)?
+            } else {
+                AgentRegistry::update(self.registry.as_ref(), &plan.agent)?;
+                // Re-read to ensure we have any updates (like provider change)
+                self.require_agent(plan.agent.agent_id)?
+            };
             self.attach_recorder(&agent)?;
 
             // Write the initial prompt to a temp file and inject it via
@@ -570,92 +597,17 @@ impl Dispatcher {
 
             Ok(agent)
         } else {
-            let agent = self.insert_starting_agent(plan.agent)?;
-            self.attach_recorder(&agent)?;
-            self.activate_agent(agent)
-        }
-    }
-
-    async fn launch_existing_plan(&self, plan: SpawnPlan) -> Result<Agent> {
-        self.write_sandbox_profile(&plan)?;
-
-        if let Some(tmux) = &self.tmux {
-            let target = TmuxTarget::parse(&plan.agent.tmux_target())?;
-            let agent = plan.agent.clone();
-            AgentRegistry::update(self.registry.as_ref(), &agent)?;
-            self.attach_recorder(&agent)?;
-
-            let sys_prompt_path =
-                std::env::temp_dir().join(format!("aegis_sysprompt_{}.txt", agent.agent_id));
-            std::fs::write(&sys_prompt_path, &plan.initial_prompt).map_err(|source| {
-                AegisError::StorageIo {
-                    path: sys_prompt_path.clone(),
-                    source,
-                }
-            })?;
-
-            let mut launch_cmd = plan.launch_command.clone();
-            let mut env_vars = vec![("AEGIS_AGENT_ID".to_string(), agent.agent_id.to_string())];
-            let provider = self.providers.get(&agent.cli_provider)?;
-
-            let trigger_text = if let Some(ot) = &plan.override_trigger {
-                ot.as_str()
-            } else if plan.is_resume {
-                "Continue where you left off."
+            let agent = if is_new {
+                self.insert_starting_agent(plan.agent)?
             } else {
-                "Begin."
+                AgentRegistry::update(self.registry.as_ref(), &plan.agent)?;
+                self.require_agent(plan.agent.agent_id)?
             };
-
-            if let Some(i_flag) = provider.interactive_flag() {
-                launch_cmd.push(i_flag.to_string());
-            }
-
-            match provider.system_prompt_mechanism() {
-                aegis_core::SystemPromptMechanism::Flag { arg } => {
-                    launch_cmd.push(arg);
-                    launch_cmd.push(sys_prompt_path.to_string_lossy().into_owned());
-                }
-                aegis_core::SystemPromptMechanism::Env { var } => {
-                    env_vars.push((var, sys_prompt_path.to_string_lossy().into_owned()));
-                }
-            }
-
-            let launch_shell =
-                launch_shell_command_with_env(&agent.worktree_path, &launch_cmd, &env_vars);
-            let launch_script = write_launch_script("launch", agent.agent_id, &launch_shell)?;
-            let launch_script_cmd = shell_command(&[
-                "/bin/sh".to_string(),
-                launch_script.to_string_lossy().into_owned(),
-            ]);
-            append_tmux_send(&agent.log_path, &launch_script_cmd)?;
-
-            // Ensure the shell is ready and the line is clear
-            sleep(Duration::from_millis(1000)).await;
-            let _ = tmux.send_key(&target, "C-u").await;
-
-            let launch_script_input = format!("{launch_script_cmd}\n");
-            tmux.send_raw_input(&target, launch_script_input.as_bytes())
-                .await?;
-            let agent = self.activate_agent(agent)?;
-            if matches!(provider.interaction_model(), InteractionModel::InjectedTui) {
-                self.submit_interactive_prompt(
-                    &agent,
-                    provider,
-                    &target,
-                    trigger_text,
-                    plan.startup_delay_ms,
-                )
-                .await?;
-            }
-
-            Ok(agent)
-        } else {
-            let agent = plan.agent;
-            AgentRegistry::update(self.registry.as_ref(), &agent)?;
             self.attach_recorder(&agent)?;
             self.activate_agent(agent)
         }
     }
+
 
     async fn submit_interactive_prompt(
         &self,
@@ -815,45 +767,7 @@ impl Dispatcher {
             }
         }
 
-        let terminal_context = self.capture_failover_context(agent_id)?;
-        let task_description = match agent.task_id {
-            Some(task_id) => {
-                TaskRegistry::get(self.registry.as_ref(), task_id)?.map(|task| task.description)
-            }
-            None => None,
-        };
-
-        let system_prompt = self.resolve_agent_system_prompt(&agent)?;
-
-        let context = FailoverContext {
-            agent_id,
-            task_id: agent.task_id,
-            previous_provider: agent.cli_provider.clone(),
-            system_prompt,
-            terminal_context,
-            task_description: task_description.clone(),
-            worktree_path: agent.worktree_path.clone(),
-            role: agent.role.clone(),
-        };
-        
-        let next_provider = self.providers.get(&next_provider_name)?;
-        let recovery_prompt = next_provider.failover_handoff_prompt(&context);
-
-        // Prepare unified spawn plan
-        let mut spec = spec_from_agent(&agent);
-        spec.cli_provider = next_provider_name.clone();
-        spec.task_description = task_description;
-        
-        // We reuse the existing tmux session name but will replace it
-        let (session, window, pane) = self
-            .prepare_tmux_window(agent.agent_id, agent.kind.clone(), &agent.role)
-            .await?;
-            
-        let mut plan = self.build_spawn_plan(spec, agent.agent_id, session, window, pane)?;
-        plan.override_trigger = Some(recovery_prompt);
-
-        // Use unified launch logic
-        let updated = self.launch_or_insert_plan(plan).await?;
+        let updated = self.perform_failover_relaunch(&agent, &next_provider_name).await?;
         
         self.events.publish(AegisEvent::FailoverInitiated {
             agent_id: updated.agent_id,
@@ -862,6 +776,89 @@ impl Dispatcher {
         });
 
         Ok(updated)
+    }
+
+    async fn perform_failover_relaunch(
+        &self,
+        agent: &Agent,
+        next_provider_name: &str,
+    ) -> Result<Agent> {
+        let terminal_context = self.capture_failover_context(agent.agent_id)?;
+        let task_description = match agent.task_id {
+            Some(tid) => TaskRegistry::get(self.registry.as_ref(), tid)?
+                .map(|task| task.description),
+            None => None,
+        };
+
+        let system_prompt = self.resolve_agent_system_prompt(agent)?;
+        let context = FailoverContext {
+            agent_id: agent.agent_id,
+            task_id: agent.task_id,
+            previous_provider: agent.cli_provider.clone(),
+            system_prompt,
+            terminal_context,
+            task_description: task_description.clone(),
+            worktree_path: agent.worktree_path.clone(),
+            role: agent.role.clone(),
+        };
+
+        let next_provider = self.providers.get(next_provider_name)?;
+        let recovery_prompt = next_provider.failover_handoff_prompt(&context);
+
+        // Drastic simplification: update registry with new provider and then use 
+        // standard spawn paths which now all use prepare_tmux_window (standardized).
+        AgentRegistry::update_provider(self.registry.as_ref(), agent.agent_id, next_provider_name)?;
+        
+        match agent.kind {
+            AgentKind::Bastion => {
+                // spawn_bastion is idempotent and handles re-starting dead sessions.
+                self.spawn_bastion(&agent.name, Some(recovery_prompt)).await
+            }
+            AgentKind::Splinter => {
+                // For splinters, we need to relaunch with the existing task and worktree.
+                let task = match agent.task_id {
+                    Some(tid) => TaskRegistry::get(self.registry.as_ref(), tid)?
+                        .ok_or_else(|| AegisError::Config {
+                            field: "agent.task_id".to_string(),
+                            reason: "task not found for splinter".to_string(),
+                        })?,
+                    None => return Err(AegisError::Config {
+                        field: "agent.task_id".to_string(),
+                        reason: "splinter missing task_id".to_string(),
+                    }),
+                };
+                self.relaunch_splinter(agent.agent_id, &agent.role, &task, agent.parent_id, Some(recovery_prompt)).await
+            }
+        }
+    }
+
+    async fn relaunch_splinter(
+        &self,
+        agent_id: Uuid,
+        role: &str,
+        task: &Task,
+        parent_id: Option<Uuid>,
+        override_trigger: Option<String>,
+    ) -> Result<Agent> {
+        tracing::info!(%agent_id, task_id = %task.task_id, %role, "relaunching splinter");
+        
+        // Re-read agent to get the already-updated cli_provider from perform_failover_relaunch
+        let existing_agent = self.require_agent(agent_id)?;
+        
+        let mut spec = self.build_splinter_spec(role, task, parent_id);
+        spec.cli_provider = existing_agent.cli_provider.clone();
+        spec.fallback_cascade = existing_agent.fallback_cascade.clone();
+
+        // Standard tmux preparation (kills session, waits for shell)
+        let (session, window, pane) = self
+            .prepare_tmux_window(agent_id, AgentKind::Splinter, role)
+            .await?;
+
+        let mut plan = self.build_spawn_plan(spec, agent_id, session, window, pane)?;
+        plan.override_trigger = override_trigger;
+
+        // relaunch_splinter uses perform_launch(..., false) to UPDATE the existing record
+        self.perform_launch(plan, false).await
     }
 
     fn next_provider_name(&self, agent: &Agent) -> Result<String> {
@@ -898,6 +895,7 @@ impl Dispatcher {
         self.ensure_transition(&agent.status, &AgentStatus::Reporting)?;
         self.perform_termination(agent).await
     }
+
 
     pub async fn process_receipt(&self, agent_id: Uuid) -> Result<()> {
         let agent = self.require_agent(agent_id)?;
@@ -957,6 +955,16 @@ impl Dispatcher {
                 self.storage.worktrees_dir(),
             );
             let _ = git.prune_for_agent(agent_id).await;
+        }
+
+        // Fix "Ghost Tasks": If the agent has an assigned task that is still Active,
+        // mark it as Failed because the agent is being terminated without a receipt.
+        if let Some(task_id) = agent.task_id {
+            if let Ok(Some(task)) = TaskRegistry::get(self.registry.as_ref(), task_id) {
+                if task.status == TaskStatus::Active {
+                    let _ = TaskRegistry::update_status(self.registry.as_ref(), task_id, TaskStatus::Failed);
+                }
+            }
         }
 
         AgentRegistry::update_status(
@@ -1085,45 +1093,6 @@ impl Dispatcher {
         Ok(())
     }
 
-    async fn replace_tmux_session_for_relaunch(&self, mut agent: Agent) -> Result<Agent> {
-        let Some(tmux) = &self.tmux else {
-            return Ok(agent);
-        };
-
-        if let Ok(Some(current)) = AgentRegistry::get(self.registry.as_ref(), agent.agent_id) {
-            agent.status = current.status;
-        }
-
-        // Try to kill/new session, but ignore errors if session doesn't exist or tmux fails
-        let _ = tmux.kill_session(&agent.tmux_session).await;
-        let _ = tmux.new_session(&agent.tmux_session).await;
-
-        let window_target_str = format!("{}:", agent.tmux_session);
-        if let Ok(window_target) = TmuxTarget::parse(&window_target_str) {
-            let panes = match tmux.list_panes(&window_target).await {
-                Ok(p) => p,
-                Err(e) => {
-                    tracing::warn!(%e, target = %window_target_str, "failed to list panes for relaunch");
-                    Vec::new()
-                }
-            };
-
-            if let Some(pane) = panes.into_iter().next() {
-                if let Ok(pane_target) = TmuxTarget::parse(&pane) {
-                    let _ = tmux.harden_pane(&pane_target).await;
-                    let _ = self.wait_for_shell(&pane_target).await;
-                }
-                agent.tmux_pane = pane;
-            }
-        }
-
-        agent.tmux_window = 0;
-        agent.updated_at = Utc::now();
-        let _ = AgentRegistry::update(self.registry.as_ref(), &agent);
-        let _ = self.attach_recorder(&agent);
-        Ok(agent)
-    }
-
     fn resolve_agent_system_prompt(&self, agent: &Agent) -> Result<String> {
         let (prompt_type, role_override) = match agent.kind {
             AgentKind::Bastion => {
@@ -1174,134 +1143,16 @@ impl FailoverExecutor for Dispatcher {
     }
 
     async fn relaunch_with_provider(&self, agent: &Agent, provider_name: &str) -> Result<Agent> {
-        let provider = self.providers.get(provider_name)?;
-        let provider_command = provider.spawn_command(&agent.worktree_path, None, None);
-        let mut relaunched_agent = agent.clone();
-        relaunched_agent.cli_provider = provider_name.to_string();
-        let relaunched_agent = self
-            .replace_tmux_session_for_relaunch(relaunched_agent)
-            .await?;
-
-        let system_prompt = self.resolve_agent_system_prompt(&relaunched_agent)?;
-        let sys_prompt_path =
-            std::env::temp_dir().join(format!("aegis_sysprompt_{}.txt", relaunched_agent.agent_id));
-        std::fs::write(&sys_prompt_path, &system_prompt).map_err(|source| {
-            AegisError::StorageIo {
-                path: sys_prompt_path.clone(),
-                source,
-            }
-        })?;
-
-        let mut launch_command = Vec::new();
-        if !DISABLE_AGENT_SANDBOX {
-            if let Some(sandbox) = &self.sandbox {
-                launch_command.extend(sandbox.exec_prefix(&relaunched_agent.sandbox_profile));
-            }
-        }
-
-        let mut provider_parts = resolved_command_parts(
-            &provider_command,
-            &provider.config().binary,
-        );
-        let mut env_vars = vec![("AEGIS_AGENT_ID".to_string(), relaunched_agent.agent_id.to_string())];
-
-        if let Some(i_flag) = provider.interactive_flag() {
-            provider_parts.push(i_flag.to_string());
-        }
-
-        match provider.system_prompt_mechanism() {
-            aegis_core::SystemPromptMechanism::Flag { arg } => {
-                provider_parts.push(arg);
-                provider_parts.push(sys_prompt_path.to_string_lossy().into_owned());
-            }
-            aegis_core::SystemPromptMechanism::Env { var } => {
-                env_vars.push((var, sys_prompt_path.to_string_lossy().into_owned()));
-            }
-        }
-
-        launch_command.extend(provider_parts);
-
-        if let Some(tmux) = &self.tmux {
-            let target = TmuxTarget::parse(&relaunched_agent.tmux_target())?;
-            let launch_shell =
-                launch_shell_command_with_env(&relaunched_agent.worktree_path, &launch_command, &env_vars);
-            let launch_script =
-                write_launch_script("failover", relaunched_agent.agent_id, &launch_shell)?;
-            let launch_script_cmd = shell_command(&[
-                "/bin/sh".to_string(),
-                launch_script.to_string_lossy().into_owned(),
-            ]);
-            append_tmux_send(&relaunched_agent.log_path, &launch_script_cmd)?;
-
-            // Ensure the shell is ready and the line is clear
-            sleep(Duration::from_millis(500)).await;
-            tmux.send_key(&target, "C-u").await?;
-
-            let launch_script_input = format!("{launch_script_cmd}\n");
-            tmux.send_raw_input(&target, launch_script_input.as_bytes())
-                .await?;
-        }
-
-        AgentRegistry::update_provider(
-            self.registry.as_ref(),
-            relaunched_agent.agent_id,
-            provider_name,
-        )?;
-        let mut updated = self.require_agent(relaunched_agent.agent_id)?;
-        updated.cli_provider = provider_name.to_string();
-        updated.updated_at = Utc::now();
-
-        let terminal_context = self.capture_failover_context(updated.agent_id)?;
-        let task_description = match updated.task_id {
-            Some(task_id) => {
-                TaskRegistry::get(self.registry.as_ref(), task_id)?.map(|task| task.description)
-            }
-            None => None,
-        };
-
-        let context = FailoverContext {
-            agent_id: updated.agent_id,
-            task_id: updated.task_id,
-            previous_provider: agent.cli_provider.clone(),
-            system_prompt: system_prompt.clone(),
-            terminal_context,
-            task_description,
-            worktree_path: updated.worktree_path.clone(),
-            role: updated.role.clone(),
-        };
-        let recovery_prompt = provider.failover_handoff_prompt(&context);
-        self.inject_recovery(&updated, &recovery_prompt).await?;
-
-        self.events.publish(AegisEvent::FailoverInitiated {
-            agent_id: relaunched_agent.agent_id,
-            from_provider: agent.cli_provider.clone(),
-            to_provider: provider_name.to_string(),
-        });
-        Ok(updated)
+        self.perform_failover_relaunch(agent, provider_name).await
     }
 
-    async fn inject_recovery(&self, agent: &Agent, prompt: &str) -> Result<()> {
-        if self.tmux.is_none() {
-            return Ok(());
-        }
-
-        let provider = self.providers.get(&agent.cli_provider)?;
-
-        let target = TmuxTarget::parse(&agent.tmux_target())?;
-        if matches!(provider.interaction_model(), InteractionModel::InjectedTui) {
-            self.submit_interactive_prompt(
-                agent,
-                provider,
-                &target,
-                prompt,
-                provider.config().startup_delay_ms,
-            )
-            .await?;
-        }
+    async fn inject_recovery(&self, _agent: &Agent, _prompt: &str) -> Result<()> {
+        // Handled by unified relaunch in relaunch_with_provider via SpawnPlan.override_trigger
         Ok(())
     }
 
     async fn mark_failed(&self, agent_id: Uuid, reason: &str) -> Result<()> {
+
         let old_status = self
             .require_agent(agent_id)
             .map(|agent| agent.status)
@@ -1366,26 +1217,6 @@ struct CompletionReceipt {
     task_id: Uuid,
 }
 
-fn spec_from_agent(agent: &Agent) -> AgentSpec {
-    AgentSpec {
-        name: agent.name.clone(),
-        kind: agent.kind.clone(),
-        role: agent.role.clone(),
-        parent_id: agent.parent_id,
-        task_id: agent.task_id,
-        task_description: None, // Will be resolved if needed
-        cli_provider: agent.cli_provider.clone(),
-        fallback_cascade: agent.fallback_cascade.clone(),
-        system_prompt: None,
-        inline_prompt: None,
-        worktree_override: Some(agent.worktree_path.clone()),
-        sandbox: SandboxPolicy::default(), // Will be resolved by build_spawn_plan from config
-        auto_cleanup: false,
-        model_override: None,
-        resume_session: None,
-    }
-}
-
 fn spec_from_agent_entry(
     name: &str,
     entry: &AgentEntry,
@@ -1438,6 +1269,14 @@ fn shell_command(parts: &[String]) -> String {
         .map(|part| shell_quote(part))
         .collect::<Vec<_>>()
         .join(" ")
+}
+
+fn launch_shell_command(worktree_path: &std::path::Path, parts: &[String]) -> String {
+    format!(
+        "cd {} && {}",
+        shell_quote(&worktree_path.to_string_lossy()),
+        shell_command(parts)
+    )
 }
 
 fn launch_shell_command_with_env(
