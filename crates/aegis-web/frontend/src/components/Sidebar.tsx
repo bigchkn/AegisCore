@@ -1,13 +1,13 @@
 import { NavLink, useLocation } from 'react-router-dom';
-import { 
-  Drawer, 
-  List, 
-  ListItem, 
-  ListItemIcon, 
-  ListItemText, 
+import {
+  Drawer,
+  List,
+  ListItem,
+  ListItemIcon,
+  ListItemText,
   ListItemButton,
-  Typography, 
-  Divider, 
+  Typography,
+  Divider,
   Box,
   Tooltip
 } from '@mui/material';
@@ -19,7 +19,6 @@ import {
   RssFeed as ChannelIcon,
   Timeline as TaskflowIcon,
   HelpOutlined as ClarificationIcon,
-  Folder as ProjectIcon,
   ChevronLeft as CollapseIcon,
   Menu as ExpandIcon
 } from '@mui/icons-material';
@@ -44,8 +43,6 @@ const navItems: Array<{ id: ActiveView; label: string; icon: React.ReactNode }> 
 export function Sidebar() {
   const location = useLocation();
   const dispatch = useAppDispatch();
-  const projects = useAppSelector((state) => state.projects.items);
-  const projectsLoading = useAppSelector((state) => state.projects.loading);
   const activeProjectId = useAppSelector((state) => state.ui.activeProjectId);
   const open = useAppSelector((state) => state.ui.sidebarOpen);
   const currentAgentId = agentIdFromLocation(location.pathname, location.search);
@@ -158,73 +155,6 @@ export function Sidebar() {
         })}
       </List>
 
-      <Divider sx={{ my: 1 }} />
-
-      <List sx={{ px: 1 }}>
-        <Typography 
-          variant="overline" 
-          sx={{ 
-            px: 2, 
-            display: open ? 'block' : 'none',
-            color: 'text.secondary',
-            fontWeight: 'bold'
-          }}
-        >
-          Projects
-        </Typography>
-        {projectsLoading && open && (
-          <ListItem sx={{ px: 2 }}>
-            <Typography variant="caption" color="text.secondary">Loading...</Typography>
-          </ListItem>
-        )}
-        {projects.map((project) => {
-          const isProjectActive = project.id === activeProjectId;
-          const name = projectName(project.root_path);
-          return (
-            <Tooltip key={project.id} title={!open ? name : ''} placement="right">
-              <ListItem disablePadding sx={{ display: 'block', mb: 0.5 }}>
-                <ListItemButton
-                  component={NavLink}
-                  to={`/projects/${project.id}`}
-                  sx={{
-                    minHeight: 48,
-                    justifyContent: open ? 'initial' : 'center',
-                    px: 2.5,
-                    borderRadius: 2,
-                    borderLeft: isProjectActive ? '3px solid' : '3px solid transparent',
-                    borderColor: 'primary.main',
-                    backgroundColor: isProjectActive ? 'rgba(156, 39, 176, 0.08)' : 'transparent',
-                  }}
-                >
-                  <ListItemIcon
-                    sx={{
-                      minWidth: 0,
-                      mr: open ? 2 : 'auto',
-                      justifyContent: 'center',
-                      color: isProjectActive ? 'primary.main' : 'inherit'
-                    }}
-                  >
-                    <ProjectIcon />
-                  </ListItemIcon>
-                  <ListItemText 
-                    sx={{ opacity: open ? 1 : 0 }}
-                    primary={
-                      <Typography variant="body2" noWrap sx={{ fontWeight: isProjectActive ? 600 : 400, fontSize: '0.85rem' }}>
-                        {name}
-                      </Typography>
-                    }
-                  />
-                </ListItemButton>
-              </ListItem>
-            </Tooltip>
-          );
-        })}
-      </List>
     </Drawer>
   );
-}
-
-function projectName(path: string) {
-  const parts = path.split('/').filter(Boolean);
-  return parts.at(-1) ?? path;
 }

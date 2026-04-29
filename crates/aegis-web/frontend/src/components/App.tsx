@@ -1,18 +1,22 @@
 import { useEffect } from 'react';
-import { Routes, Route, Navigate, useLocation, useParams } from 'react-router-dom';
+import { Routes, Route, Navigate, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { Toaster } from 'sonner';
-import { 
-  Box, 
-  AppBar, 
-  Toolbar, 
-  Typography, 
+import {
+  Box,
+  AppBar,
+  Toolbar,
+  Typography,
   Chip,
   Container,
-  Paper
+  Paper,
+  Select,
+  MenuItem,
+  Tooltip,
 } from '@mui/material';
+import { Folder as FolderIcon } from '@mui/icons-material';
 
 import { fetchProjectData, fetchProjects } from '../api/thunks';
-import { setActiveProject, toggleSidebar } from '../store/uiSlice';
+import { setActiveProject } from '../store/uiSlice';
 import { useAppDispatch, useAppSelector } from '../store/hooks';
 import { agentRoute } from '../lib/agentRoutes';
 import { AgentsView } from '../views/AgentsView';
@@ -27,6 +31,7 @@ import { Sidebar } from './Sidebar';
 export function App() {
   const dispatch = useAppDispatch();
   const location = useLocation();
+  const navigate = useNavigate();
   const activeProjectId = useAppSelector((state) => state.ui.activeProjectId);
   const connectionState = useAppSelector((state) => state.ui.connectionState);
   const sidebarOpen = useAppSelector((state) => state.ui.sidebarOpen);
@@ -91,18 +96,54 @@ export function App() {
           }}
         >
           <Toolbar>
-            <Box sx={{ flexGrow: 1 }}>
-              <Typography variant="h6" noWrap component="div" sx={{ fontWeight: 600 }}>
-                {titleForView(activeViewPath)}
-              </Typography>
-              <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block', mt: -0.5 }}>
-                {activeProject ? activeProject.root_path : 'No active project'}
-              </Typography>
-            </Box>
+            <Typography variant="h6" noWrap component="div" sx={{ fontWeight: 600, mr: 2 }}>
+              {titleForView(activeViewPath)}
+            </Typography>
 
-            <Chip 
-              label={connectionState} 
-              size="small" 
+            {projects.length > 0 && (
+              <Tooltip title={activeProject?.root_path ?? ''}>
+                <Select
+                  value={activeProjectId ?? ''}
+                  onChange={(e) => {
+                    const id = e.target.value;
+                    dispatch(setActiveProject(id));
+                    navigate(`/projects/${id}`);
+                  }}
+                  size="small"
+                  displayEmpty
+                  startAdornment={<FolderIcon fontSize="small" sx={{ mr: 0.5, color: 'text.secondary' }} />}
+                  sx={{
+                    fontSize: '0.85rem',
+                    maxWidth: 320,
+                    '& .MuiOutlinedInput-notchedOutline': { borderColor: 'divider' },
+                  }}
+                  renderValue={(selected) => {
+                    const p = projects.find((proj) => proj.id === selected);
+                    if (!p) return 'No project';
+                    return p.name ?? p.root_path;
+                  }}
+                >
+                  {projects.map((project) => (
+                    <MenuItem key={project.id} value={project.id}>
+                      <Box>
+                        <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                          {project.name ?? lastPathSegment(project.root_path)}
+                        </Typography>
+                        <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                          {project.root_path}
+                        </Typography>
+                      </Box>
+                    </MenuItem>
+                  ))}
+                </Select>
+              </Tooltip>
+            )}
+
+            <Box sx={{ flexGrow: 1 }} />
+
+            <Chip
+              label={connectionState}
+              size="small"
               color={connectionState === 'connected' ? 'success' : 'warning'}
               variant="outlined"
               sx={{ fontWeight: 'bold', textTransform: 'uppercase', fontSize: '0.65rem' }}
@@ -185,6 +226,11 @@ function ProjectRoutes() {
       <Route path="*" element={<Navigate to="agents" replace />} />
     </Routes>
   );
+}
+
+function lastPathSegment(path: string): string {
+  const parts = path.split('/').filter(Boolean);
+  return parts.at(-1) ?? path;
 }
 
 function titleForView(view: string) {
