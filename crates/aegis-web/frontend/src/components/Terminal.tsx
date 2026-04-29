@@ -113,9 +113,20 @@ export function Terminal({
 
     window.addEventListener('resize', onResize);
 
+    const resizeObserver = new ResizeObserver(() => {
+      if (!active) return;
+      fitAddon.fit();
+      const socket = socketRef.current;
+      if (socket && socket.readyState === WebSocket.OPEN) {
+        sendResize(socket, terminal.cols, terminal.rows);
+      }
+    });
+    resizeObserver.observe(containerRef.current);
+
     return () => {
       active = false;
       cancelAnimationFrame(rafId);
+      resizeObserver.disconnect();
       window.removeEventListener('resize', onResize);
       dataSubscription.dispose();
       if (reconnectTimerRef.current !== null) {

@@ -48,6 +48,13 @@ describe('Terminal', () => {
     mockDispose.mockClear();
     mockOnData.mockClear();
     stubWebSocket();
+    vi.stubGlobal(
+      'ResizeObserver',
+      class {
+        observe = vi.fn();
+        disconnect = vi.fn();
+      },
+    );
   });
 
   afterEach(() => {
