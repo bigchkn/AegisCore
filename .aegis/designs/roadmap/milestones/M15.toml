@@ -2,27 +2,39 @@ id = 15
 name = "Web Agent Controls"
 status = "done"
 lld = "lld/web-agents.md"
+depends_on = []
 
 [[tasks]]
 id = "15.4"
 uid = "104532ff-215b-44c4-9e1c-7f35ff0fa3f6"
 task = "Add Vitest coverage for web agent spawn/create flows"
+task_type = "feature"
 status = "done"
 
 [[tasks]]
 id = "15.1"
 uid = "cc156b90-1295-4aea-b432-8ac16c687b7f"
 task = "Write lld/web-agents.md"
+task_type = "feature"
 status = "done"
 
 [[tasks]]
 id = "15.2"
 uid = "4f09c967-0097-448b-b1f8-f344f29af0af"
 task = "Add web agent create/spawn controls in AgentsView"
+task_type = "feature"
 status = "done"
 
 [[tasks]]
 id = "15.3"
 uid = "4eddfb55-e777-4b72-b922-eb0a39772164"
 task = "Wire spawn/create-agent form state and API thunk flow"
+task_type = "feature"
+status = "done"
+
+[[tasks]]
+id = "15.5"
+uid = "059eb629-4264-48fe-877a-f852e6d435be"
+task = "In the new task pop-up and other savable modals put cancel to the left of the save button."
+task_type = "maintenance"
 status = "done"

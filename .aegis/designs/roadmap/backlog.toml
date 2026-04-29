@@ -88,3 +88,18 @@ task = "Force pane to render an emulation of terminal in web-ui"
 task_type = "feature"
 status = "done"
 notes = "Current approach causes odd overlapping text. Instead we should emulate a terminal. Search libraries online if needed."
+
+[[tasks]]
+id = "B13"
+uid = "08ef0b19-ae7e-4ae8-9c02-d015022abb3f"
+task = "Force the terminal size on site to exactly match tmux so that it renders properly"
+task_type = "maintenance"
+status = "done"
+
+[[tasks]]
+id = "B14"
+uid = "f98e41bc-1ea1-454c-8b0f-8d8a9195582c"
+task = "In the new task pop-up and other savable modals put cancel to the left of the save button."
+task_type = "feature"
+status = "done"
+notes = "Also default the Target to Backlog"

@@ -15,6 +15,11 @@ AGENTS.md
 CLAUDE.md
 .cursor/
 .mcp.json
+.kiro/
+.opencode.json
+.windsurfrules
+GEMINI.md
+
 
 # macOS
 .DS_Store
