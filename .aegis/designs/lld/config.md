@@ -399,6 +399,9 @@ binary = "gemini"
 [providers.codex]
 binary = "codex"
 
+[providers.dirac]
+binary = "dirac"
+
 [providers.ollama]
 binary = "ollama"
 model = "gemma3"
@@ -411,7 +414,7 @@ allowed_chat_ids = []
 type = "bastion"
 role = "architect"
 cli_provider = "claude-code"
-fallback_cascade = ["gemini-cli", "ollama"]
+fallback_cascade = ["gemini-cli", "codex", "dirac", "ollama"]
 # system_prompt = ".aegis/prompts/system/architect.md"
 
 [agent.architect.sandbox]
@@ -419,7 +422,7 @@ network = "outbound"
 
 [splinter_defaults]
 cli_provider = "claude-code"
-fallback_cascade = ["gemini-cli", "ollama"]
+fallback_cascade = ["gemini-cli", "codex", "dirac", "ollama"]
 auto_cleanup = true
 ```
 
@@ -440,6 +443,9 @@ binary = "gemini"
 [providers.codex]
 binary = "codex"
 
+[providers.dirac]
+binary = "dirac"
+
 [providers.ollama]
 binary = "ollama"
 model = "gemma3"
@@ -453,7 +459,7 @@ network = "outbound"
 
 [splinter_defaults]
 cli_provider = "claude-code"
-fallback_cascade = ["gemini-cli", "ollama"]
+fallback_cascade = ["gemini-cli", "codex", "dirac", "ollama"]
 auto_cleanup = true
 ```
 

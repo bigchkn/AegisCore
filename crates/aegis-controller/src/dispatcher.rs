@@ -590,6 +590,7 @@ impl Dispatcher {
                 plan.launch_command.clone(),
                 env_vars,
                 &sys_prompt_path,
+                &plan.initial_prompt,
             );
 
             let launch_shell =
@@ -1332,6 +1333,7 @@ fn prepare_provider_launch(
     mut launch_cmd: Vec<String>,
     mut env_vars: Vec<(String, String)>,
     sys_prompt_path: &std::path::Path,
+    initial_prompt: &str,
 ) -> (Vec<String>, Vec<(String, String)>) {
     // Injected-TUI providers receive the initial prompt after startup via tmux input.
     // Do not append CLI prompt flags like Gemini's `-i` here; those require an
@@ -1343,6 +1345,22 @@ fn prepare_provider_launch(
         }
         aegis_core::SystemPromptMechanism::Env { var } => {
             env_vars.push((var, sys_prompt_path.to_string_lossy().into_owned()));
+        }
+        aegis_core::SystemPromptMechanism::None => {}
+    }
+
+    if !matches!(provider.interaction_model(), InteractionModel::InjectedTui)
+        && !initial_prompt.is_empty()
+    {
+        match provider.initial_prompt_arg() {
+            Some(arg) if arg.contains("{prompt}") => {
+                launch_cmd.push(arg.replace("{prompt}", initial_prompt));
+            }
+            Some(arg) if !arg.is_empty() => {
+                launch_cmd.push(arg.to_string());
+                launch_cmd.push(initial_prompt.to_string());
+            }
+            _ => launch_cmd.push(initial_prompt.to_string()),
         }
     }
 
@@ -1752,6 +1770,7 @@ mod tests {
             vec!["gemini".to_string(), "--yolo".to_string()],
             env_vars,
             Path::new("/tmp/aegis-system.md"),
+            "Begin.",
         );
 
         assert!(!launch_cmd.iter().any(|part| part == "-i"));
@@ -1759,6 +1778,36 @@ mod tests {
         assert!(env_vars
             .iter()
             .any(|(key, value)| key == "GEMINI_SYSTEM_MD" && value == "/tmp/aegis-system.md"));
+    }
+
+    #[test]
+    fn prompt_arg_provider_receives_initial_prompt_positionally() {
+        let (dispatcher, _dir) = dispatcher();
+        let provider = dispatcher.providers.get("codex").unwrap();
+        let env_vars = vec![("AEGIS_AGENT_ID".to_string(), Uuid::nil().to_string())];
+
+        let (launch_cmd, env_vars) = prepare_provider_launch(
+            provider,
+            vec![
+                "codex".to_string(),
+                "--full-auto".to_string(),
+                "--no-alt-screen".to_string(),
+            ],
+            env_vars,
+            Path::new("/tmp/aegis-system.md"),
+            "Start this task.",
+        );
+
+        assert!(launch_cmd.iter().any(|part| part == "--full-auto"));
+        assert!(launch_cmd.iter().any(|part| part == "--no-alt-screen"));
+        assert_eq!(
+            launch_cmd.last().map(String::as_str),
+            Some("Start this task.")
+        );
+        assert!(!launch_cmd
+            .iter()
+            .any(|part| part == "--system-prompt-file" || part == "--append-system-prompt-file"));
+        assert!(!env_vars.iter().any(|(key, _)| key == "GEMINI_SYSTEM_MD"));
     }
 
     #[tokio::test]

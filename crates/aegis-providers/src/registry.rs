@@ -108,6 +108,7 @@ mod tests {
         assert!(manifest.providers.contains_key("claude-code"));
         assert!(manifest.providers.contains_key("gemini-cli"));
         assert!(manifest.providers.contains_key("codex"));
+        assert!(manifest.providers.contains_key("dirac"));
     }
 
     #[test]
@@ -146,7 +147,19 @@ mod tests {
         let args: Vec<_> = cmd.get_args().map(|a| a.to_str().unwrap()).collect();
 
         assert!(args.contains(&"--full-auto"));
-        assert!(!args.contains(&"--no-alt-screen"));
+        assert!(args.contains(&"--no-alt-screen"));
+    }
+
+    #[test]
+    fn test_dirac_auto_approve_flags() {
+        let cfg = mock_config();
+        let registry = ProviderRegistry::from_config(&cfg).unwrap();
+        let dirac = registry.get("dirac").unwrap();
+
+        let cmd = dirac.spawn_command(&PathBuf::from("/tmp"), None, None);
+        let args: Vec<_> = cmd.get_args().map(|a| a.to_str().unwrap()).collect();
+
+        assert!(args.contains(&"--auto-approve-all"));
     }
 
     #[test]
@@ -174,7 +187,31 @@ mod tests {
         assert_eq!(args[0], "resume");
         assert_eq!(args[1], "00000000-0000-0000-0000-000000000001");
         assert!(args.contains(&"--full-auto"));
-        assert!(!args.contains(&"--no-alt-screen"));
+        assert!(args.contains(&"--no-alt-screen"));
+    }
+
+    #[test]
+    fn test_dirac_resume_task_id_flag() {
+        let cfg = mock_config();
+        let registry = ProviderRegistry::from_config(&cfg).unwrap();
+        let dirac = registry.get("dirac").unwrap();
+        let session = aegis_core::provider::SessionRef {
+            provider: "dirac".into(),
+            session_id: Some("dirac-task-123".into()),
+            checkpoint: None,
+        };
+
+        assert_eq!(
+            dirac.resume_args(&session),
+            vec!["--taskId".to_string(), "dirac-task-123".to_string()]
+        );
+
+        let cmd = dirac.spawn_command(&PathBuf::from("/tmp"), Some(&session), None);
+        let args: Vec<_> = cmd.get_args().map(|a| a.to_str().unwrap()).collect();
+
+        let task_id_pos = args.iter().position(|a| *a == "--taskId").unwrap();
+        assert_eq!(args[task_id_pos + 1], "dirac-task-123");
+        assert!(args.contains(&"--auto-approve-all"));
     }
 
     #[test]
@@ -195,6 +232,10 @@ mod tests {
         assert!(codex.is_rate_limit_error("429 too many requests"));
         assert!(codex.is_auth_error("invalid api key"));
         assert!(codex.is_auth_error("not logged in"));
+
+        let dirac = registry.get("dirac").unwrap();
+        assert!(dirac.is_rate_limit_error("429 too many requests"));
+        assert!(dirac.is_auth_error("authentication failed"));
     }
 
     #[test]
@@ -213,6 +254,25 @@ mod tests {
         assert_eq!(
             registry.get("codex").unwrap().interaction_model(),
             aegis_core::InteractionModel::HeadlessIterative
+        );
+        assert_eq!(
+            registry.get("dirac").unwrap().interaction_model(),
+            aegis_core::InteractionModel::HeadlessIterative
+        );
+    }
+
+    #[test]
+    fn test_codex_and_dirac_do_not_use_system_prompt_transport() {
+        let cfg = mock_config();
+        let registry = ProviderRegistry::from_config(&cfg).unwrap();
+
+        assert_eq!(
+            registry.get("codex").unwrap().system_prompt_mechanism(),
+            aegis_core::SystemPromptMechanism::None
+        );
+        assert_eq!(
+            registry.get("dirac").unwrap().system_prompt_mechanism(),
+            aegis_core::SystemPromptMechanism::None
         );
     }
 

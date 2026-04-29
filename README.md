@@ -16,7 +16,7 @@ It coordinates a hierarchy of long-lived **Bastion** agents and ephemeral **Spli
 
 **Context indestructibility.** The Flight Recorder mirrors every agent's terminal I/O to an append-only log the moment it spawns. If a CLI hits a rate limit or crashes, the Watchdog captures the last known context and injects it into a failover agent without you lifting a finger.
 
-**CLI-agnostic.** AegisCore treats `claude-code`, `gemini-cli`, `codex`, and local `ollama` models as interchangeable providers behind a uniform interface. Failover cascades are user-defined in TOML — primary, fallback, and local fallback, in whatever order you prefer.
+**CLI-agnostic.** AegisCore treats `claude-code`, `gemini-cli`, `codex`, `dirac`, and local `ollama` models as interchangeable providers behind a uniform interface. Failover cascades are user-defined in TOML — primary, fallback, and local fallback, in whatever order you prefer.
 
 **Remote command and control.** A Telegram bridge gives you real-time push notifications (task complete, rate limit, failover, sandbox violation) and pull commands (`/status`, `/kill`, `/spawn`, `/logs`) from your phone.
 
@@ -60,6 +60,7 @@ Telegram Bot  ←→  AegisCore Controller (Rust)
 - `claude-code` (Anthropic)
 - `gemini-cli` (Google)
 - `codex` (OpenAI)
+- `dirac`
 - `ollama` (local models — unlimited, no API cap)
 
 All providers are configured in `aegis.toml`. Failover cascades are user-defined per agent role.

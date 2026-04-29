@@ -10,6 +10,8 @@ pub enum SystemPromptMechanism {
     Flag { arg: String },
     /// Pass via an environment variable (e.g. GEMINI_SYSTEM_MD)
     Env { var: String },
+    /// The provider has no separate system-prompt transport; pass the launch prompt normally.
+    None,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

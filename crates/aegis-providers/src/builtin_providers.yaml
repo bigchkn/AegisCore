@@ -37,7 +37,7 @@ providers:
 
   codex:
     binary: "codex"
-    auto_approve_flags: ["--full-auto"]
+    auto_approve_flags: ["--full-auto", "--no-alt-screen"]
     resume_mechanism: "subcommand"
     resume_command: "resume {session_id}"
     export_command: null
@@ -45,8 +45,23 @@ providers:
     interaction_model:
       type: "headless_iterative"
     system_prompt_mechanism:
-      type: "flag"
-      arg: "--system-prompt-file"
+      type: "none"
     error_patterns:
       rate_limit: ["rate limit", "re:\\b429\\b", "too many requests", "quota exceeded"]
       auth: ["401", "unauthorized", "invalid api key", "not logged in"]
+
+  dirac:
+    binary: "dirac"
+    auto_approve_flags: ["--auto-approve-all"]
+    resume_mechanism: "cli_flag"
+    resume_flag: "--taskId"
+    resume_command: null
+    export_command: null
+    model_flag: "--model"
+    interaction_model:
+      type: "headless_iterative"
+    system_prompt_mechanism:
+      type: "none"
+    error_patterns:
+      rate_limit: ["rate limit", "re:\\b429\\b", "too many requests", "quota exceeded"]
+      auth: ["401", "unauthorized", "invalid api key", "not logged in", "authentication failed"]

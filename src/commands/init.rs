@@ -44,13 +44,19 @@ resume_flag = "--resume"
 [providers.gemini-cli]
 binary = "gemini"
 
+[providers.codex]
+binary = "codex"
+
+[providers.dirac]
+binary = "dirac"
+
 [providers.ollama]
 binary = "ollama"
 model = "gemma3"
 
 [splinter_defaults]
 cli_provider = "claude-code"
-fallback_cascade = ["gemini-cli", "ollama"]
+fallback_cascade = ["gemini-cli", "codex", "dirac", "ollama"]
 auto_cleanup = true
 "#;
 

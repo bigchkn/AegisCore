@@ -1,6 +1,6 @@
 id = 41
 name = "Structured TUI Session Recording"
-status = "pending"
+status = "in-progress"
 lld = "lld/tui-session-recording.md"
 depends_on = []
 
@@ -24,3 +24,10 @@ uid = "a2497c42-0dc7-46c8-a0d4-e394b529a1b1"
 task = "Implement event-based recorder output/input/resize logging"
 task_type = "feature"
 status = "pending"
+
+[[tasks]]
+id = "41.4"
+uid = "9eb4df71-cb30-4311-8d06-159da579bb36"
+task = "Support Codex and Dirac provider launch contracts"
+task_type = "maintenance"
+status = "done"

@@ -61,14 +61,23 @@ providers:
 
   codex:
     binary: "codex"
-    auto_approve_flags: ["--full-auto"]
-    non_interactive_flags: ["--no-alt-screen"]
+    auto_approve_flags: ["--full-auto", "--no-alt-screen"]
     resume_mechanism: "subcommand"
     resume_command: "resume {session_id}"
     export_command: null
     error_patterns:
       rate_limit: ["rate limit", "429", "too many requests", "quota exceeded"]
       auth: ["401", "unauthorized", "invalid api key", "not logged in"]
+
+  dirac:
+    binary: "dirac"
+    auto_approve_flags: ["--auto-approve-all"]
+    resume_mechanism: "cli_flag"
+    resume_flag: "--taskId"
+    export_command: null
+    error_patterns:
+      rate_limit: ["rate limit", "429", "too many requests", "quota exceeded"]
+      auth: ["401", "unauthorized", "invalid api key", "not logged in", "authentication failed"]
 ```
 
 ---
@@ -121,5 +130,6 @@ Loads the internal manifest and user overrides, providing failover cascade resol
 | `test_gemini_unattended_flags` | Command includes `--yes` |
 | `test_codex_unattended_flags` | Command includes `--full-auto` and `--no-alt-screen` |
 | `test_codex_resume_subcommand` | Resume args render as `resume <session_id>` |
+| `test_dirac_resume_task_id_flag` | Resume args render as `--taskId <session_id>` |
 | `test_registry_binary_override` | User-provided `binary` takes precedence |
 | `test_error_pattern_matching_all` | Matches strings defined in manifest for all providers |

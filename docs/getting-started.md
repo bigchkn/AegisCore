@@ -7,7 +7,7 @@ AegisCore is an orchestration engine for autonomous AI CLI agents running in mac
 - **macOS (Darwin)**: Mandatory for `sandbox-exec`.
 - **tmux (≥ 3.0)**: Used for agent session management.
 - **git**: Required for project anchoring and versioning.
-- **AI CLI Providers**: You should have at least one supported provider installed (e.g., `claude-code`, `gemini-cli`).
+- **AI CLI Providers**: You should have at least one supported provider installed (e.g., `claude-code`, `gemini-cli`, `codex`, or `dirac`).
 
 ## Installation
 

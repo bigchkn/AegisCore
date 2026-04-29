@@ -41,7 +41,7 @@ status = "done"
 [milestones.M41]
 name = "Structured TUI Session Recording"
 path = "milestones/M41.toml"
-status = "pending"
+status = "in-progress"
 
 [milestones.M19]
 name = "Agent Design — Design Phase"
