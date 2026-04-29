@@ -1,6 +1,6 @@
 # AegisCore
 
-| Note : Software is still pre-release and not suitable to install yet.
+| Note : Software is still in a alpha state. Telegram is not implemented and aegis ui is not great. Sandboxing is causing some issues so disabled by feature flag pending further stabilization.
 
 **Hardened Orchestration. Shielded Intelligence. Absolute Control.**
 
