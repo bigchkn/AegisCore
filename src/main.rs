@@ -767,9 +767,7 @@ async fn dispatch(cli: Cli, printer: &Printer, client: &DaemonClient) -> Result<
                 WorktreeCommands::Merge { milestone_id } => {
                     commands::worktree::merge(&milestone_id, printer, client, &anchor).await
                 }
-                WorktreeCommands::List => {
-                    commands::worktree::list(printer, client, &anchor).await
-                }
+                WorktreeCommands::List => commands::worktree::list(printer, client, &anchor).await,
             }
         }
 

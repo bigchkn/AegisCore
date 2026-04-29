@@ -1,6 +1,8 @@
 use std::{path::PathBuf, sync::Arc};
 
-use aegis_core::{AgentRegistry, EffectiveConfig, Recorder, Result, SandboxProfile, StorageBackend};
+use aegis_core::{
+    AgentRegistry, EffectiveConfig, Recorder, Result, SandboxProfile, StorageBackend,
+};
 use aegis_providers::ProviderRegistry;
 use aegis_recorder::FlightRecorder;
 use aegis_sandbox::SeatbeltSandbox;

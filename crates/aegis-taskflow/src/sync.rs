@@ -800,14 +800,12 @@ impl TaskflowEngine {
         let mut index_lock = LockedFile::open_exclusive(&index_path)?;
         let mut index: ProjectIndex = index_lock.read_toml()?;
 
-        let milestone_id_num: u32 = id
-            .strip_prefix('M')
-            .unwrap_or(id)
-            .parse()
-            .map_err(|_| aegis_core::error::AegisError::ConfigValidation {
+        let milestone_id_num: u32 = id.strip_prefix('M').unwrap_or(id).parse().map_err(|_| {
+            aegis_core::error::AegisError::ConfigValidation {
                 field: "milestone_id".into(),
                 reason: "Milestone ID must be a number (optionally prefixed with 'M')".into(),
-            })?;
+            }
+        })?;
 
         let id_clean = id.strip_prefix('M').unwrap_or(id);
         let filename = format!("M{}.toml", id_clean);

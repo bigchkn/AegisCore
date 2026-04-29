@@ -225,14 +225,18 @@ impl Dispatcher {
         })
     }
 
-    pub async fn spawn_bastion(&self, name: &str, override_trigger: Option<String>) -> Result<Agent> {
+    pub async fn spawn_bastion(
+        &self,
+        name: &str,
+        override_trigger: Option<String>,
+    ) -> Result<Agent> {
         let active = self.registry.list_active()?;
         if let Some(existing) = active
             .into_iter()
             .find(|a| a.kind == AgentKind::Bastion && a.role == name)
         {
             let force_restart = existing.status == AgentStatus::Cooling;
-            
+
             if !force_restart {
                 if let Some(tmux) = &self.tmux {
                     let target = TmuxTarget::parse(&existing.tmux_target())?;
@@ -246,7 +250,9 @@ impl Dispatcher {
             // reuse the registry identity and tmux session, but seed the normal
             // bastion prompt instead of resuming a potentially broken provider session.
             tracing::info!(agent_id = %existing.agent_id, role = %name, "restarting bastion in-place with fresh prompt");
-            return self.restart_bastion_in_place(name, existing, override_trigger).await;
+            return self
+                .restart_bastion_in_place(name, existing, override_trigger)
+                .await;
         }
 
         let mut spec = self.build_bastion_spec(name)?;
@@ -491,10 +497,10 @@ impl Dispatcher {
         // In a new dedicated session, the first window is typically 0 and the first pane is %0.
         // We list panes to find the actual ID.
         let window_target = TmuxTarget::parse(&format!("{}:", session))?;
-        
+
         // Ensure a reasonable terminal size for TUIs
         let _ = tmux.resize_window(&window_target, 160, 50).await;
-        
+
         let pane = tmux
             .list_panes(&window_target)
             .await?
@@ -626,7 +632,6 @@ impl Dispatcher {
             self.activate_agent(agent)
         }
     }
-
 
     async fn submit_interactive_prompt(
         &self,
@@ -786,8 +791,10 @@ impl Dispatcher {
             }
         }
 
-        let updated = self.perform_failover_relaunch(&agent, &next_provider_name).await?;
-        
+        let updated = self
+            .perform_failover_relaunch(&agent, &next_provider_name)
+            .await?;
+
         self.events.publish(AegisEvent::FailoverInitiated {
             agent_id: updated.agent_id,
             from_provider: agent.cli_provider,
@@ -804,8 +811,9 @@ impl Dispatcher {
     ) -> Result<Agent> {
         let terminal_context = self.capture_failover_context(agent.agent_id)?;
         let task_description = match agent.task_id {
-            Some(tid) => TaskRegistry::get(self.registry.as_ref(), tid)?
-                .map(|task| task.description),
+            Some(tid) => {
+                TaskRegistry::get(self.registry.as_ref(), tid)?.map(|task| task.description)
+            }
             None => None,
         };
 
@@ -824,10 +832,10 @@ impl Dispatcher {
         let next_provider = self.providers.get(next_provider_name)?;
         let recovery_prompt = next_provider.failover_handoff_prompt(&context);
 
-        // Drastic simplification: update registry with new provider and then use 
+        // Drastic simplification: update registry with new provider and then use
         // standard spawn paths which now all use prepare_tmux_window (standardized).
         AgentRegistry::update_provider(self.registry.as_ref(), agent.agent_id, next_provider_name)?;
-        
+
         match agent.kind {
             AgentKind::Bastion => {
                 // spawn_bastion is idempotent and handles re-starting dead sessions.
@@ -836,17 +844,29 @@ impl Dispatcher {
             AgentKind::Splinter => {
                 // For splinters, we need to relaunch with the existing task and worktree.
                 let task = match agent.task_id {
-                    Some(tid) => TaskRegistry::get(self.registry.as_ref(), tid)?
-                        .ok_or_else(|| AegisError::Config {
+                    Some(tid) => {
+                        TaskRegistry::get(self.registry.as_ref(), tid)?.ok_or_else(|| {
+                            AegisError::Config {
+                                field: "agent.task_id".to_string(),
+                                reason: "task not found for splinter".to_string(),
+                            }
+                        })?
+                    }
+                    None => {
+                        return Err(AegisError::Config {
                             field: "agent.task_id".to_string(),
-                            reason: "task not found for splinter".to_string(),
-                        })?,
-                    None => return Err(AegisError::Config {
-                        field: "agent.task_id".to_string(),
-                        reason: "splinter missing task_id".to_string(),
-                    }),
+                            reason: "splinter missing task_id".to_string(),
+                        })
+                    }
                 };
-                self.relaunch_splinter(agent.agent_id, &agent.role, &task, agent.parent_id, Some(recovery_prompt)).await
+                self.relaunch_splinter(
+                    agent.agent_id,
+                    &agent.role,
+                    &task,
+                    agent.parent_id,
+                    Some(recovery_prompt),
+                )
+                .await
             }
         }
     }
@@ -860,10 +880,10 @@ impl Dispatcher {
         override_trigger: Option<String>,
     ) -> Result<Agent> {
         tracing::info!(%agent_id, task_id = %task.task_id, %role, "relaunching splinter");
-        
+
         // Re-read agent to get the already-updated cli_provider from perform_failover_relaunch
         let existing_agent = self.require_agent(agent_id)?;
-        
+
         let mut spec = self.build_splinter_spec(role, task, parent_id);
         spec.cli_provider = existing_agent.cli_provider.clone();
         spec.fallback_cascade = existing_agent.fallback_cascade.clone();
@@ -915,7 +935,6 @@ impl Dispatcher {
         self.perform_termination(agent).await
     }
 
-
     pub async fn process_receipt(&self, agent_id: Uuid) -> Result<()> {
         let agent = self.require_agent(agent_id)?;
         self.ensure_transition(&agent.status, &AgentStatus::Reporting)?;
@@ -936,11 +955,7 @@ impl Dispatcher {
         let receipt_path = self.receipt_path(task_id);
         if receipt_path.exists() {
             self.validate_receipt(task_id, &receipt_path)?;
-            TaskRegistry::complete(
-                self.registry.as_ref(),
-                task_id,
-                Some(receipt_path.clone()),
-            )?;
+            TaskRegistry::complete(self.registry.as_ref(), task_id, Some(receipt_path.clone()))?;
             self.events.publish(AegisEvent::TaskComplete {
                 task_id,
                 receipt_path: receipt_path.to_string_lossy().into_owned(),
@@ -981,16 +996,16 @@ impl Dispatcher {
         if let Some(task_id) = agent.task_id {
             if let Ok(Some(task)) = TaskRegistry::get(self.registry.as_ref(), task_id) {
                 if task.status == TaskStatus::Active {
-                    let _ = TaskRegistry::update_status(self.registry.as_ref(), task_id, TaskStatus::Failed);
+                    let _ = TaskRegistry::update_status(
+                        self.registry.as_ref(),
+                        task_id,
+                        TaskStatus::Failed,
+                    );
                 }
             }
         }
 
-        AgentRegistry::update_status(
-            self.registry.as_ref(),
-            agent_id,
-            AgentStatus::Terminated,
-        )?;
+        AgentRegistry::update_status(self.registry.as_ref(), agent_id, AgentStatus::Terminated)?;
         AgentRegistry::archive(self.registry.as_ref(), agent_id)?;
 
         self.events.publish(AegisEvent::AgentStatusChanged {
@@ -1102,7 +1117,8 @@ impl Dispatcher {
             if let Ok(bytes) = tmux.capture_pane(target, 1).await {
                 let out = String::from_utf8_lossy(&bytes);
                 // Common shell prompt markers
-                if out.contains('%') || out.contains('$') || out.contains('#') || out.contains('>') {
+                if out.contains('%') || out.contains('$') || out.contains('#') || out.contains('>')
+                {
                     return Ok(());
                 }
             }
@@ -1167,7 +1183,6 @@ impl FailoverExecutor for Dispatcher {
     }
 
     async fn mark_failed(&self, agent_id: Uuid, reason: &str) -> Result<()> {
-
         let old_status = self
             .require_agent(agent_id)
             .map(|agent| agent.status)
@@ -1743,8 +1758,7 @@ mod tests {
         assert!(launch_cmd.iter().any(|part| part == "--yolo"));
         assert!(env_vars
             .iter()
-            .any(|(key, value)| key == "GEMINI_SYSTEM_MD"
-                && value == "/tmp/aegis-system.md"));
+            .any(|(key, value)| key == "GEMINI_SYSTEM_MD" && value == "/tmp/aegis-system.md"));
     }
 
     #[tokio::test]

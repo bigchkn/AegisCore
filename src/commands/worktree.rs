@@ -1,4 +1,6 @@
-use crate::{anchoring::ProjectAnchor, client::DaemonClient, error::AegisCliError, output::Printer};
+use crate::{
+    anchoring::ProjectAnchor, client::DaemonClient, error::AegisCliError, output::Printer,
+};
 
 pub async fn create(
     milestone_id: &str,
@@ -20,7 +22,10 @@ pub async fn create(
     }
 
     let path = payload.get("path").and_then(|v| v.as_str()).unwrap_or("?");
-    let branch = payload.get("branch").and_then(|v| v.as_str()).unwrap_or("?");
+    let branch = payload
+        .get("branch")
+        .and_then(|v| v.as_str())
+        .unwrap_or("?");
     printer.line(&format!("Worktree created: {path}  branch={branch}"));
     Ok(())
 }
@@ -72,7 +77,10 @@ pub async fn list(
     println!("{:<12}  {}", "MILESTONE", "PATH");
     printer.separator();
     for entry in &arr {
-        let id = entry.get("milestone_id").and_then(|v| v.as_str()).unwrap_or("?");
+        let id = entry
+            .get("milestone_id")
+            .and_then(|v| v.as_str())
+            .unwrap_or("?");
         let path = entry.get("path").and_then(|v| v.as_str()).unwrap_or("?");
         println!("{:<12}  {}", id, path);
     }

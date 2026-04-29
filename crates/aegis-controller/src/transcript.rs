@@ -1,8 +1,4 @@
-use std::{
-    fs::OpenOptions,
-    io::Write,
-    path::Path,
-};
+use std::{fs::OpenOptions, io::Write, path::Path};
 
 use aegis_core::{AegisError, Result};
 

@@ -203,12 +203,12 @@ impl MessageRouter {
             TmuxTarget::parse(&agent.tmux_target()).map_err(|e| AegisError::IpcProtocol {
                 reason: e.to_string(),
             })?;
-        let pane = tmux
-            .capture_pane_plain(&target, 30)
-            .await
-            .map_err(|e| AegisError::IpcConnection {
-                source: std::io::Error::new(std::io::ErrorKind::Other, e.to_string()),
-            })?;
+        let pane =
+            tmux.capture_pane_plain(&target, 30)
+                .await
+                .map_err(|e| AegisError::IpcConnection {
+                    source: std::io::Error::new(std::io::ErrorKind::Other, e.to_string()),
+                })?;
         if !pane_looks_ready_for_nudge(&pane) {
             tracing::debug!(
                 agent_id = %agent.agent_id,

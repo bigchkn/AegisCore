@@ -3,8 +3,8 @@ use std::{
     path::Path,
 };
 
-use tracing::debug;
 use tokio::time::{sleep, Duration};
+use tracing::debug;
 
 use crate::{escape::escape_for_send_keys, TmuxError, TmuxTarget};
 
@@ -165,8 +165,14 @@ impl TmuxClient {
 
     /// Enable tmux options that reduce TUI interference for interactive panes.
     pub async fn harden_pane(&self, target: &TmuxTarget) -> Result<(), TmuxError> {
-        self.run_tmux(&["set-option", "-pt", target.as_str(), "allow-passthrough", "on"])
-            .await?;
+        self.run_tmux(&[
+            "set-option",
+            "-pt",
+            target.as_str(),
+            "allow-passthrough",
+            "on",
+        ])
+        .await?;
         self.run_tmux(&["set-option", "-pt", target.as_str(), "extended-keys", "on"])
             .await?;
         Ok(())
@@ -423,10 +429,7 @@ impl TmuxClient {
 
     /// Returns the name of the current foreground command in the pane
     /// (e.g. `"claude"`, `"gemini"`, `"zsh"`).
-    pub async fn pane_current_command(
-        &self,
-        target: &TmuxTarget,
-    ) -> Result<String, TmuxError> {
+    pub async fn pane_current_command(&self, target: &TmuxTarget) -> Result<String, TmuxError> {
         let out = self
             .run_tmux(&[
                 "display-message",

@@ -159,7 +159,10 @@ async fn clarify_list(
     State(state): State<HttpState>,
 ) -> std::result::Result<Json<serde_json::Value>, String> {
     let runtime = get_runtime(&state, id).await.map_err(|e| e.to_string())?;
-    let requests = runtime.commands().clarify_list().map_err(|e| e.to_string())?;
+    let requests = runtime
+        .commands()
+        .clarify_list()
+        .map_err(|e| e.to_string())?;
     Ok(Json(serde_json::to_value(requests).unwrap()))
 }
 
@@ -175,7 +178,9 @@ async fn clarify_answer(
         .get("request_id")
         .and_then(|v| v.as_str())
         .ok_or("Missing request_id")?;
-    let request_id = commands.clarify_resolve_request_id(request_id_raw).map_err(|e| e.to_string())?;
+    let request_id = commands
+        .clarify_resolve_request_id(request_id_raw)
+        .map_err(|e| e.to_string())?;
 
     let answer = payload
         .get("answer")

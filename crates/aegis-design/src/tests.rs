@@ -338,7 +338,10 @@ fn splinter_startup_contains_commit_step() {
     vars.insert("project_root".into(), "/tmp/project".into());
     vars.insert("task_description".into(), "Add feature X".into());
     vars.insert("task_id".into(), "5.1".into());
-    vars.insert("lld_path".into(), "/tmp/project/.aegis/designs/lld/x.md".into());
+    vars.insert(
+        "lld_path".into(),
+        "/tmp/project/.aegis/designs/lld/x.md".into(),
+    );
     vars.insert(
         "bastion_agent_id".into(),
         "00000000-0000-0000-0000-000000000002".into(),
@@ -364,10 +367,18 @@ fn bastion_loop_processes_two_milestones_sequence() {
     let rendered = DesignEngine::render(t, &vars).unwrap();
 
     // Startup must send the agent back to pick-next after each merge.
-    assert!(rendered.startup.as_deref().unwrap().contains("Return to Step 2"));
+    assert!(rendered
+        .startup
+        .as_deref()
+        .unwrap()
+        .contains("Return to Step 2"));
     // System prompt must describe the full loop (PICK → MERGE → LOOP).
     assert!(rendered.system_prompt.contains("LOOP"));
     assert!(rendered.system_prompt.contains("MERGE"));
     assert!(rendered.system_prompt.contains("PICK"));
-    assert!(rendered.startup.as_deref().unwrap().contains("Splinter agent ID"));
+    assert!(rendered
+        .startup
+        .as_deref()
+        .unwrap()
+        .contains("Splinter agent ID"));
 }

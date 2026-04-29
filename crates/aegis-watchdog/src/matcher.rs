@@ -179,7 +179,10 @@ mod tests {
             )
             .unwrap();
 
-        if let DetectedEvent::RateLimit { matched_pattern, .. } = event {
+        if let DetectedEvent::RateLimit {
+            matched_pattern, ..
+        } = event
+        {
             assert!(matched_pattern.contains("too many requests"));
             assert!(matched_pattern.contains("TOO MANY REQUESTS"));
         } else {
@@ -198,7 +201,10 @@ mod tests {
             .detect(Uuid::new_v4(), provider, "error: 429   TOO MANY requests")
             .unwrap();
 
-        if let DetectedEvent::RateLimit { matched_pattern, .. } = event {
+        if let DetectedEvent::RateLimit {
+            matched_pattern, ..
+        } = event
+        {
             assert!(matched_pattern.contains("re:429\\s+too\\s+many"));
             assert!(matched_pattern.contains("429   TOO MANY requests"));
         } else {

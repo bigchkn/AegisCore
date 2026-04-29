@@ -32,7 +32,7 @@ providers:
       type: "env"
       var: "GEMINI_SYSTEM_MD"
     error_patterns:
-      rate_limit: ["quota exceeded", "re:\\b429\\b"]
+      rate_limit: ["quota exceeded", "usage limit reached", "re:\\b429\\b"]
       auth: ["401", "permission denied"]
 
   codex:

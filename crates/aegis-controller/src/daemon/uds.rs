@@ -1340,7 +1340,11 @@ esac
         let runtimes: Arc<AsyncMutex<HashMap<Uuid, AegisRuntime>>> =
             Arc::new(AsyncMutex::new(HashMap::new()));
 
-        let start_req = request("session.start", Some(project.path()), serde_json::Value::Null);
+        let start_req = request(
+            "session.start",
+            Some(project.path()),
+            serde_json::Value::Null,
+        );
         let list_req = request("agents.list", Some(project.path()), serde_json::Value::Null);
 
         let start_task = tokio::spawn({

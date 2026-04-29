@@ -44,7 +44,6 @@ impl Provider for GenericProvider {
     }
 
     fn spawn_command(
-
         &self,
         worktree: &Path,
         session: Option<&SessionRef>,

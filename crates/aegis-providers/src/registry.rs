@@ -188,6 +188,7 @@ mod tests {
 
         let gemini = registry.get("gemini-cli").unwrap();
         assert!(gemini.is_rate_limit_error("quota exceeded"));
+        assert!(gemini.is_rate_limit_error("Usage limit reached"));
         assert!(gemini.is_auth_error("permission denied"));
 
         let codex = registry.get("codex").unwrap();

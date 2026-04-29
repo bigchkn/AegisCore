@@ -1,5 +1,5 @@
-use aegis_core::SystemPromptMechanism;
 use aegis_core::InteractionModel;
+use aegis_core::SystemPromptMechanism;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 

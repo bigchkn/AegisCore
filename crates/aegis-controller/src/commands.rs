@@ -121,8 +121,9 @@ impl ControllerCommands {
                 }
             }
             return Err(AegisError::IpcProtocol {
-                reason: "agent_id 'self' specified but AEGIS_AGENT_ID env var is missing or invalid"
-                    .to_string(),
+                reason:
+                    "agent_id 'self' specified but AEGIS_AGENT_ID env var is missing or invalid"
+                        .to_string(),
             });
         }
 
@@ -232,7 +233,8 @@ impl ControllerCommands {
             field: "taskflow".to_string(),
             reason: "Taskflow engine is not initialized".to_string(),
         })?;
-        let task_id = resolve_registry_task_id_for_assignment(self.registry.as_ref(), task_or_agent_id)?;
+        let task_id =
+            resolve_registry_task_id_for_assignment(self.registry.as_ref(), task_or_agent_id)?;
         tf.links().assign(roadmap_id.to_string(), task_id)
     }
 
@@ -484,7 +486,8 @@ mod tests {
         TaskRegistry::insert(registry.as_ref(), &task).unwrap();
         AgentRegistry::insert(registry.as_ref(), &splinter).unwrap();
 
-        let resolved = resolve_registry_task_id_for_assignment(registry.as_ref(), agent_id).unwrap();
+        let resolved =
+            resolve_registry_task_id_for_assignment(registry.as_ref(), agent_id).unwrap();
 
         assert_eq!(resolved, task_id);
     }
@@ -520,7 +523,12 @@ mod tests {
         }
     }
 
-    fn setup(root: &std::path::Path) -> (Arc<crate::registry::FileRegistry>, crate::messaging::MessageRouter) {
+    fn setup(
+        root: &std::path::Path,
+    ) -> (
+        Arc<crate::registry::FileRegistry>,
+        crate::messaging::MessageRouter,
+    ) {
         write_minimal_config(root);
         let storage = Arc::new(crate::storage::ProjectStorage::new(root.to_path_buf()));
         storage.ensure_layout().unwrap();
@@ -535,9 +543,20 @@ mod tests {
         let dir = tempdir().unwrap();
         let (registry, router) = setup(dir.path());
         let bastion_id = Uuid::parse_str("aaaaaaaa-0000-0000-0000-000000000001").unwrap();
-        AgentRegistry::insert(registry.as_ref(), &make_bastion(bastion_id, AgentStatus::Active)).unwrap();
+        AgentRegistry::insert(
+            registry.as_ref(),
+            &make_bastion(bastion_id, AgentStatus::Active),
+        )
+        .unwrap();
 
-        let count = notify_active_bastions(registry.as_ref(), &router, "roadmap_updated", "new milestone added").await.unwrap();
+        let count = notify_active_bastions(
+            registry.as_ref(),
+            &router,
+            "roadmap_updated",
+            "new milestone added",
+        )
+        .await
+        .unwrap();
 
         assert_eq!(count, 1);
         let inbox = router.inbox(&bastion_id.to_string()).unwrap();
@@ -550,9 +569,15 @@ mod tests {
         let dir = tempdir().unwrap();
         let (registry, router) = setup(dir.path());
         let bastion_id = Uuid::parse_str("aaaaaaaa-0000-0000-0000-000000000002").unwrap();
-        AgentRegistry::insert(registry.as_ref(), &make_bastion(bastion_id, AgentStatus::Terminated)).unwrap();
+        AgentRegistry::insert(
+            registry.as_ref(),
+            &make_bastion(bastion_id, AgentStatus::Terminated),
+        )
+        .unwrap();
 
-        let count = notify_active_bastions(registry.as_ref(), &router, "roadmap_updated", "").await.unwrap();
+        let count = notify_active_bastions(registry.as_ref(), &router, "roadmap_updated", "")
+            .await
+            .unwrap();
 
         assert_eq!(count, 0);
     }
@@ -566,7 +591,14 @@ mod tests {
         AgentRegistry::insert(registry.as_ref(), &make_bastion(b1, AgentStatus::Active)).unwrap();
         AgentRegistry::insert(registry.as_ref(), &make_bastion(b2, AgentStatus::Active)).unwrap();
 
-        let count = notify_active_bastions(registry.as_ref(), &router, "roadmap_updated", "two bastions").await.unwrap();
+        let count = notify_active_bastions(
+            registry.as_ref(),
+            &router,
+            "roadmap_updated",
+            "two bastions",
+        )
+        .await
+        .unwrap();
 
         assert_eq!(count, 2);
         assert_eq!(router.inbox(&b1.to_string()).unwrap().messages.len(), 1);
