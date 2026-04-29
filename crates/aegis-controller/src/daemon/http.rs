@@ -233,6 +233,8 @@ async fn dispatch_command(
         }
         "design.list" => {
             let registry = TemplateRegistry::load(&runtime.root_path);
+            let mut providers: Vec<_> = runtime.config.providers.keys().cloned().collect();
+            providers.sort();
             let templates: Vec<_> = registry
                 .list()
                 .into_iter()
@@ -252,7 +254,10 @@ async fn dispatch_command(
                     })
                 })
                 .collect();
-            Ok(Json(serde_json::json!({ "templates": templates })))
+            Ok(Json(serde_json::json!({
+                "providers": providers,
+                "templates": templates,
+            })))
         }
         "design.spawn_template" => {
             let name = params
@@ -266,6 +271,7 @@ async fn dispatch_command(
             let cli_vars = serde_json::from_value::<HashMap<String, String>>(vars_value)
                 .map_err(|e| e.to_string())?;
             let model_override = params.get("model").and_then(|v| v.as_str());
+            let provider_override = params.get("provider").and_then(|v| v.as_str());
 
             let registry = TemplateRegistry::load(&runtime.root_path);
             let resolved = registry.get(name).map_err(|e| e.to_string())?;
@@ -280,6 +286,12 @@ async fn dispatch_command(
                 DesignEngine::render(&resolved.template, &vars).map_err(|e| e.to_string())?;
             if let Some(model) = model_override {
                 rendered.model = Some(model.to_owned());
+            }
+            if let Some(provider) = provider_override {
+                if !runtime.config.providers.contains_key(provider) {
+                    return Err(format!("Unknown provider: {provider}"));
+                }
+                rendered.cli_provider = provider.to_owned();
             }
 
             let agent = commands

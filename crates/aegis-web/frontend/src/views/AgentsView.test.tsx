@@ -35,6 +35,8 @@ describe('AgentsView', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Spawn New Agent' }));
 
     expect(await screen.findByRole('heading', { name: 'Spawn Agent' })).toBeTruthy();
+    expect(screen.getByLabelText('Type')).toBeTruthy();
+    expect(screen.getByLabelText('Provider')).toBeTruthy();
     expect(await screen.findByLabelText('taskflow-implementer')).toBeTruthy();
     expect(screen.getByText('Implements one taskflow task.')).toBeTruthy();
   });
@@ -121,6 +123,7 @@ describe('AgentsView', () => {
                 bastion_agent_id: 'coordinator-1',
               },
               model: null,
+              provider: 'claude-code',
             },
           }),
         }),
@@ -188,6 +191,7 @@ function makeAgent(agentId: string, name: string) {
 function templateListResponse() {
   return new Response(
     JSON.stringify({
+      providers: ['claude-code', 'codex', 'dirac', 'gemini-cli'],
       templates: [
         {
           name: 'taskflow-bastion',

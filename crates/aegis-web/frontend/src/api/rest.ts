@@ -32,6 +32,7 @@ export type DesignTemplate = {
 };
 
 type DesignTemplateListResponse = {
+  providers: string[];
   templates: DesignTemplate[];
 };
 
@@ -113,11 +114,13 @@ export const api = {
     name: string,
     vars: Record<string, string>,
     model?: string,
+    provider?: string,
   ) =>
     api.command(projectId, 'design.spawn_template', {
       name,
       vars,
       model: model || null,
+      provider: provider || null,
     }),
   taskflowCreateTask: (projectId: string, milestoneId: string, draft: TaskDraftPayload) =>
     api.command<TaskMutationResponse>(projectId, 'taskflow.create_task', {

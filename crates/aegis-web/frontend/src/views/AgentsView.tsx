@@ -24,6 +24,9 @@ import {
   Tabs,
   Tab,
   FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
   RadioGroup,
   FormControlLabel,
   Radio,
@@ -65,9 +68,12 @@ export function AgentsView() {
   const [spawnMode, setSpawnMode] = useState<'template' | 'custom'>('template');
   const [taskPrompt, setTaskPrompt] = useState('');
   const [templates, setTemplates] = useState<DesignTemplate[]>([]);
+  const [providers, setProviders] = useState<string[]>([]);
   const [templatesLoading, setTemplatesLoading] = useState(false);
   const [templatesLoaded, setTemplatesLoaded] = useState(false);
+  const [selectedKind, setSelectedKind] = useState<'bastion' | 'splinter'>('splinter');
   const [selectedTemplateName, setSelectedTemplateName] = useState('');
+  const [selectedProvider, setSelectedProvider] = useState('');
   const [templateVars, setTemplateVars] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
   const [spawnError, setSpawnError] = useState<string | null>(null);
@@ -76,6 +82,16 @@ export function AgentsView() {
     () => templates.find((template) => template.name === selectedTemplateName) ?? null,
     [selectedTemplateName, templates],
   );
+
+  const filteredTemplates = useMemo(
+    () => templates.filter((template) => template.kind === selectedKind),
+    [selectedKind, templates],
+  );
+
+  const providerOptions = useMemo(() => {
+    const all = new Set([...providers, ...templates.map((template) => template.provider)]);
+    return Array.from(all).filter(Boolean).sort();
+  }, [providers, templates]);
 
   const templateVariableNames = useMemo(() => {
     if (!selectedTemplate) {
@@ -98,7 +114,12 @@ export function AgentsView() {
       .unwrap()
       .then((result) => {
         setTemplates(result.templates);
-        setSelectedTemplateName((current) => current || result.templates[0]?.name || '');
+        setProviders(result.providers);
+        const initialTemplate =
+          result.templates.find((template) => template.kind === selectedKind) ?? result.templates[0];
+        setSelectedKind(initialTemplate?.kind ?? 'splinter');
+        setSelectedTemplateName((current) => current || initialTemplate?.name || '');
+        setSelectedProvider((current) => current || initialTemplate?.provider || result.providers[0] || '');
       })
       .catch((error) => {
         const msg = error instanceof Error ? error.message : 'Unable to load templates.';
@@ -108,14 +129,24 @@ export function AgentsView() {
         setTemplatesLoaded(true);
         setTemplatesLoading(false);
       });
-  }, [activeProjectId, dispatch, modalOpen, templatesLoaded]);
+  }, [activeProjectId, dispatch, modalOpen, selectedKind, templatesLoaded]);
 
   useEffect(() => {
     setTemplates([]);
+    setProviders([]);
     setTemplatesLoaded(false);
+    setSelectedKind('splinter');
     setSelectedTemplateName('');
+    setSelectedProvider('');
     setTemplateVars({});
   }, [activeProjectId]);
+
+  useEffect(() => {
+    if (!selectedTemplate) {
+      return;
+    }
+    setSelectedProvider((current) => current || selectedTemplate.provider);
+  }, [selectedTemplate]);
 
   function attachAgent(agentId: string) {
     if (!activeProjectId) {
@@ -154,6 +185,7 @@ export function AgentsView() {
             projectId: activeProjectId,
             name: selectedTemplate.name,
             vars: compactVars(templateVars),
+            provider: selectedProvider,
           }),
         ).unwrap();
       } else {
@@ -230,45 +262,97 @@ export function AgentsView() {
                     No built-in templates are available.
                   </Typography>
                 ) : (
-                  <FormControl fullWidth>
-                    <RadioGroup
-                      value={selectedTemplateName}
-                      onChange={(event) => {
-                        setSelectedTemplateName(event.target.value);
-                        setTemplateVars({});
-                        setSpawnError(null);
-                      }}
-                    >
-                      <Stack spacing={1}>
-                        {templates.map((template) => (
-                          <Paper
-                            key={template.name}
-                            variant="outlined"
-                            sx={{ p: 1.5, borderRadius: 1 }}
-                          >
-                            <FormControlLabel
-                              value={template.name}
-                              control={<Radio />}
-                              label={
-                                <Box>
-                                  <Typography variant="subtitle2">{template.name}</Typography>
-                                  <Typography variant="body2" color="text.secondary">
-                                    {template.description}
-                                  </Typography>
-                                  <Stack direction="row" spacing={1} sx={{ mt: 1, flexWrap: 'wrap', rowGap: 1 }}>
-                                    <Chip size="small" label={template.kind} />
-                                    <Chip size="small" label={template.role} />
-                                    <Chip size="small" label={template.provider} />
-                                  </Stack>
-                                </Box>
-                              }
-                              sx={{ alignItems: 'flex-start', m: 0, width: '100%' }}
-                            />
-                          </Paper>
-                        ))}
-                      </Stack>
-                    </RadioGroup>
-                  </FormControl>
+                  <>
+                    <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
+                      <FormControl fullWidth>
+                        <InputLabel id="spawn-type-label">Type</InputLabel>
+                        <Select
+                          labelId="spawn-type-label"
+                          label="Type"
+                          value={selectedKind}
+                          onChange={(event) => {
+                            const kind = event.target.value as 'bastion' | 'splinter';
+                            const nextTemplate =
+                              templates.find((template) => template.kind === kind) ?? null;
+                            setSelectedKind(kind);
+                            setSelectedTemplateName(nextTemplate?.name ?? '');
+                            setSelectedProvider(nextTemplate?.provider ?? providerOptions[0] ?? '');
+                            setTemplateVars({});
+                            setSpawnError(null);
+                          }}
+                          disabled={submitting}
+                        >
+                          <MenuItem value="splinter">Splinter</MenuItem>
+                          <MenuItem value="bastion">Bastion</MenuItem>
+                        </Select>
+                      </FormControl>
+                      <FormControl fullWidth>
+                        <InputLabel id="spawn-provider-label">Provider</InputLabel>
+                        <Select
+                          labelId="spawn-provider-label"
+                          label="Provider"
+                          value={selectedProvider}
+                          onChange={(event) => setSelectedProvider(event.target.value)}
+                          disabled={submitting || providerOptions.length === 0}
+                        >
+                          {providerOptions.map((provider) => (
+                            <MenuItem key={provider} value={provider}>
+                              {provider}
+                            </MenuItem>
+                          ))}
+                        </Select>
+                      </FormControl>
+                    </Stack>
+
+                    {filteredTemplates.length === 0 ? (
+                      <Typography variant="body2" color="text.secondary">
+                        No built-in templates match the selected type.
+                      </Typography>
+                    ) : (
+                      <FormControl fullWidth>
+                        <RadioGroup
+                          value={selectedTemplateName}
+                          onChange={(event) => {
+                            const templateName = event.target.value;
+                            const template = templates.find((item) => item.name === templateName);
+                            setSelectedTemplateName(templateName);
+                            setSelectedProvider(template?.provider ?? selectedProvider);
+                            setTemplateVars({});
+                            setSpawnError(null);
+                          }}
+                        >
+                          <Stack spacing={1}>
+                            {filteredTemplates.map((template) => (
+                              <Paper
+                                key={template.name}
+                                variant="outlined"
+                                sx={{ p: 1.5, borderRadius: 1 }}
+                              >
+                                <FormControlLabel
+                                  value={template.name}
+                                  control={<Radio />}
+                                  label={
+                                    <Box>
+                                      <Typography variant="subtitle2">{template.name}</Typography>
+                                      <Typography variant="body2" color="text.secondary">
+                                        {template.description}
+                                      </Typography>
+                                      <Stack direction="row" spacing={1} sx={{ mt: 1, flexWrap: 'wrap', rowGap: 1 }}>
+                                        <Chip size="small" label={template.kind} />
+                                        <Chip size="small" label={template.role} />
+                                        <Chip size="small" label={template.provider} />
+                                      </Stack>
+                                    </Box>
+                                  }
+                                  sx={{ alignItems: 'flex-start', m: 0, width: '100%' }}
+                                />
+                              </Paper>
+                            ))}
+                          </Stack>
+                        </RadioGroup>
+                      </FormControl>
+                    )}
+                  </>
                 )}
 
                 {selectedTemplate && templateVariableNames.length > 0 && (
@@ -318,7 +402,7 @@ export function AgentsView() {
               disabled={
                 submitting ||
                 (spawnMode === 'custom' && taskPrompt.trim().length === 0) ||
-                (spawnMode === 'template' && (!selectedTemplate || templatesLoading))
+                (spawnMode === 'template' && (!selectedTemplate || !selectedProvider || templatesLoading))
               }
               startIcon={submitting && <CircularProgress size={20} color="inherit" />}
             >

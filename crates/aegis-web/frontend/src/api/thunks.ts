@@ -75,10 +75,12 @@ export const spawnDesignTemplate = createAsyncThunk(
     name,
     vars,
     model,
+    provider,
   }: {
     projectId: string;
     name: string;
     vars: Record<string, string>;
     model?: string;
-  }) => api.spawnDesignTemplate(projectId, name, vars, model),
+    provider?: string;
+  }) => api.spawnDesignTemplate(projectId, name, vars, model, provider),
 );
