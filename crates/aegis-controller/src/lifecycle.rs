@@ -41,6 +41,7 @@ pub struct SpawnPlan {
     pub launch_command: Vec<String>,
     pub initial_prompt: String,
     pub sandbox_policy: SandboxPolicy,
+    pub reuse_existing_sandbox_profile: bool,
     pub startup_delay_ms: u64,
     pub is_resume: bool,
     pub override_trigger: Option<String>,

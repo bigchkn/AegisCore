@@ -218,6 +218,7 @@ impl Dispatcher {
             launch_command,
             initial_prompt,
             sandbox_policy: spec.sandbox,
+            reuse_existing_sandbox_profile: false,
             startup_delay_ms: provider.config().startup_delay_ms,
             is_resume: spec.resume_session.is_some(),
             override_trigger: None,
@@ -299,9 +300,32 @@ impl Dispatcher {
         existing: &Agent,
         pane: String,
     ) -> Result<SpawnPlan> {
-        let mut spec = self.build_bastion_spec(name)?;
-        spec.cli_provider = existing.cli_provider.clone();
-        spec.fallback_cascade = existing.fallback_cascade.clone();
+        let reuse_existing_sandbox_profile = !self.config.agents.contains_key(name);
+        let mut spec = if reuse_existing_sandbox_profile {
+            AgentSpec {
+                name: existing.name.clone(),
+                kind: AgentKind::Bastion,
+                role: existing.role.clone(),
+                parent_id: existing.parent_id,
+                task_id: existing.task_id,
+                task_description: None,
+                cli_provider: existing.cli_provider.clone(),
+                fallback_cascade: existing.fallback_cascade.clone(),
+                system_prompt: None,
+                inline_prompt: None,
+                worktree_override: Some(existing.worktree_path.clone()),
+                sandbox: SandboxPolicy::default(),
+                auto_cleanup: false,
+                model_override: None,
+                resume_session: None,
+            }
+        } else {
+            let mut spec = self.build_bastion_spec(name)?;
+            spec.cli_provider = existing.cli_provider.clone();
+            spec.fallback_cascade = existing.fallback_cascade.clone();
+            spec.resume_session = None;
+            spec
+        };
         spec.resume_session = None;
         let mut plan = self.build_spawn_plan(
             spec,
@@ -311,6 +335,7 @@ impl Dispatcher {
             pane,
         )?;
         plan.agent.created_at = existing.created_at;
+        plan.reuse_existing_sandbox_profile = reuse_existing_sandbox_profile;
         Ok(plan)
     }
 
@@ -514,7 +539,9 @@ impl Dispatcher {
     }
 
     async fn perform_launch(&self, plan: SpawnPlan, is_new: bool) -> Result<Agent> {
-        self.write_sandbox_profile(&plan)?;
+        if !(plan.reuse_existing_sandbox_profile && plan.agent.sandbox_profile.exists()) {
+            self.write_sandbox_profile(&plan)?;
+        }
 
         if let Some(tmux) = &self.tmux {
             let target = TmuxTarget::parse(&plan.agent.tmux_target())?;
@@ -1095,17 +1122,13 @@ impl Dispatcher {
 
     fn resolve_agent_system_prompt(&self, agent: &Agent) -> Result<String> {
         let (prompt_type, role_override) = match agent.kind {
-            AgentKind::Bastion => {
-                let entry = self
-                    .config
+            AgentKind::Bastion => (
+                PromptType::System,
+                self.config
                     .agents
                     .get(&agent.name)
-                    .ok_or_else(|| AegisError::Config {
-                        field: format!("agent.{}", agent.name),
-                        reason: "configured agent not found during failover".to_string(),
-                    })?;
-                (PromptType::System, entry.system_prompt.as_deref())
-            }
+                    .and_then(|entry| entry.system_prompt.as_deref()),
+            ),
             AgentKind::Splinter => (PromptType::Task, None),
         };
 
@@ -1750,6 +1773,78 @@ mod tests {
             .unwrap();
         assert_eq!(stored.status, AgentStatus::Active);
         assert_eq!(stored.cli_provider, "gemini-cli");
+    }
+
+    #[tokio::test]
+    async fn failover_relaunches_template_bastion_without_config_entry() {
+        let (dispatcher, _dir) = dispatcher();
+        let now = Utc::now();
+        let agent_id = Uuid::new_v4();
+        let agent = Agent {
+            agent_id,
+            name: "bastion".to_string(),
+            kind: AgentKind::Bastion,
+            status: AgentStatus::Active,
+            role: "bastion".to_string(),
+            parent_id: None,
+            task_id: None,
+            tmux_session: "aegis-test-bastion".to_string(),
+            tmux_window: 0,
+            tmux_pane: "%1".to_string(),
+            worktree_path: dispatcher.storage.project_root().to_path_buf(),
+            cli_provider: "claude-code".to_string(),
+            fallback_cascade: vec!["claude-code".to_string(), "gemini-cli".to_string()],
+            sandbox_profile: dispatcher.storage.sandbox_profile_path(agent_id),
+            log_path: dispatcher.storage.agent_log_path(agent_id),
+            created_at: now,
+            updated_at: now,
+            terminated_at: None,
+        };
+        AgentRegistry::insert(dispatcher.registry.as_ref(), &agent).unwrap();
+
+        let relaunched = dispatcher
+            .perform_failover_relaunch(&agent, "gemini-cli")
+            .await
+            .unwrap();
+
+        assert_eq!(relaunched.agent_id, agent_id);
+        assert_eq!(relaunched.cli_provider, "gemini-cli");
+    }
+
+    #[test]
+    fn template_bastion_restart_plan_reuses_existing_sandbox_profile() {
+        let (dispatcher, _dir) = dispatcher();
+        let now = Utc::now();
+        let agent_id = Uuid::new_v4();
+        let agent = Agent {
+            agent_id,
+            name: "bastion".to_string(),
+            kind: AgentKind::Bastion,
+            status: AgentStatus::Cooling,
+            role: "bastion".to_string(),
+            parent_id: None,
+            task_id: None,
+            tmux_session: "aegis-test-bastion".to_string(),
+            tmux_window: 0,
+            tmux_pane: "%1".to_string(),
+            worktree_path: dispatcher.storage.project_root().to_path_buf(),
+            cli_provider: "gemini-cli".to_string(),
+            fallback_cascade: vec!["claude-code".to_string(), "gemini-cli".to_string()],
+            sandbox_profile: dispatcher.storage.sandbox_profile_path(agent_id),
+            log_path: dispatcher.storage.agent_log_path(agent_id),
+            created_at: now,
+            updated_at: now,
+            terminated_at: None,
+        };
+
+        let plan = dispatcher
+            .build_bastion_restart_plan("bastion", &agent, "%9".to_string())
+            .unwrap();
+
+        assert!(plan.reuse_existing_sandbox_profile);
+        assert_eq!(plan.agent.agent_id, agent_id);
+        assert_eq!(plan.agent.tmux_pane, "%9");
+        assert_eq!(plan.agent.cli_provider, "gemini-cli");
     }
 
     #[tokio::test]

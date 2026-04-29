@@ -12,6 +12,8 @@ use crate::registry::FileRegistry;
 use crate::storage::ProjectStorage;
 use crate::transcript::append_tmux_input;
 
+const INITIAL_PANE_SNAPSHOT_BYTES: usize = 128 * 1024;
+
 pub struct LogTailer {
     storage: Arc<ProjectStorage>,
 }
@@ -153,9 +155,12 @@ impl PaneRelay {
             out_tx.send(PaneEvent::Resize { cols, rows }).await?;
         }
 
-        // 2. Initial burst: capture current tmux pane state
-        if let Ok(snapshot) = self.tmux.capture_pane(&target, 2000).await {
-            out_tx.send(PaneEvent::Output(snapshot)).await?;
+        // 2. Initial burst: replay the recent raw pane log bytes so the
+        // browser receives the same ANSI stream format as live updates.
+        if let Ok(snapshot) = read_log_tail_bytes(&log_path, INITIAL_PANE_SNAPSHOT_BYTES) {
+            if !snapshot.is_empty() {
+                out_tx.send(PaneEvent::Output(snapshot)).await?;
+            }
         }
 
         let mut last_size: Option<(u16, u16)> = None;
@@ -207,5 +212,37 @@ impl PaneRelay {
                 }
             }
         }
+    }
+}
+
+fn read_log_tail_bytes(path: &std::path::Path, max_bytes: usize) -> std::io::Result<Vec<u8>> {
+    let mut file = std::fs::File::open(path)?;
+    let len = file.metadata()?.len();
+    let start = len.saturating_sub(max_bytes as u64);
+    file.seek(SeekFrom::Start(start))?;
+
+    let mut bytes = Vec::with_capacity((len - start) as usize);
+    file.read_to_end(&mut bytes)?;
+    Ok(bytes)
+}
+
+#[cfg(test)]
+mod tests {
+    use std::io::Write;
+
+    use tempfile::NamedTempFile;
+
+    use super::read_log_tail_bytes;
+
+    #[test]
+    fn read_log_tail_bytes_preserves_raw_ansi_bytes() {
+        let mut file = NamedTempFile::new().expect("temp file");
+        let expected = b"\x1b[38;5;174mhello\x1b[0m\n";
+        file.write_all(b"prefix\n").expect("write prefix");
+        file.write_all(expected).expect("write ansi");
+        file.flush().expect("flush temp file");
+
+        let snapshot = read_log_tail_bytes(file.path(), expected.len()).expect("read log tail");
+        assert_eq!(snapshot, expected);
     }
 }

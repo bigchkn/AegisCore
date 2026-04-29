@@ -103,3 +103,10 @@ task = "In the new task pop-up and other savable modals put cancel to the left o
 task_type = "feature"
 status = "done"
 notes = "Also default the Target to Backlog"
+
+[[tasks]]
+id = "B15"
+uid = "3388b5a8-61f6-4b1f-a482-136225259223"
+task = "Terminal is still not rendering properly. Examine docs (https://xtermjs.org) to identify how to fix our implementation"
+task_type = "bug"
+status = "pending"
