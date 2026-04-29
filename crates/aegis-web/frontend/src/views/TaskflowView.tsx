@@ -640,9 +640,6 @@ function TaskEditorModal({
               <h3>{editor.mode === 'create' ? 'New Task' : 'Edit Task'}</h3>
               <p>{editor.mode === 'create' ? 'Create a task or bug from Taskflow.' : editor.sourceMilestoneName}</p>
             </div>
-            <button type="submit" className="task-editor-save" disabled={saving}>
-              {saving ? 'Saving...' : 'Save'}
-            </button>
           </div>
 
           {error ? <div className="task-editor-error">{error}</div> : null}
@@ -731,6 +728,9 @@ function TaskEditorModal({
             <button type="button" onClick={onClose}>
               Cancel
             </button>
+            <button type="submit" className="task-editor-save" disabled={saving}>
+              {saving ? 'Saving...' : 'Save'}
+            </button>
           </div>
         </form>
       </div>
@@ -800,9 +800,6 @@ function MilestoneEditorModal({
               <h3>New Milestone</h3>
               <p>Create a new milestone file in the roadmap.</p>
             </div>
-            <button type="submit" className="task-editor-save" disabled={saving}>
-              {saving ? 'Creating...' : 'Create'}
-            </button>
           </div>
 
           {error ? <div className="task-editor-error">{error}</div> : null}
@@ -840,6 +837,9 @@ function MilestoneEditorModal({
           <div className="task-editor-footer">
             <button type="button" onClick={onClose}>
               Cancel
+            </button>
+            <button type="submit" className="task-editor-save" disabled={saving}>
+              {saving ? 'Creating...' : 'Create'}
             </button>
           </div>
         </form>
