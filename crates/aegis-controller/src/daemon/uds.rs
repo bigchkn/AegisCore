@@ -1,5 +1,5 @@
 use crate::commands::ControllerCommands;
-use crate::daemon::logs::PaneRelay;
+use crate::daemon::logs::{PaneEvent, PaneRelay};
 use crate::daemon::projects::ProjectRegistry;
 use crate::events::EventBus;
 use crate::runtime::AegisRuntime;
@@ -908,7 +908,7 @@ where
     }
 }
 
-impl<S> Sink<Vec<u8>> for GenericSink<S>
+impl<S> Sink<PaneEvent> for GenericSink<S>
 where
     S: Sink<String, Error = tokio_util::codec::LinesCodecError> + Unpin,
 {
@@ -922,13 +922,20 @@ where
             })
     }
 
-    fn start_send(mut self: Pin<&mut Self>, item: Vec<u8>) -> Result<()> {
+    fn start_send(mut self: Pin<&mut Self>, item: PaneEvent) -> Result<()> {
         use base64::prelude::*;
-        let msg = MessageWrapper {
-            kind: self.kind.clone(),
-            data: BASE64_STANDARD.encode(item),
+        let json = match item {
+            PaneEvent::Output(bytes) => {
+                let msg = MessageWrapper {
+                    kind: self.kind.clone(),
+                    data: BASE64_STANDARD.encode(bytes),
+                };
+                serde_json::to_string(&msg).unwrap()
+            }
+            PaneEvent::Resize { cols, rows } => {
+                serde_json::json!({"type": "resize", "cols": cols, "rows": rows}).to_string()
+            }
         };
-        let json = serde_json::to_string(&msg).unwrap();
         Pin::new(&mut self.inner)
             .start_send(json)
             .map_err(|e| AegisError::IpcConnection {

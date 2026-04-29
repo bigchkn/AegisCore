@@ -371,6 +371,30 @@ impl TmuxClient {
 
     // ── pane liveness ─────────────────────────────────────────────────────────
 
+    /// Returns the current dimensions of a pane as (cols, rows).
+    pub async fn pane_size(&self, target: &TmuxTarget) -> Result<(u16, u16), TmuxError> {
+        let out = self
+            .run_tmux(&[
+                "display-message",
+                "-t",
+                target.as_str(),
+                "-p",
+                "#{pane_width} #{pane_height}",
+            ])
+            .await?;
+        let trimmed = out.trim();
+        let mut parts = trimmed.splitn(2, ' ');
+        let cols = parts
+            .next()
+            .and_then(|s| s.parse::<u16>().ok())
+            .unwrap_or(80);
+        let rows = parts
+            .next()
+            .and_then(|s| s.parse::<u16>().ok())
+            .unwrap_or(24);
+        Ok((cols, rows))
+    }
+
     /// Returns the exit status of the process in the pane.
     /// `None` = still running. `Some(code)` = exited with that code.
     pub async fn pane_exit_status(&self, target: &TmuxTarget) -> Result<Option<i32>, TmuxError> {

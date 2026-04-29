@@ -1,3 +1,4 @@
+use crate::daemon::logs::PaneEvent;
 use crate::daemon::projects::{ProjectRecord, ProjectRegistry};
 use crate::events::EventBus;
 use crate::runtime::AegisRuntime;
@@ -591,10 +592,18 @@ async fn ws_pane_handler(
             use base64::prelude::*;
             let (ws_sender, ws_receiver) = socket.split();
 
+            #[derive(serde::Serialize)]
+            struct ResizeMessage {
+                #[serde(rename = "type")]
+                kind: &'static str,
+                cols: u16,
+                rows: u16,
+            }
+
             struct PaneWsSink<S> {
                 inner: S,
             }
-            impl<S> Sink<Vec<u8>> for PaneWsSink<S>
+            impl<S> Sink<PaneEvent> for PaneWsSink<S>
             where
                 S: Sink<Message, Error = axum::Error> + Unpin,
             {
@@ -609,13 +618,25 @@ async fn ws_pane_handler(
                 }
                 fn start_send(
                     mut self: Pin<&mut Self>,
-                    item: Vec<u8>,
+                    item: PaneEvent,
                 ) -> std::result::Result<(), Self::Error> {
-                    let msg = MessageWrapper {
-                        kind: "output".to_string(),
-                        data: BASE64_STANDARD.encode(item),
+                    let json = match item {
+                        PaneEvent::Output(bytes) => {
+                            let msg = MessageWrapper {
+                                kind: "output".to_string(),
+                                data: BASE64_STANDARD.encode(bytes),
+                            };
+                            serde_json::to_string(&msg).unwrap()
+                        }
+                        PaneEvent::Resize { cols, rows } => {
+                            let msg = ResizeMessage {
+                                kind: "resize",
+                                cols,
+                                rows,
+                            };
+                            serde_json::to_string(&msg).unwrap()
+                        }
                     };
-                    let json = serde_json::to_string(&msg).unwrap();
                     Pin::new(&mut self.inner)
                         .start_send(Message::Text(json.into()))
                         .map_err(|e| aegis_core::AegisError::Unexpected(Box::new(e)))
