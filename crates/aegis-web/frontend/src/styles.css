@@ -715,6 +715,7 @@ tbody tr:hover {
 .task-editor-footer {
   display: flex;
   justify-content: flex-end;
+  gap: 8px;
   padding: 0 16px 16px;
 }
 
