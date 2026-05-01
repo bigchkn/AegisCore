@@ -109,10 +109,10 @@ describe('AgentsView', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Spawn New Agent' }));
     fireEvent.click(await screen.findByLabelText('taskflow-implementer'));
-    fireEvent.change(screen.getByLabelText('Task Description'), {
+    fireEvent.change(await screen.findByRole('textbox', { name: /Task Description/ }), {
       target: { value: 'Build the modal' },
     });
-    fireEvent.change(screen.getByLabelText('Bastion Agent Id'), {
+    fireEvent.change(await screen.findByRole('textbox', { name: /Bastion Agent Id/ }), {
       target: { value: 'coordinator-1' },
     });
     fireEvent.click(screen.getByRole('button', { name: 'Spawn' }));

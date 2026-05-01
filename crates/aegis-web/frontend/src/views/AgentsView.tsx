@@ -371,7 +371,7 @@ export function AgentsView() {
                               >
                                 <FormControlLabel
                                   value={template.name}
-                                  control={<Radio />}
+                                  control={<Radio aria-label={template.name} />}
                                   label={
                                     <Box>
                                       <Typography variant="subtitle2">{template.name}</Typography>
@@ -481,7 +481,8 @@ export function AgentsView() {
                   multiline
                   rows={4}
                   variant="outlined"
-                  placeholder="Describe the task for the new agent..."
+                  label="Task Prompt"
+                  placeholder="Describe the task for the new agent"
                   value={taskPrompt}
                   onChange={(e) => setTaskPrompt(e.target.value)}
                   disabled={submitting}
