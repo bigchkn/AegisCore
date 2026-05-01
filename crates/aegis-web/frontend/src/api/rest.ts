@@ -7,7 +7,10 @@ import type {
   TaskflowIndex, 
   TaskflowMilestone,
   ClarificationRequest,
-  ClarifierSource
+  ClarifierSource,
+  DesignDocContent,
+  DesignDocSummary,
+  DesignRefinementDraft,
 } from '../store/domain';
 
 type CommandResponse = {
@@ -107,6 +110,10 @@ export const api = {
     request<TaskflowIndex>(`/projects/${projectId}/taskflow/status`),
   taskflowMilestone: (projectId: string, milestoneId: string) =>
     request<TaskflowMilestone>(`/projects/${projectId}/taskflow/show/${milestoneId}`),
+  listDesignDocs: (projectId: string) =>
+    request<DesignDocSummary[]>(`/projects/${projectId}/designs`),
+  readDesignDoc: (projectId: string, path: string) =>
+    request<DesignDocContent>(`/projects/${projectId}/designs/read?path=${encodeURIComponent(path)}`),
   command: <T = CommandResponse>(projectId: string, command: string, params: unknown = null) =>
     request<T>(`/projects/${projectId}/commands`, {
       method: 'POST',
@@ -140,6 +147,8 @@ export const api = {
       model: model || null,
       provider: provider || null,
     }),
+  startDesignRefinement: (projectId: string, draft: DesignRefinementDraft) =>
+    api.command(projectId, 'design.refine', draft),
   taskflowCreateTask: (projectId: string, milestoneId: string, draft: TaskDraftPayload) =>
     api.command<TaskMutationResponse>(projectId, 'taskflow.create_task', {
       milestone_id: milestoneId,

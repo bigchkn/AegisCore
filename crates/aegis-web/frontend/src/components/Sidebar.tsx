@@ -18,6 +18,7 @@ import {
   Assignment as TaskIcon,
   RssFeed as ChannelIcon,
   Timeline as TaskflowIcon,
+  Article as DesignsIcon,
   HelpOutlined as ClarificationIcon,
   ChevronLeft as CollapseIcon,
   Menu as ExpandIcon
@@ -37,6 +38,7 @@ const navItems: Array<{ id: ActiveView; label: string; icon: React.ReactNode }> 
   { id: 'tasks', label: 'Tasks', icon: <TaskIcon /> },
   { id: 'channels', label: 'Channels', icon: <ChannelIcon /> },
   { id: 'taskflow', label: 'Taskflow', icon: <TaskflowIcon /> },
+  { id: 'designs', label: 'Designs', icon: <DesignsIcon /> },
   { id: 'clarifications', label: 'Clarifications', icon: <ClarificationIcon /> },
 ];
 

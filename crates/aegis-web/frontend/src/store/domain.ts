@@ -41,7 +41,34 @@ export type TaskflowMilestone = {
   }>;
 };
 
-export type ActiveView = 'agents' | 'pane' | 'logs' | 'tasks' | 'channels' | 'taskflow' | 'clarifications';
+export type DesignDocSummary = {
+  path: string;
+  name: string;
+  kind: string;
+  bytes: number;
+  modified_at: string | null;
+};
+
+export type DesignDocContent = {
+  path: string;
+  name: string;
+  kind: string;
+  content: string;
+  modified_at: string | null;
+};
+
+export type DesignRefinementDraft = {
+  doc_type: 'HLD' | 'LLD';
+  doc_path: string;
+  doc_description: string;
+  bastion_agent_id?: string | null;
+  hld_ref?: string | null;
+  task_id?: string | null;
+  provider?: string | null;
+  model?: string | null;
+};
+
+export type ActiveView = 'agents' | 'pane' | 'logs' | 'tasks' | 'channels' | 'taskflow' | 'designs' | 'clarifications';
 
 export type ConnectionState = 'connecting' | 'connected' | 'disconnected';
 

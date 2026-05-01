@@ -16,7 +16,7 @@ use axum::{
 };
 use futures_util::{Sink, SinkExt, StreamExt};
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Component, PathBuf};
 use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
@@ -45,6 +45,8 @@ impl HttpServer {
             .route("/projects/:id/channels", get(list_channels))
             .route("/projects/:id/clarify/list", get(clarify_list))
             .route("/projects/:id/clarify/answer", post(clarify_answer))
+            .route("/projects/:id/designs", get(list_design_docs))
+            .route("/projects/:id/designs/read", get(read_design_doc))
             .route("/projects/:id/commands", post(dispatch_command))
             .route("/projects/:id/taskflow/status", get(taskflow_status))
             .route(
@@ -304,7 +306,7 @@ async fn dispatch_command(
         }
         "design.list" => {
             let registry = TemplateRegistry::load(&runtime.root_path);
-            let mut providers: Vec<_> = runtime.config.providers.keys().cloned().collect();
+            let mut providers: Vec<_> = runtime.providers.providers.keys().cloned().collect();
             providers.sort();
             let templates: Vec<_> = registry
                 .list()
@@ -362,6 +364,81 @@ async fn dispatch_command(
                 let provider_names = configured_provider_names(&runtime);
                 validate_provider(&provider_names, provider)?;
                 rendered.cli_provider = provider.to_owned();
+            }
+
+            let agent = commands
+                .spawn_from_template(rendered)
+                .await
+                .map_err(|e| e.to_string())?;
+            Ok(Json(serde_json::json!({
+                "agent_id": agent.agent_id,
+                "role": agent.role,
+                "kind": format!("{:?}", agent.kind),
+            })))
+        }
+        "design.refine" => {
+            let doc_type = params
+                .get("doc_type")
+                .and_then(|v| v.as_str())
+                .ok_or("Missing doc_type")?;
+            if !matches!(doc_type, "HLD" | "LLD") {
+                return Err("doc_type must be HLD or LLD".to_string());
+            }
+            let doc_path = params
+                .get("doc_path")
+                .and_then(|v| v.as_str())
+                .ok_or("Missing doc_path")?;
+            let doc_description = params
+                .get("doc_description")
+                .and_then(|v| v.as_str())
+                .ok_or("Missing doc_description")?;
+
+            let mut cli_vars = HashMap::new();
+            cli_vars.insert("doc_type".to_string(), doc_type.to_string());
+            cli_vars.insert("doc_path".to_string(), doc_path.to_string());
+            cli_vars.insert("doc_description".to_string(), doc_description.to_string());
+
+            if let Some(value) = params.get("hld_ref").and_then(|v| v.as_str()) {
+                if !value.trim().is_empty() {
+                    cli_vars.insert("hld_ref".to_string(), value.to_string());
+                }
+            }
+            if let Some(value) = params.get("task_id").and_then(|v| v.as_str()) {
+                if !value.trim().is_empty() {
+                    cli_vars.insert("task_id".to_string(), value.to_string());
+                }
+            }
+
+            let bastion_agent_id = params
+                .get("bastion_agent_id")
+                .and_then(|v| v.as_str())
+                .filter(|v| !v.trim().is_empty())
+                .map(str::to_string)
+                .or_else(|| active_bastion_agent_id(&commands).ok().flatten())
+                .ok_or("No active bastion found. Start taskflow-bastion or provide a coordinator agent ID.")?;
+            cli_vars.insert("bastion_agent_id".to_string(), bastion_agent_id);
+
+            let registry = TemplateRegistry::load(&runtime.root_path);
+            let resolved = registry
+                .get("taskflow-designer")
+                .map_err(|e| e.to_string())?;
+            let vars =
+                BootstrapContext::build(&resolved.template, &runtime.root_path, &cli_vars, None)
+                    .map_err(|e| e.to_string())?;
+            let mut rendered =
+                DesignEngine::render(&resolved.template, &vars).map_err(|e| e.to_string())?;
+
+            if let Some(model) = params.get("model").and_then(|v| v.as_str()) {
+                if !model.trim().is_empty() {
+                    rendered.model = Some(model.to_owned());
+                }
+            }
+            if let Some(provider) = params.get("provider").and_then(|v| v.as_str()) {
+                if !provider.trim().is_empty() {
+                    let provider_names = configured_provider_names(&runtime);
+                    validate_provider(&provider_names, provider)?;
+                    rendered.cli_provider = provider.to_owned();
+                }
             }
 
             let agent = commands
@@ -571,7 +648,7 @@ fn resolve_agent_id_param(
 }
 
 fn configured_provider_names(runtime: &AegisRuntime) -> Vec<String> {
-    runtime.config.providers.keys().cloned().collect()
+    runtime.providers.providers.keys().cloned().collect()
 }
 
 fn validate_provider(provider_names: &[String], provider: &str) -> std::result::Result<(), String> {
@@ -602,6 +679,173 @@ fn parse_fallback_cascade(
         parsed.push(provider.to_owned());
     }
     Ok(parsed)
+}
+
+fn active_bastion_agent_id(
+    commands: &crate::commands::ControllerCommands,
+) -> std::result::Result<Option<String>, String> {
+    let agents = commands.list_agents().map_err(|e| e.to_string())?;
+    Ok(agents
+        .into_iter()
+        .find(|agent| {
+            agent.kind == aegis_core::AgentKind::Bastion
+                && agent.status == aegis_core::AgentStatus::Active
+        })
+        .map(|agent| agent.agent_id.to_string()))
+}
+
+#[derive(serde::Serialize)]
+struct DesignDocSummary {
+    path: String,
+    name: String,
+    kind: String,
+    bytes: u64,
+    modified_at: Option<chrono::DateTime<chrono::Utc>>,
+}
+
+#[derive(serde::Serialize)]
+struct DesignDocContent {
+    path: String,
+    name: String,
+    kind: String,
+    content: String,
+    modified_at: Option<chrono::DateTime<chrono::Utc>>,
+}
+
+#[derive(serde::Deserialize)]
+struct DesignReadQuery {
+    path: String,
+}
+
+async fn list_design_docs(
+    Path(id): Path<Uuid>,
+    State(state): State<HttpState>,
+) -> std::result::Result<Json<Vec<DesignDocSummary>>, String> {
+    let runtime = get_runtime(&state, id).await.map_err(|e| e.to_string())?;
+    let designs_dir = runtime.root_path.join(".aegis").join("designs");
+    let mut docs = Vec::new();
+    collect_design_docs(&designs_dir, &designs_dir, &mut docs).map_err(|e| e.to_string())?;
+    docs.sort_by(|left, right| left.path.cmp(&right.path));
+    Ok(Json(docs))
+}
+
+async fn read_design_doc(
+    Path(id): Path<Uuid>,
+    Query(query): Query<DesignReadQuery>,
+    State(state): State<HttpState>,
+) -> std::result::Result<Json<DesignDocContent>, String> {
+    let runtime = get_runtime(&state, id).await.map_err(|e| e.to_string())?;
+    let designs_dir = runtime.root_path.join(".aegis").join("designs");
+    let relative = normalize_design_path(&query.path)?;
+    let designs_root = designs_dir.canonicalize().map_err(|e| e.to_string())?;
+    let full_path = designs_dir.join(&relative);
+    let full_path = full_path.canonicalize().map_err(|e| e.to_string())?;
+    if !full_path.starts_with(&designs_root) {
+        return Err("Design path resolves outside .aegis/designs".to_string());
+    }
+    if !full_path.is_file() {
+        return Err(format!("Design doc not found: {}", query.path));
+    }
+    let content = std::fs::read_to_string(&full_path).map_err(|e| e.to_string())?;
+    let metadata = full_path.metadata().map_err(|e| e.to_string())?;
+    Ok(Json(DesignDocContent {
+        path: format!(".aegis/designs/{}", relative.to_string_lossy()),
+        name: full_path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or("design.md")
+            .to_string(),
+        kind: design_doc_kind(&relative),
+        content,
+        modified_at: metadata
+            .modified()
+            .ok()
+            .map(chrono::DateTime::<chrono::Utc>::from),
+    }))
+}
+
+fn collect_design_docs(
+    base_dir: &std::path::Path,
+    current_dir: &std::path::Path,
+    docs: &mut Vec<DesignDocSummary>,
+) -> std::io::Result<()> {
+    if !current_dir.exists() {
+        return Ok(());
+    }
+
+    for entry in std::fs::read_dir(current_dir)? {
+        let entry = entry?;
+        let path = entry.path();
+        let file_type = entry.file_type()?;
+        if file_type.is_dir() {
+            collect_design_docs(base_dir, &path, docs)?;
+            continue;
+        }
+        if path.extension().and_then(|ext| ext.to_str()) != Some("md") {
+            continue;
+        }
+
+        let relative = path.strip_prefix(base_dir).unwrap_or(&path);
+        let metadata = entry.metadata()?;
+        docs.push(DesignDocSummary {
+            path: format!(".aegis/designs/{}", relative.to_string_lossy()),
+            name: path
+                .file_name()
+                .and_then(|name| name.to_str())
+                .unwrap_or("design.md")
+                .to_string(),
+            kind: design_doc_kind(relative),
+            bytes: metadata.len(),
+            modified_at: metadata
+                .modified()
+                .ok()
+                .map(chrono::DateTime::<chrono::Utc>::from),
+        });
+    }
+
+    Ok(())
+}
+
+fn normalize_design_path(raw: &str) -> std::result::Result<PathBuf, String> {
+    let trimmed = raw
+        .strip_prefix(".aegis/designs/")
+        .or_else(|| raw.strip_prefix("./.aegis/designs/"))
+        .unwrap_or(raw);
+    let path = std::path::Path::new(trimmed);
+    if path.is_absolute() {
+        return Err("Design path must be relative".to_string());
+    }
+
+    let mut normalized = PathBuf::new();
+    for component in path.components() {
+        match component {
+            Component::Normal(part) => normalized.push(part),
+            Component::CurDir => {}
+            _ => return Err("Design path cannot contain parent directory components".to_string()),
+        }
+    }
+
+    if normalized.extension().and_then(|ext| ext.to_str()) != Some("md") {
+        return Err("Design path must point to a Markdown file".to_string());
+    }
+
+    Ok(normalized)
+}
+
+fn design_doc_kind(relative: &std::path::Path) -> String {
+    match relative
+        .components()
+        .next()
+        .and_then(|component| match component {
+            Component::Normal(value) => value.to_str(),
+            _ => None,
+        }) {
+        Some("hld") => "HLD".to_string(),
+        Some("lld") => "LLD".to_string(),
+        Some("roadmap") => "Roadmap".to_string(),
+        Some(value) => value.to_string(),
+        None => "Design".to_string(),
+    }
 }
 
 async fn taskflow_status(

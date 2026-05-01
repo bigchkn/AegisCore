@@ -939,6 +939,114 @@ tbody tr:hover {
   font-weight: 500;
 }
 
+.designs-view {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  flex: 1;
+  min-height: 0;
+  border: 1px solid #303842;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #171b20;
+}
+
+.designs-header,
+.designs-reader-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 14px;
+  border-bottom: 1px solid #303842;
+}
+
+.designs-header h2,
+.designs-reader-header h3 {
+  margin: 0 0 4px;
+  font-size: 1rem;
+}
+
+.designs-header p,
+.designs-reader-header p {
+  margin: 0;
+  color: #9ea7b3;
+  font-size: 0.82rem;
+}
+
+.designs-layout {
+  display: grid;
+  grid-template-columns: minmax(240px, 320px) minmax(0, 1fr);
+  min-height: 0;
+}
+
+.designs-list {
+  overflow: auto;
+  border-right: 1px solid #303842;
+  background: #12171c;
+}
+
+.designs-group {
+  padding: 12px;
+  border-bottom: 1px solid #262d35;
+}
+
+.designs-group h3 {
+  margin: 0 0 8px;
+  color: #9ea7b3;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+}
+
+.designs-group button {
+  display: grid;
+  gap: 3px;
+  width: 100%;
+  margin-bottom: 6px;
+  padding: 8px 10px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: #d8dde4;
+  text-align: left;
+  cursor: pointer;
+}
+
+.designs-group button:hover,
+.designs-group button.is-active {
+  border-color: #3b4652;
+  background: #20262d;
+}
+
+.designs-group button span,
+.designs-group button small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.designs-group button small {
+  color: #8e99a6;
+  font-size: 0.72rem;
+}
+
+.designs-reader {
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  background: #101316;
+}
+
+.design-markdown {
+  margin: 0;
+  padding: 18px;
+  color: #e8eaed;
+  font-family: Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-size: 0.86rem;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 .task-edit-button {
   margin-left: auto;
 }
@@ -1073,5 +1181,15 @@ tbody tr:hover {
 
   .task-editor-grid {
     grid-template-columns: 1fr;
+  }
+
+  .designs-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .designs-list {
+    max-height: 240px;
+    border-right: 0;
+    border-bottom: 1px solid #303842;
   }
 }

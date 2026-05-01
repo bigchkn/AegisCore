@@ -23,6 +23,7 @@ import { AgentsView } from '../views/AgentsView';
 import { ChannelsView } from '../views/ChannelsView';
 import { LogView } from '../views/LogView';
 import { PaneView } from '../views/PaneView';
+import { DesignsView } from '../views/DesignsView';
 import { TaskflowView } from '../views/TaskflowView';
 import { TasksView } from '../views/TasksView';
 import { ClarificationsView } from '../views/ClarificationsView';
@@ -176,6 +177,7 @@ export function App() {
             <Route path="/tasks" element={<TasksView />} />
             <Route path="/channels" element={<ChannelsView />} />
             <Route path="/taskflow" element={<TaskflowView />} />
+            <Route path="/designs" element={<DesignsView />} />
             <Route path="/clarifications" element={<ClarificationsView />} />
             
             <Route path="*" element={<Navigate to="/agents" replace />} />
@@ -222,6 +224,7 @@ function ProjectRoutes() {
       <Route path="tasks" element={<TasksView />} />
       <Route path="channels" element={<ChannelsView />} />
       <Route path="taskflow" element={<TaskflowView />} />
+      <Route path="designs" element={<DesignsView />} />
       <Route path="clarifications" element={<ClarificationsView />} />
       <Route path="*" element={<Navigate to="agents" replace />} />
     </Routes>
@@ -245,6 +248,8 @@ function titleForView(view: string) {
       return 'Channels';
     case 'taskflow':
       return 'Taskflow';
+    case 'designs':
+      return 'Designs';
     case 'clarifications':
       return 'Clarifications';
     case 'agents':

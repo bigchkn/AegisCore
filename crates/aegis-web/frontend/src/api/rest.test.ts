@@ -24,4 +24,18 @@ describe('REST API client', () => {
 
     await expect(api.listAgents('missing')).rejects.toThrow('not found');
   });
+
+  it('encodes design document paths', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(JSON.stringify({ path: 'x', name: 'x', kind: 'LLD', content: '', modified_at: null }), { status: 200 })),
+    );
+
+    await api.readDesignDoc('project-1', '.aegis/designs/lld/web ui.md');
+
+    expect(fetch).toHaveBeenCalledWith(
+      '/projects/project-1/designs/read?path=.aegis%2Fdesigns%2Flld%2Fweb%20ui.md',
+      expect.any(Object),
+    );
+  });
 });
