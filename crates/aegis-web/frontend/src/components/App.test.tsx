@@ -1,5 +1,5 @@
 import { configureStore } from '@reduxjs/toolkit';
-import { render, act } from '@testing-library/react';
+import { render, act, screen, waitFor } from '@testing-library/react';
 import { Provider } from 'react-redux';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -31,6 +31,14 @@ const PROJECT = {
   last_attached_agent_id: undefined,
 };
 
+const SECOND_PROJECT = {
+  id: 'project-2',
+  root_path: '/tmp/project-2',
+  auto_start: false,
+  last_seen: new Date().toISOString(),
+  last_attached_agent_id: undefined,
+};
+
 function makeStore() {
   return configureStore({
     reducer: {
@@ -45,19 +53,31 @@ function makeStore() {
 
 function makeFetch() {
   return vi.fn(async (url: string) => {
-    if (url === '/projects') return new Response(JSON.stringify([PROJECT]), { status: 200 });
+    if (url === '/projects') return new Response(JSON.stringify([PROJECT, SECOND_PROJECT]), { status: 200 });
     if (url.endsWith('/agents')) return new Response(JSON.stringify([]), { status: 200 });
     if (url.endsWith('/tasks')) return new Response(JSON.stringify([]), { status: 200 });
     if (url.endsWith('/channels')) return new Response(JSON.stringify([]), { status: 200 });
+    if (url.endsWith('/designs')) return new Response(JSON.stringify([]), { status: 200 });
     if (url.endsWith('/status')) return new Response(JSON.stringify({ active_agents: 0 }), { status: 200 });
     return new Response(JSON.stringify({}), { status: 200 });
   });
 }
 
 describe('App background polling', () => {
+  const storage = new Map<string, string>();
+
   beforeEach(() => {
     vi.useFakeTimers();
     vi.stubGlobal('WebSocket', MockWebSocket);
+    storage.clear();
+    Object.defineProperty(window, 'localStorage', {
+      configurable: true,
+      value: {
+        getItem: (key: string) => storage.get(key) ?? null,
+        setItem: (key: string, value: string) => storage.set(key, value),
+        removeItem: (key: string) => storage.delete(key),
+      },
+    });
   });
 
   afterEach(() => {
@@ -119,5 +139,48 @@ describe('App background polling', () => {
     await act(async () => { vi.advanceTimersByTime(15_000); });
 
     expect(fetchMock.mock.calls.length).toBe(callsAtUnmount);
+  });
+
+  it('restores the saved tab when opening a project root', async () => {
+    vi.useRealTimers();
+    const fetchMock = makeFetch();
+    vi.stubGlobal('fetch', fetchMock);
+    window.localStorage.setItem('aegis.web.projectView.project-1', 'designs');
+
+    const store = makeStore();
+    store.dispatch(setProjects([PROJECT]));
+
+    render(
+      <Provider store={store}>
+        <MemoryRouter initialEntries={['/projects/project-1']}>
+          <App />
+        </MemoryRouter>
+      </Provider>,
+    );
+
+    await waitFor(() => expect(screen.getByRole('heading', { level: 2, name: 'Designs' })).toBeDefined());
+  });
+
+  it('remembers the current tab separately for each project route', async () => {
+    vi.useRealTimers();
+    const fetchMock = makeFetch();
+    vi.stubGlobal('fetch', fetchMock);
+
+    const store = makeStore();
+    store.dispatch(setProjects([PROJECT, SECOND_PROJECT]));
+    store.dispatch(setActiveProject('project-2'));
+
+    render(
+      <Provider store={store}>
+        <MemoryRouter initialEntries={['/projects/project-2/tasks']}>
+          <App />
+        </MemoryRouter>
+      </Provider>,
+    );
+
+    await waitFor(() =>
+      expect(window.localStorage.getItem('aegis.web.projectView.project-2')).toBe('tasks'),
+    );
+    expect(window.localStorage.getItem('aegis.web.projectView.project-1')).toBeNull();
   });
 });

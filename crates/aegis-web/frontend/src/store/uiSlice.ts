@@ -11,14 +11,26 @@ export type UIState = {
   sidebarOpen: boolean;
 };
 
-const initialState: UIState = {
+const SIDEBAR_STORAGE_KEY = 'aegis.web.sidebarOpen';
+
+function loadSidebarOpen() {
+  if (typeof window === 'undefined') return true;
+  try {
+    const value = window.localStorage.getItem(SIDEBAR_STORAGE_KEY);
+    if (value === 'false') return false;
+    if (value === 'true') return true;
+  } catch {}
+  return true;
+}
+
+const initialState = (): UIState => ({
   activeProjectId: null,
   activeView: 'agents',
   selectedAgentId: null,
   error: null,
   connectionState: 'disconnected',
-  sidebarOpen: true,
-};
+  sidebarOpen: loadSidebarOpen(),
+});
 
 const uiSlice = createSlice({
   name: 'ui',
@@ -49,6 +61,13 @@ const uiSlice = createSlice({
     },
   },
 });
+
+export function persistSidebarOpen(open: boolean) {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.setItem(SIDEBAR_STORAGE_KEY, String(open));
+  } catch {}
+}
 
 export const {
   setActiveProject,

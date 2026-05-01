@@ -16,9 +16,16 @@ import {
 import { Folder as FolderIcon } from '@mui/icons-material';
 
 import { fetchProjectData, fetchProjects } from '../api/thunks';
-import { setActiveProject } from '../store/uiSlice';
+import { persistSidebarOpen, setActiveProject, setActiveView } from '../store/uiSlice';
 import { useAppDispatch, useAppSelector } from '../store/hooks';
-import { agentRoute } from '../lib/agentRoutes';
+import type { ActiveView, ProjectRecord } from '../store/domain';
+import {
+  loadProjectView,
+  projectRouteForView,
+  routeProjectIdFromPathParts,
+  saveProjectView,
+  viewFromPathParts,
+} from '../lib/projectNavigation';
 import { AgentsView } from '../views/AgentsView';
 import { ChannelsView } from '../views/ChannelsView';
 import { LogView } from '../views/LogView';
@@ -42,7 +49,8 @@ export function App() {
 
   // Derive active view from path for the title
   const pathParts = location.pathname.split('/').filter(Boolean);
-  const activeViewPath = pathParts.includes('projects') ? pathParts[2] : pathParts[0] || 'agents';
+  const routeProjectId = routeProjectIdFromPathParts(pathParts);
+  const activeViewPath = viewFromPathParts(pathParts);
 
   useEffect(() => {
     void dispatch(fetchProjects());
@@ -67,6 +75,19 @@ export function App() {
       dispatch(setActiveProject(projects[0].id));
     }
   }, [activeProjectId, dispatch, projects, location.pathname]);
+
+  useEffect(() => {
+    persistSidebarOpen(sidebarOpen);
+  }, [sidebarOpen]);
+
+  useEffect(() => {
+    if (!activeViewPath) return;
+    dispatch(setActiveView(activeViewPath));
+    const projectIdForView = routeProjectId ?? activeProjectId;
+    if (projectIdForView) {
+      saveProjectView(projectIdForView, activeViewPath);
+    }
+  }, [activeProjectId, activeViewPath, dispatch, routeProjectId]);
 
   return (
     <Box sx={{ display: 'flex', minHeight: '100vh', bgcolor: 'background.default' }}>
@@ -107,8 +128,9 @@ export function App() {
                   value={activeProjectId ?? ''}
                   onChange={(e) => {
                     const id = e.target.value;
+                    const project = projects.find((candidate) => candidate.id === id);
                     dispatch(setActiveProject(id));
-                    navigate(`/projects/${id}`);
+                    navigate(projectRouteForView(project ?? { id }, loadProjectView(id)));
                   }}
                   size="small"
                   displayEmpty
@@ -188,9 +210,10 @@ export function App() {
   );
 }
 
-function ProjectRedirect({ projects }: { projects: any[] }) {
+function ProjectRedirect({ projects }: { projects: ProjectRecord[] }) {
   if (projects.length > 0) {
-    return <Navigate to={`/projects/${projects[0].id}`} replace />;
+    const project = projects[0];
+    return <Navigate to={projectRouteForView(project, loadProjectView(project.id))} replace />;
   }
   return <Navigate to="/agents" replace />;
 }
@@ -210,10 +233,17 @@ function ProjectRoutes() {
   }, [projectId, activeProjectId, dispatch]);
 
   if (
-    activeProject?.last_attached_agent_id &&
     (location.pathname === `/projects/${projectId}` || location.pathname === `/projects/${projectId}/`)
   ) {
-    return <Navigate to={agentRoute(projectId ?? null, 'pane', activeProject.last_attached_agent_id)} replace />;
+    if (!projectId) {
+      return <Navigate to="agents" replace />;
+    }
+    return (
+      <Navigate
+        to={projectRouteForView(activeProject ?? { id: projectId }, loadProjectView(projectId))}
+        replace
+      />
+    );
   }
 
   return (
@@ -236,7 +266,7 @@ function lastPathSegment(path: string): string {
   return parts.at(-1) ?? path;
 }
 
-function titleForView(view: string) {
+function titleForView(view: ActiveView | null) {
   switch (view) {
     case 'pane':
       return 'Pane';
