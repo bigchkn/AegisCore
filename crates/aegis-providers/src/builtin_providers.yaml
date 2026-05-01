@@ -76,7 +76,7 @@ providers:
     export_command: null
     model_flag: "--model"
     interaction_model:
-      type: "headless_iterative"
+      type: "injected_tui"
     system_prompt_mechanism:
       type: "none"
     nudges:

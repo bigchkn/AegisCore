@@ -366,7 +366,7 @@ mod tests {
     use super::*;
     use aegis_core::provider::{NudgeAction, NudgeDefinition};
     use aegis_core::{
-        config::WatchdogPatterns, AegisError, AgentKind, LogQuery, StorageBackend, Task, TaskStatus,
+        config::WatchdogPatterns, AegisError, AgentKind, LogQuery, Task, TaskStatus,
     };
     use aegis_providers::{
         generic::GenericProvider,
@@ -601,6 +601,47 @@ mod tests {
 
         let sent = tmux.sent_texts.lock().unwrap();
         assert!(sent.iter().any(|(_, text)| text == "continue"));
+    }
+
+    #[tokio::test]
+    async fn dirac_loop_nudge_sequence() {
+        let agent = agent_with_status(AgentStatus::Active);
+        let executor = Arc::new(RecordingExecutor::default());
+        let tmux = Arc::new(MockTmuxClient::default());
+        
+        let registry = default_registry();
+        let observer = Arc::new(FakeObserver {
+            capture: "Task completed successfully. Press 1 to continue.".to_string(),
+            exit_status: None,
+            captures: Mutex::new(0),
+        });
+        
+        let mut agent = agent;
+        agent.cli_provider = "dirac".into();
+        
+        let watchdog = nudge_test_watchdog(
+            observer.clone(),
+            Arc::new(FakeAgentRegistry {
+                agents: vec![agent.clone()],
+            }),
+            executor.clone(),
+            registry,
+            tmux.clone(),
+        );
+
+        // This should trigger the screen_scrape nudge for dirac
+        watchdog.sweep_once().await.unwrap();
+        
+        // Check the sequence: "1", then SendInitialPrompt
+        // (the Wait is internal to apply_actions)
+        {
+            let sent = tmux.sent_texts.lock().unwrap();
+            assert_eq!(sent.len(), 1);
+            assert_eq!(sent[0].1, "1");
+        }
+        
+        // Initial prompt should have been sent via executor
+        assert!(executor.initial_prompts.lock().unwrap().contains(&agent.agent_id));
     }
 
     fn agent_with_status(status: AgentStatus) -> Agent {
