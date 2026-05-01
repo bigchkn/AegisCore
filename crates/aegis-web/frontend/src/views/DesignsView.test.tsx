@@ -43,8 +43,18 @@ function renderWithStore() {
 }
 
 describe('DesignsView', () => {
+  const storage = new Map<string, string>();
+
   beforeEach(() => {
     vi.clearAllMocks();
+    storage.clear();
+    Object.defineProperty(window, 'localStorage', {
+      configurable: true,
+      value: {
+        getItem: (key: string) => storage.get(key) ?? null,
+        setItem: (key: string, value: string) => storage.set(key, value),
+      },
+    });
     (api.listDesignDocs as any).mockResolvedValue([
       {
         path: '.aegis/designs/hld/aegis.md',
@@ -61,12 +71,23 @@ describe('DesignsView', () => {
         modified_at: null,
       },
     ]);
-    (api.readDesignDoc as any).mockResolvedValue({
-      path: '.aegis/designs/hld/aegis.md',
-      name: 'aegis.md',
-      kind: 'HLD',
-      content: '# Aegis\n\nDesign content',
-      modified_at: null,
+    (api.readDesignDoc as any).mockImplementation((_projectId: string, path: string) => {
+      if (path === '.aegis/designs/lld/web-ui.md') {
+        return Promise.resolve({
+          path,
+          name: 'web-ui.md',
+          kind: 'LLD',
+          content: '# Web UI\n\nPersisted document',
+          modified_at: null,
+        });
+      }
+      return Promise.resolve({
+        path: '.aegis/designs/hld/aegis.md',
+        name: 'aegis.md',
+        kind: 'HLD',
+        content: '# Aegis\n\nDesign content',
+        modified_at: null,
+      });
     });
   });
 
@@ -95,6 +116,23 @@ describe('DesignsView', () => {
 
     expect(screen.getByLabelText('Design documents')).toBeDefined();
     expect(screen.getByRole('button', { name: 'Hide List' }).getAttribute('aria-expanded')).toBe('true');
+  });
+
+  it('restores selected document and collapsed list state', async () => {
+    window.localStorage.setItem(
+      'aegis.web.viewState.proj-1.designs.selectedPath',
+      JSON.stringify('.aegis/designs/lld/web-ui.md'),
+    );
+    window.localStorage.setItem('aegis.web.viewState.proj-1.designs.listCollapsed', JSON.stringify(true));
+
+    renderWithStore();
+
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Show List' })).toBeDefined());
+    await waitFor(() =>
+      expect(api.readDesignDoc).toHaveBeenCalledWith('proj-1', '.aegis/designs/lld/web-ui.md'),
+    );
+    expect(screen.queryByLabelText('Design documents')).toBeNull();
+    expect(screen.getByText(/Persisted document/)).toBeDefined();
   });
 
   it('starts a design refinement cycle', async () => {

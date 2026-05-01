@@ -95,8 +95,18 @@ function mockTaskflowData() {
 }
 
 describe('TaskflowView Refactored Filters', () => {
+  const storage = new Map<string, string>();
+
   beforeEach(() => {
     vi.clearAllMocks();
+    storage.clear();
+    Object.defineProperty(window, 'localStorage', {
+      configurable: true,
+      value: {
+        getItem: (key: string) => storage.get(key) ?? null,
+        setItem: (key: string, value: string) => storage.set(key, value),
+      },
+    });
   });
 
   it('separates Milestone Tree from Flat Bugs View', async () => {
@@ -144,6 +154,24 @@ describe('TaskflowView Refactored Filters', () => {
     expect((within(dialog).getByLabelText(/^Task$/) as HTMLInputElement).value).toBe('');
     expect((within(dialog).getByLabelText('Type') as HTMLSelectElement).value).toBe('bug');
     expect((within(dialog).getByLabelText('Target') as HTMLSelectElement).value).toBe('backlog');
+  });
+
+  it('restores taskflow filters and expanded milestones', async () => {
+    window.localStorage.setItem('aegis.web.viewState.proj-1.taskflow.viewMode', JSON.stringify('bugs'));
+    window.localStorage.setItem('aegis.web.viewState.proj-1.taskflow.showAll', JSON.stringify(true));
+    window.localStorage.setItem('aegis.web.viewState.proj-1.taskflow.expandedMilestones', JSON.stringify(['M1']));
+    mockTaskflowData();
+
+    renderWithStore();
+
+    await waitFor(() => expect(screen.getByText('Completed Bug')).toBeDefined());
+    expect(screen.getByText('Bugs').className).toContain('is-active');
+    expect(screen.getByText('All').className).toContain('is-active');
+
+    fireEvent.click(screen.getByText('Milestones'));
+
+    await waitFor(() => expect(screen.getByText('Active Feature')).toBeDefined());
+    expect(api.taskflowMilestone).toHaveBeenCalledWith('proj-1', 'M1');
   });
 
   it('saves task edits and surfaces notify warnings', async () => {

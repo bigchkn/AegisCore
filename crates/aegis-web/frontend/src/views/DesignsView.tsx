@@ -3,6 +3,7 @@ import { toast } from 'sonner';
 
 import { api } from '../api/rest';
 import { MarkdownRenderer } from '../components/MarkdownRenderer';
+import { useProjectViewState } from '../lib/useProjectViewState';
 import type { DesignDocContent, DesignDocSummary, DesignRefinementDraft } from '../store/domain';
 import { useAppSelector } from '../store/hooks';
 
@@ -22,7 +23,12 @@ const defaultRefinementForm: RefinementForm = {
 export function DesignsView() {
   const activeProjectId = useAppSelector((state) => state.ui.activeProjectId);
   const [docs, setDocs] = useState<DesignDocSummary[]>([]);
-  const [selectedPath, setSelectedPath] = useState<string | null>(null);
+  const [selectedPath, setSelectedPath] = useProjectViewState<string | null>(
+    activeProjectId,
+    'designs.selectedPath',
+    null,
+    isStringOrNull,
+  );
   const [selectedDoc, setSelectedDoc] = useState<DesignDocContent | null>(null);
   const [loading, setLoading] = useState(false);
   const [docLoading, setDocLoading] = useState(false);
@@ -30,7 +36,12 @@ export function DesignsView() {
   const [refinement, setRefinement] = useState<RefinementForm | null>(null);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
-  const [listCollapsed, setListCollapsed] = useState(false);
+  const [listCollapsed, setListCollapsed] = useProjectViewState(
+    activeProjectId,
+    'designs.listCollapsed',
+    false,
+    isBoolean,
+  );
 
   const loadDocs = useCallback(async () => {
     if (!activeProjectId) return;
@@ -39,7 +50,9 @@ export function DesignsView() {
       const items = await api.listDesignDocs(activeProjectId);
       setDocs(items);
       setError(null);
-      setSelectedPath((current) => current ?? items[0]?.path ?? null);
+      setSelectedPath((current) =>
+        current && items.some((item) => item.path === current) ? current : items[0]?.path ?? null,
+      );
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -338,4 +351,12 @@ function EmptyPanel({ title, body }: { title: string; body: string }) {
       <p>{body}</p>
     </section>
   );
+}
+
+function isStringOrNull(value: unknown): value is string | null {
+  return typeof value === 'string' || value === null;
+}
+
+function isBoolean(value: unknown): value is boolean {
+  return typeof value === 'boolean';
 }

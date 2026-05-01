@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState, type Dispatch, type SetState
 import { toast } from 'sonner';
 
 import { api } from '../api/rest';
+import { useProjectViewState } from '../lib/useProjectViewState';
 import type { TaskflowIndex, TaskflowMilestone, TaskType } from '../store/domain';
 import { useAppSelector } from '../store/hooks';
 
@@ -52,8 +53,24 @@ export function TaskflowView() {
   const [editorError, setEditorError] = useState<string | null>(null);
   const [mutationWarning, setMutationWarning] = useState<string | null>(null);
 
-  const [viewMode, setViewMode] = useState<ViewMode>('milestones');
-  const [showAll, setShowAll] = useState(false);
+  const [viewMode, setViewMode] = useProjectViewState<ViewMode>(
+    activeProjectId,
+    'taskflow.viewMode',
+    'milestones',
+    isViewMode,
+  );
+  const [showAll, setShowAll] = useProjectViewState(
+    activeProjectId,
+    'taskflow.showAll',
+    false,
+    isBoolean,
+  );
+  const [expandedMilestoneIds, setExpandedMilestoneIds] = useProjectViewState<string[]>(
+    activeProjectId,
+    'taskflow.expandedMilestones',
+    [],
+    isStringArray,
+  );
 
   const refreshTaskflow = useCallback(async () => {
     if (!activeProjectId) return;
@@ -76,12 +93,12 @@ export function TaskflowView() {
     void refreshTaskflow();
   }, [refreshTaskflow]);
 
-  const loadMilestone = (milestoneId: string) => {
+  const loadMilestone = useCallback((milestoneId: string, expanded = true) => {
     if (!activeProjectId) return;
-    
+
     setMilestones((state) => ({
       ...state,
-      [milestoneId]: { expanded: true, loading: true, data: null, error: null },
+      [milestoneId]: { expanded, loading: true, data: null, error: null },
     }));
 
     api
@@ -89,23 +106,31 @@ export function TaskflowView() {
       .then((data) =>
         setMilestones((state) => ({
           ...state,
-          [milestoneId]: { expanded: true, loading: false, data, error: null },
+          [milestoneId]: { expanded, loading: false, data, error: null },
         })),
       )
       .catch((err: Error) =>
         setMilestones((state) => ({
           ...state,
-          [milestoneId]: { expanded: true, loading: false, data: null, error: err.message },
+          [milestoneId]: { expanded, loading: false, data: null, error: err.message },
         })),
       );
-  };
+  }, [activeProjectId]);
 
   const toggleMilestone = (milestoneId: string) => {
     const current = milestones[milestoneId];
+    const nextExpanded = !current?.expanded;
+    setExpandedMilestoneIds((ids) => {
+      if (nextExpanded) {
+        return ids.includes(milestoneId) ? ids : [...ids, milestoneId];
+      }
+      return ids.filter((id) => id !== milestoneId);
+    });
+
     if (current?.data) {
       setMilestones((state) => ({
         ...state,
-        [milestoneId]: { ...current, expanded: !current.expanded },
+        [milestoneId]: { ...current, expanded: nextExpanded },
       }));
       return;
     }
@@ -273,11 +298,31 @@ export function TaskflowView() {
       
       for (const id of ids) {
         if (!milestones[id]?.data && !milestones[id]?.loading) {
-          loadMilestone(id);
+          loadMilestone(id, false);
         }
       }
     }
-  }, [viewMode, index]);
+  }, [viewMode, index, milestones, loadMilestone]);
+
+  useEffect(() => {
+    if (!index) return;
+    const validIds = new Set(Object.keys(index.milestones));
+    if (index.project.backlog) validIds.add('backlog');
+
+    for (const id of expandedMilestoneIds) {
+      if (!validIds.has(id)) continue;
+      if (milestones[id]?.data && !milestones[id].expanded) {
+        setMilestones((state) => {
+          const current = state[id];
+          return current ? { ...state, [id]: { ...current, expanded: true } } : state;
+        });
+        continue;
+      }
+      if (!milestones[id]?.data && !milestones[id]?.loading) {
+        loadMilestone(id);
+      }
+    }
+  }, [expandedMilestoneIds, index, loadMilestone, milestones]);
 
   // Aggregate all tasks for flat views
   const allLoadedTasks = useMemo(() => {
@@ -846,4 +891,16 @@ function MilestoneEditorModal({
       </div>
     </div>
   );
+}
+
+function isViewMode(value: unknown): value is ViewMode {
+  return value === 'milestones' || value === 'bugs';
+}
+
+function isBoolean(value: unknown): value is boolean {
+  return typeof value === 'boolean';
+}
+
+function isStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((item) => typeof item === 'string');
 }
