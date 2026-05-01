@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState, type Dispatch, type SetState
 import { toast } from 'sonner';
 
 import { api } from '../api/rest';
+import { MarkdownRenderer } from '../components/MarkdownRenderer';
 import type { DesignDocContent, DesignDocSummary, DesignRefinementDraft } from '../store/domain';
 import { useAppSelector } from '../store/hooks';
 
@@ -191,7 +192,7 @@ export function DesignsView() {
                 </div>
                 <span className="status-pill status-pending">{selectedDoc.kind}</span>
               </div>
-              <pre className="design-markdown">{selectedDoc.content}</pre>
+              <MarkdownRenderer content={selectedDoc.content} />
             </>
           ) : (
             <p className="muted padding-14">Select a design document.</p>
