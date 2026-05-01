@@ -28,7 +28,7 @@ use crate::{
 };
 
 // TODO: Fix sandbox launch/auth behavior and re-enable sandbox execution.
-const DISABLE_AGENT_SANDBOX: bool = true;
+const DISABLE_AGENT_SANDBOX: bool = false;
 
 pub struct Dispatcher {
     registry: Arc<FileRegistry>,
@@ -232,11 +232,27 @@ impl Dispatcher {
         name: &str,
         override_trigger: Option<String>,
     ) -> Result<Agent> {
-        let active = self.registry.list_active()?;
-        if let Some(existing) = active
-            .into_iter()
-            .find(|a| a.kind == AgentKind::Bastion && a.role == name)
-        {
+        let mut spec = self.build_bastion_spec(name)?;
+        spec.resume_session = None;
+        let agent_id = Uuid::new_v4();
+
+        // Standard plan generation for a *new* bastion.
+        // We don't have tmux details yet, so we use placeholders.
+        let mut initial_plan = self.build_spawn_plan(
+            spec.clone(),
+            agent_id,
+            "pending".to_string(),
+            0,
+            "pending".to_string(),
+        )?;
+
+        // Atomically check for existing and insert 'Starting' record if new.
+        let (agent, inserted) =
+            self.registry
+                .find_or_insert_starting_bastion(name, &initial_plan.agent)?;
+
+        if !inserted {
+            let existing = agent;
             let force_restart = existing.status == AgentStatus::Cooling;
 
             if !force_restart {
@@ -248,24 +264,28 @@ impl Dispatcher {
                     }
                 }
             }
-            // Pane is dead (daemon restarted or process exited) or agent is cooling. Restart in-place:
-            // reuse the registry identity and tmux session, but seed the normal
-            // bastion prompt instead of resuming a potentially broken provider session.
+            // Pane is dead (daemon restarted or process exited) or agent is cooling. Restart in-place.
             tracing::info!(agent_id = %existing.agent_id, role = %name, "restarting bastion in-place with fresh prompt");
             return self
                 .restart_bastion_in_place(name, existing, override_trigger)
                 .await;
         }
 
-        let mut spec = self.build_bastion_spec(name)?;
-        spec.resume_session = None;
-        let agent_id = Uuid::new_v4();
-        let (session, window, pane) = self
+        // We successfully inserted a 'Starting' record. Now finish the setup.
+        let (session, window, pane) = match self
             .prepare_tmux_window(agent_id, AgentKind::Bastion, name)
-            .await?;
+            .await
+        {
+            Ok(res) => res,
+            Err(e) => {
+                let _ = self.registry.remove(agent_id);
+                return Err(e);
+            }
+        };
+
         let mut plan = self.build_spawn_plan(spec, agent_id, session, window, pane)?;
         plan.override_trigger = override_trigger;
-        self.launch_or_insert_plan(plan).await
+        self.launch_existing_plan(plan).await
     }
 
     /// Restart an existing bastion agent in-place: kill the old tmux session, open a fresh one
@@ -388,18 +408,59 @@ impl Dispatcher {
         }
 
         tracing::debug!(%agent_id, "preparing worktree");
-        self.prepare_splinter_worktree(agent_id, role).await?;
+        if let Err(e) = self.prepare_splinter_worktree(agent_id, role).await {
+            let _ = self.cleanup_failed_splinter(agent_id).await;
+            return Err(e);
+        }
 
-        let (session, window, pane) = self
+        let (session, window, pane) = match self
             .prepare_tmux_window(agent_id, AgentKind::Splinter, role)
-            .await?;
+            .await
+        {
+            Ok(res) => res,
+            Err(e) => {
+                let _ = self.cleanup_failed_splinter(agent_id).await;
+                return Err(e);
+            }
+        };
 
         tracing::debug!(%agent_id, session, window, pane, "building spawn plan");
-        let plan = self.build_spawn_plan(spec, agent_id, session, window, pane)?;
+        let plan = match self.build_spawn_plan(spec, agent_id, session, window, pane) {
+            Ok(p) => p,
+            Err(e) => {
+                let _ = self.cleanup_failed_splinter(agent_id).await;
+                return Err(e);
+            }
+        };
 
         tracing::debug!(%agent_id, launch_cmd = ?plan.launch_command, "launching");
-        TaskRegistry::assign(self.registry.as_ref(), task.task_id, agent_id)?;
-        self.launch_or_insert_plan(plan).await
+        if let Err(e) = TaskRegistry::assign(self.registry.as_ref(), task.task_id, agent_id) {
+            let _ = self.cleanup_failed_splinter(agent_id).await;
+            return Err(e);
+        }
+
+        match self.launch_or_insert_plan(plan).await {
+            Ok(agent) => Ok(agent),
+            Err(e) => {
+                let _ = self.cleanup_failed_splinter(agent_id).await;
+                let _ = TaskRegistry::update_status(
+                    self.registry.as_ref(),
+                    task.task_id,
+                    TaskStatus::Queued,
+                );
+                Err(e)
+            }
+        }
+    }
+
+    async fn cleanup_failed_splinter(&self, agent_id: Uuid) -> Result<()> {
+        let git = GitWorktree::new(
+            self.storage.project_root().to_path_buf(),
+            self.storage.worktrees_dir(),
+        );
+        let _ = git.prune_for_agent(agent_id).await;
+        let _ = self.registry.remove(agent_id);
+        Ok(())
     }
 
     /// Spawn an agent directly from a rendered template.

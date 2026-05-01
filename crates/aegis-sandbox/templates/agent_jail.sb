@@ -21,6 +21,8 @@
 ; sysctl-read is required by the claude binary for platform/hardware detection at startup.
 ; Without it, sandbox-exec sends SIGTRAP and the process dies immediately.
 (allow sysctl-read)
+(allow mach-lookup)
+(allow iokit-get-properties)
 
 ; Broad read access — agents need to read freely to understand project context,
 ; run bash commands, load system libraries, and use provider auth state.
@@ -31,7 +33,10 @@
 (allow file-read* file-write*
   (subpath "/tmp")
   (subpath "/private/tmp")
-  (subpath "/var/folders"))
+  (subpath "/var/folders")
+  (subpath "/dev/null")
+  (subpath "/dev/zero")
+  (subpath "/dev/ttys"))
 
 ; Agent worktree
 (allow file-read* file-write*

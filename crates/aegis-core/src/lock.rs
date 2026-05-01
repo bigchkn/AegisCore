@@ -3,206 +3,174 @@ use fs2::FileExt;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use std::fs::{File, OpenOptions};
-use std::io::{Read, Seek, SeekFrom, Write};
+use std::io::{Read, SeekFrom, Write};
 use std::path::{Path, PathBuf};
-use std::time::{Duration, Instant};
 use tempfile::NamedTempFile;
 
 pub struct LockedFile {
-    file: File,
-    path: PathBuf,
+    lock_file: File,
+    data_path: PathBuf,
 }
 
 impl LockedFile {
     pub fn open_exclusive(path: &Path) -> Result<Self> {
-        Self::open(path, true)
+        Self::open_with_lock(path, true)
     }
 
     pub fn open_shared(path: &Path) -> Result<Self> {
-        Self::open(path, false)
+        Self::open_with_lock(path, false)
     }
 
-    fn open(path: &Path, exclusive: bool) -> Result<Self> {
-        let file = OpenOptions::new()
-            .read(true)
-            .write(true)
-            .create(true)
-            .truncate(false)
-            .open(path)
-            .map_err(|e| AegisError::StorageIo {
-                path: path.to_path_buf(),
-                source: e,
-            })?;
-
-        let start = Instant::now();
-        let timeout = Duration::from_secs(5);
-
-        loop {
-            let res = if exclusive {
-                file.try_lock_exclusive().map_err(|e| e.to_string())
-            } else {
-                file.try_lock_shared().map_err(|e| e.to_string())
-            };
-
-            match res {
-                Ok(_) => break,
-                Err(_) if start.elapsed() < timeout => {
-                    std::thread::sleep(Duration::from_millis(100));
-                }
-                Err(e) => {
-                    return Err(AegisError::RegistryLock {
-                        source: std::io::Error::other(e),
-                    })
-                }
+    fn open_with_lock(data_path: &Path, exclusive: bool) -> Result<Self> {
+        let lock_path = data_path.with_extension("lock");
+        if let Some(parent) = lock_path.parent() {
+            if !parent.exists() {
+                std::fs::create_dir_all(parent).map_err(|e| AegisError::StorageIo {
+                    path: parent.to_path_buf(),
+                    source: e,
+                })?;
             }
         }
 
+        let lock_file = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .open(&lock_path)
+            .map_err(|e| AegisError::StorageIo {
+                path: lock_path.to_path_buf(),
+                source: e,
+            })?;
+
+        if exclusive {
+            lock_file.lock_exclusive()
+        } else {
+            lock_file.lock_shared()
+        }
+        .map_err(|e| AegisError::RegistryLock { source: e })?;
+
         Ok(Self {
-            file,
-            path: path.to_path_buf(),
+            lock_file,
+            data_path: data_path.to_path_buf(),
         })
     }
 
     pub fn read_json<T: DeserializeOwned>(&mut self) -> Result<T> {
-        self.file
-            .seek(SeekFrom::Start(0))
-            .map_err(|e| AegisError::StorageIo {
-                path: self.path.clone(),
+        if !self.data_path.exists() {
+            return serde_json::from_str("{}").map_err(|e| AegisError::RegistryCorrupted {
+                path: self.data_path.clone(),
                 source: e,
-            })?;
+            });
+        }
+
+        let mut file = File::open(&self.data_path).map_err(|e| AegisError::StorageIo {
+            path: self.data_path.clone(),
+            source: e,
+        })?;
 
         let mut content = String::new();
-        self.file
-            .read_to_string(&mut content)
+        file.read_to_string(&mut content)
             .map_err(|e| AegisError::StorageIo {
-                path: self.path.clone(),
+                path: self.data_path.clone(),
                 source: e,
             })?;
 
         if content.trim().is_empty() {
-            // Return empty/default if the file was just created
-            // We use a trick to return T::default() if possible, or just {}
             return serde_json::from_str("{}").map_err(|e| AegisError::RegistryCorrupted {
-                path: self.path.clone(),
+                path: self.data_path.clone(),
                 source: e,
             });
         }
 
         serde_json::from_str(&content).map_err(|e| AegisError::RegistryCorrupted {
-            path: self.path.clone(),
+            path: self.data_path.clone(),
             source: e,
         })
     }
 
     pub fn read_toml<T: DeserializeOwned>(&mut self) -> Result<T> {
-        self.file
-            .seek(SeekFrom::Start(0))
-            .map_err(|e| AegisError::StorageIo {
-                path: self.path.clone(),
-                source: e,
-            })?;
+        if !self.data_path.exists() {
+            return toml::from_str("").map_err(|e| AegisError::Config {
+                field: self.data_path.display().to_string(),
+                reason: format!("Empty TOML: {}", e),
+            });
+        }
+
+        let mut file = File::open(&self.data_path).map_err(|e| AegisError::StorageIo {
+            path: self.data_path.clone(),
+            source: e,
+        })?;
 
         let mut content = String::new();
-        self.file
-            .read_to_string(&mut content)
+        file.read_to_string(&mut content)
             .map_err(|e| AegisError::StorageIo {
-                path: self.path.clone(),
+                path: self.data_path.clone(),
                 source: e,
             })?;
 
         if content.trim().is_empty() {
-            // TOML doesn't have an empty object like {}, it's just an empty string
-            // But we need to be able to parse it into the target type.
-            // If T implements Default, we could use that, but DeserializeOwned doesn't guarantee it.
-            // Most our TOMLs are not meant to be empty.
             return toml::from_str("").map_err(|e| AegisError::Config {
-                field: self.path.display().to_string(),
+                field: self.data_path.display().to_string(),
                 reason: format!("Empty TOML: {}", e),
             });
         }
 
         toml::from_str(&content).map_err(|e| AegisError::Config {
-            field: self.path.display().to_string(),
+            field: self.data_path.display().to_string(),
             reason: format!("TOML Parse Error: {}", e),
         })
     }
 
     pub fn write_json_atomic<T: Serialize>(&mut self, value: &T) -> Result<()> {
-        let parent = self.path.parent().unwrap_or_else(|| Path::new("."));
+        let parent = self.data_path.parent().unwrap_or_else(|| Path::new("."));
         let mut tmp = NamedTempFile::new_in(parent).map_err(|e| AegisError::StorageIo {
-            path: self.path.clone(),
+            path: self.data_path.clone(),
             source: e,
         })?;
 
         let json =
             serde_json::to_string_pretty(value).map_err(|e| AegisError::RegistryCorrupted {
-                path: self.path.clone(),
+                path: self.data_path.clone(),
                 source: e,
             })?;
 
         tmp.write_all(json.as_bytes())
             .map_err(|e| AegisError::StorageIo {
-                path: self.path.clone(),
+                path: self.data_path.clone(),
                 source: e,
             })?;
 
-        tmp.persist(&self.path).map_err(|e| AegisError::StorageIo {
-            path: self.path.clone(),
+        tmp.persist(&self.data_path).map_err(|e| AegisError::StorageIo {
+            path: self.data_path.clone(),
             source: e.error,
         })?;
-
-        // Re-acquire lock on the new file
-        self.file = OpenOptions::new()
-            .read(true)
-            .write(true)
-            .open(&self.path)
-            .map_err(|e| AegisError::StorageIo {
-                path: self.path.clone(),
-                source: e,
-            })?;
-        self.file
-            .lock_exclusive()
-            .map_err(|e| AegisError::RegistryLock { source: e })?;
 
         Ok(())
     }
 
     pub fn write_toml_atomic<T: Serialize>(&mut self, value: &T) -> Result<()> {
-        let parent = self.path.parent().unwrap_or_else(|| Path::new("."));
+        let parent = self.data_path.parent().unwrap_or_else(|| Path::new("."));
         let mut tmp = NamedTempFile::new_in(parent).map_err(|e| AegisError::StorageIo {
-            path: self.path.clone(),
+            path: self.data_path.clone(),
             source: e,
         })?;
 
         let content =
             toml::to_string_pretty(value).map_err(|e| AegisError::ConfigSerializationError {
-                path: self.path.clone(),
+                path: self.data_path.clone(),
                 source: e,
             })?;
 
         tmp.write_all(content.as_bytes())
             .map_err(|e| AegisError::StorageIo {
-                path: self.path.clone(),
+                path: self.data_path.clone(),
                 source: e,
             })?;
 
-        tmp.persist(&self.path).map_err(|e| AegisError::StorageIo {
-            path: self.path.clone(),
+        tmp.persist(&self.data_path).map_err(|e| AegisError::StorageIo {
+            path: self.data_path.clone(),
             source: e.error,
         })?;
-
-        // Re-acquire lock on the new file
-        self.file = OpenOptions::new()
-            .read(true)
-            .write(true)
-            .open(&self.path)
-            .map_err(|e| AegisError::StorageIo {
-                path: self.path.clone(),
-                source: e,
-            })?;
-        self.file
-            .lock_exclusive()
-            .map_err(|e| AegisError::RegistryLock { source: e })?;
 
         Ok(())
     }
@@ -210,6 +178,6 @@ impl LockedFile {
 
 impl Drop for LockedFile {
     fn drop(&mut self) {
-        let _ = self.file.unlock();
+        let _ = self.lock_file.unlock();
     }
 }

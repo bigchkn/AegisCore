@@ -184,4 +184,29 @@ impl AgentRegistry for FileRegistry {
             Err(AegisError::AgentNotFound { agent_id })
         }
     }
+
+    fn find_or_insert_starting_bastion(&self, role: &str, agent: &Agent) -> Result<(Agent, bool)> {
+        let mut file = LockedFile::open_exclusive(&self.storage.registry_path())?;
+        let mut store: AgentStore = file.read_json()?;
+
+        if let Some(existing) = store
+            .agents
+            .iter()
+            .find(|a| a.kind == AgentKind::Bastion && a.role == role)
+        {
+            return Ok((existing.clone(), false));
+        }
+
+        store.agents.push(agent.clone());
+        file.write_json_atomic(&store)?;
+        Ok((agent.clone(), true))
+    }
+
+    fn remove(&self, agent_id: Uuid) -> Result<()> {
+        let mut file = LockedFile::open_exclusive(&self.storage.registry_path())?;
+        let mut store: AgentStore = file.read_json()?;
+
+        store.agents.retain(|a| a.agent_id != agent_id);
+        file.write_json_atomic(&store)
+    }
 }

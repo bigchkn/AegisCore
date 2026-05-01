@@ -88,4 +88,12 @@ pub trait AgentRegistry: Send + Sync {
     fn list_by_role(&self, role: &str) -> Result<Vec<Agent>>;
     fn list_all(&self) -> Result<Vec<Agent>>;
     fn archive(&self, agent_id: Uuid) -> Result<()>;
+
+    /// Atomically check for an active bastion with the given role.
+    /// If none exists, insert the provided agent in Starting status.
+    /// Returns (ExistingOrNewlyInsertedAgent, WasInserted).
+    fn find_or_insert_starting_bastion(&self, role: &str, agent: &Agent) -> Result<(Agent, bool)>;
+
+    /// Remove an agent from the registry (used for cleanup on failed spawns).
+    fn remove(&self, agent_id: Uuid) -> Result<()>;
 }

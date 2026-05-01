@@ -6,7 +6,6 @@ use serde::{Deserialize, Serialize};
 use std::fs::{File, OpenOptions};
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
-use std::time::{Duration, Instant};
 use tempfile::NamedTempFile;
 
 pub struct FileChannelRegistry {
@@ -19,7 +18,8 @@ impl FileChannelRegistry {
     }
 
     fn lock(&self, exclusive: bool) -> Result<LockedFile> {
-        LockedFile::open(&self.path, exclusive)
+        let lock_path = self.path.with_extension("lock");
+        LockedFile::open(&self.path, &lock_path, exclusive)
     }
 }
 
@@ -73,15 +73,16 @@ impl ChannelRegistry for FileChannelRegistry {
     }
 }
 
-// Internal helper mirroring the one in aegis-controller
+/// Internal helper that holds a lock on a sidecar .lock file
+/// while providing access to the registry data file.
 struct LockedFile {
-    file: File,
-    path: PathBuf,
+    lock_file: File,
+    data_path: PathBuf,
 }
 
 impl LockedFile {
-    fn open(path: &Path, exclusive: bool) -> Result<Self> {
-        if let Some(parent) = path.parent() {
+    fn open(data_path: &Path, lock_path: &Path, exclusive: bool) -> Result<Self> {
+        if let Some(parent) = data_path.parent() {
             if !parent.exists() {
                 std::fs::create_dir_all(parent).map_err(|e| AegisError::StorageIo {
                     path: parent.to_path_buf(),
@@ -90,59 +91,43 @@ impl LockedFile {
             }
         }
 
-        let file = OpenOptions::new()
+        let lock_file = OpenOptions::new()
             .read(true)
             .write(true)
             .create(true)
-            .truncate(false)
-            .open(path)
+            .open(lock_path)
             .map_err(|e| AegisError::StorageIo {
-                path: path.to_path_buf(),
+                path: lock_path.to_path_buf(),
                 source: e,
             })?;
 
-        let start = Instant::now();
-        let timeout = Duration::from_secs(5);
-
-        loop {
-            let res = if exclusive {
-                file.try_lock_exclusive().map_err(|e| e.to_string())
-            } else {
-                file.try_lock_shared().map_err(|e| e.to_string())
-            };
-
-            match res {
-                Ok(_) => break,
-                Err(_) if start.elapsed() < timeout => {
-                    std::thread::sleep(Duration::from_millis(100));
-                }
-                Err(e) => {
-                    return Err(AegisError::RegistryLock {
-                        source: std::io::Error::other(e),
-                    })
-                }
-            }
+        if exclusive {
+            lock_file.lock_exclusive()
+        } else {
+            lock_file.lock_shared()
         }
+        .map_err(|e| AegisError::RegistryLock { source: e })?;
 
         Ok(Self {
-            file,
-            path: path.to_path_buf(),
+            lock_file,
+            data_path: data_path.to_path_buf(),
         })
     }
 
     fn read_json<T: DeserializeOwned + Default>(&mut self) -> Result<T> {
-        self.file
-            .seek(SeekFrom::Start(0))
-            .map_err(|e| AegisError::StorageIo {
-                path: self.path.clone(),
-                source: e,
-            })?;
+        if !self.data_path.exists() {
+            return Ok(T::default());
+        }
+
+        let mut file = File::open(&self.data_path).map_err(|e| AegisError::StorageIo {
+            path: self.data_path.clone(),
+            source: e,
+        })?;
 
         let mut content = String::new();
-        self.file
-            .read_to_string(&mut content)
+        file.read_to_string(&mut content)
             .map_err(|e| AegisError::StorageIo {
-                path: self.path.clone(),
+                path: self.data_path.clone(),
                 source: e,
             })?;
 
@@ -151,47 +136,34 @@ impl LockedFile {
         }
 
         serde_json::from_str(&content).map_err(|e| AegisError::RegistryCorrupted {
-            path: self.path.clone(),
+            path: self.data_path.clone(),
             source: e,
         })
     }
 
     fn write_json_atomic<T: Serialize>(&mut self, value: &T) -> Result<()> {
-        let parent = self.path.parent().unwrap_or_else(|| Path::new("."));
+        let parent = self.data_path.parent().unwrap_or_else(|| Path::new("."));
         let mut tmp = NamedTempFile::new_in(parent).map_err(|e| AegisError::StorageIo {
-            path: self.path.clone(),
+            path: self.data_path.clone(),
             source: e,
         })?;
 
         let json =
             serde_json::to_string_pretty(value).map_err(|e| AegisError::RegistryCorrupted {
-                path: self.path.clone(),
+                path: self.data_path.clone(),
                 source: e,
             })?;
 
         tmp.write_all(json.as_bytes())
             .map_err(|e| AegisError::StorageIo {
-                path: self.path.clone(),
+                path: self.data_path.clone(),
                 source: e,
             })?;
 
-        tmp.persist(&self.path).map_err(|e| AegisError::StorageIo {
-            path: self.path.clone(),
+        tmp.persist(&self.data_path).map_err(|e| AegisError::StorageIo {
+            path: self.data_path.clone(),
             source: e.error,
         })?;
-
-        // Re-acquire lock on the new file
-        self.file = OpenOptions::new()
-            .read(true)
-            .write(true)
-            .open(&self.path)
-            .map_err(|e| AegisError::StorageIo {
-                path: self.path.clone(),
-                source: e,
-            })?;
-        self.file
-            .lock_exclusive()
-            .map_err(|e| AegisError::RegistryLock { source: e })?;
 
         Ok(())
     }
@@ -199,6 +171,6 @@ impl LockedFile {
 
 impl Drop for LockedFile {
     fn drop(&mut self) {
-        let _ = self.file.unlock();
+        let _ = self.lock_file.unlock();
     }
 }
