@@ -94,3 +94,27 @@ providers:
     error_patterns:
       rate_limit: ["rate limit", 're:429', "too many requests", "quota exceeded"]
       auth: ["401", "unauthorized", "invalid api key", "not logged in", "authentication failed"]
+
+  opencode:
+    binary: "opencode"
+    auto_approve_flags: ["--dangerously-skip-permissions", "--pure"]
+    startup_delay_ms: 2000
+    resume_mechanism: "cli_flag"
+    resume_flag: "--session"
+    export_command: "/export"
+    model_flag: "--model"
+    interaction_model:
+      type: "injected_tui"
+    system_prompt_mechanism:
+      type: "none"
+    nudges:
+      - trigger:
+          type: stalled
+          timeout_ms: 30000
+        actions:
+          - type: send_text
+            text: "Continue"
+        repeat: true
+    error_patterns:
+      rate_limit: ["rate limit", 're:429', "quota exceeded", "usage limit reached"]
+      auth: ["401", "unauthorized", "authentication failed"]
