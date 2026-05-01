@@ -48,6 +48,7 @@ pub trait FailoverExecutor: Send + Sync {
     async fn mark_active(&self, agent_id: Uuid, provider_name: &str) -> Result<()>;
     async fn mark_paused(&self, agent_id: Uuid) -> Result<()>;
     async fn process_receipt(&self, agent_id: Uuid) -> Result<()>;
+    async fn send_initial_prompt(&self, agent: &Agent) -> Result<()>;
 }
 
 pub struct FailoverCoordinator {
@@ -490,8 +491,15 @@ mod tests {
             self.calls.lock().unwrap().push("receipt".to_string());
             Ok(())
         }
-    }
 
+        async fn send_initial_prompt(&self, _agent: &Agent) -> Result<()> {
+            self.calls
+                .lock()
+                .unwrap()
+                .push("initial_prompt".to_string());
+            Ok(())
+        }
+    }
     #[tokio::test]
     async fn failover_selects_next_provider() {
         let agent = active_agent("claude-code", vec!["claude-code", "gemini-cli"]);

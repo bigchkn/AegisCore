@@ -1,3 +1,4 @@
+use aegis_core::provider::NudgeDefinition;
 use aegis_core::InteractionModel;
 use aegis_core::SystemPromptMechanism;
 use serde::{Deserialize, Serialize};
@@ -32,6 +33,8 @@ pub struct ProviderDefinition {
     pub initial_prompt_arg: Option<String>,
     pub interaction_model: InteractionModel,
     pub system_prompt_mechanism: SystemPromptMechanism,
+    #[serde(default)]
+    pub nudges: Vec<NudgeDefinition>,
     pub error_patterns: ErrorPatterns,
     #[serde(default)]
     pub startup_delay_ms: u64,

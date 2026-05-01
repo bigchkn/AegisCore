@@ -38,7 +38,7 @@ impl Channel for InjectionChannel {
         self.tmux
             .send_text(&self.target, &text)
             .await
-            .map_err(|e| aegis_core::error::AegisError::from(e))?;
+            .map_err(aegis_core::error::AegisError::from)?;
 
         Ok(())
     }

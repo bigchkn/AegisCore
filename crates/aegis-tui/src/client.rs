@@ -158,10 +158,8 @@ impl AegisClient {
             while let Some(line_res) = framed.next().await {
                 if let Ok(line) = line_res {
                     if let Ok(msg) = serde_json::from_str::<MessageWrapper>(&line) {
-                        if msg.kind == "line" {
-                            if tx.send(msg.data).await.is_err() {
-                                break;
-                            }
+                        if msg.kind == "line" && tx.send(msg.data).await.is_err() {
+                            break;
                         }
                     }
                 }

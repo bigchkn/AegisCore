@@ -207,7 +207,7 @@ impl MessageRouter {
             tmux.capture_pane_plain(&target, 30)
                 .await
                 .map_err(|e| AegisError::IpcConnection {
-                    source: std::io::Error::new(std::io::ErrorKind::Other, e.to_string()),
+                    source: std::io::Error::other(e.to_string()),
                 })?;
         if !pane_looks_ready_for_nudge(&pane) {
             tracing::debug!(
@@ -223,7 +223,7 @@ impl MessageRouter {
         tmux.send_interactive_text(&target, &prompt)
             .await
             .map_err(|e| AegisError::IpcConnection {
-                source: std::io::Error::new(std::io::ErrorKind::Other, e.to_string()),
+                source: std::io::Error::other(e.to_string()),
             })?;
 
         Ok(true)

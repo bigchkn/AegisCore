@@ -487,7 +487,7 @@ impl ClarificationService {
 
         Err(AegisError::StorageIo {
             path: path.to_path_buf(),
-            source: std::io::Error::new(std::io::ErrorKind::Other, "missing parent"),
+            source: std::io::Error::other("missing parent"),
         })
     }
 }

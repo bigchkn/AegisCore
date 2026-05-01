@@ -74,7 +74,7 @@ pub async fn list(
         return Ok(());
     }
 
-    println!("{:<12}  {}", "MILESTONE", "PATH");
+    println!("{:<12}  PATH", "MILESTONE");
     printer.separator();
     for entry in &arr {
         let id = entry

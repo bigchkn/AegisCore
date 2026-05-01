@@ -231,7 +231,7 @@ fn render_overlay(app: &AppState, frame: &mut Frame) {
 fn render_project_switcher_overlay(
     frame: &mut Frame,
     area: Rect,
-    projects: &Vec<ProjectRecord>,
+    projects: &[ProjectRecord],
     selected_idx: usize,
 ) {
     let items: Vec<ListItem> = projects

@@ -17,6 +17,6 @@ impl ObservationService {
         self.tmux
             .capture_pane_plain(&target, lines)
             .await
-            .map_err(|e| aegis_core::error::AegisError::from(e))
+            .map_err(aegis_core::error::AegisError::from)
     }
 }

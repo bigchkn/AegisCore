@@ -186,10 +186,8 @@ impl TmuxClient {
         polling_interval_ms: u64,
         timeout_ms: u64,
     ) -> Result<bool, TmuxError> {
-        let required_checks = std::cmp::max(
-            1,
-            ((stable_duration_ms + polling_interval_ms - 1) / polling_interval_ms) as usize,
-        );
+        let required_checks =
+            std::cmp::max(1, stable_duration_ms.div_ceil(polling_interval_ms) as usize);
         let mut last_signature = String::new();
         let mut stable_checks = 0usize;
         let deadline = std::time::Instant::now() + Duration::from_millis(timeout_ms);

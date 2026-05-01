@@ -39,6 +39,7 @@ impl Printer {
         eprintln!("warning: {msg}");
     }
 
+    #[allow(dead_code)]
     pub fn error(&self, msg: &str) {
         eprintln!("error: {msg}");
     }

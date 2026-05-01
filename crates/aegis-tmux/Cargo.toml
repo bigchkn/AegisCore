@@ -12,6 +12,7 @@ tracing    = { workspace = true }
 thiserror  = { workspace = true }
 tempfile   = "3"
 uuid       = { version = "1", features = ["v4"] }
+async-trait.workspace = true
 
 [dev-dependencies]
 tokio = { workspace = true }

@@ -2,7 +2,7 @@ use crate::generic::GenericProvider;
 use crate::manifest::BuiltinManifest;
 use aegis_core::config::{AgentEntry, EffectiveConfig};
 use aegis_core::error::{AegisError, Result};
-use aegis_core::provider::Provider;
+use aegis_core::provider::{Provider, ProviderConfig};
 use std::collections::HashMap;
 
 pub struct ProviderRegistry {
@@ -21,7 +21,7 @@ impl ProviderRegistry {
 
         for (name, definition) in &manifest.providers {
             let user_config = if let Some(entry) = cfg.providers.get(name) {
-                aegis_core::provider::ProviderConfig {
+                ProviderConfig {
                     name: name.clone(),
                     binary: entry.binary.clone(),
                     extra_args: entry.extra_args.clone(),
@@ -38,7 +38,7 @@ impl ProviderRegistry {
                         .unwrap_or(definition.startup_delay_ms),
                 }
             } else {
-                aegis_core::provider::ProviderConfig {
+                ProviderConfig {
                     name: name.clone(),
                     binary: definition.binary.clone(),
                     extra_args: Vec::new(),
@@ -62,6 +62,10 @@ impl ProviderRegistry {
             manifest,
             providers,
         })
+    }
+
+    pub fn insert(&mut self, name: String, provider: Box<dyn Provider>) {
+        self.providers.insert(name, provider);
     }
 
     pub fn get(&self, name: &str) -> Result<&dyn Provider> {

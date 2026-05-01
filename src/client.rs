@@ -124,6 +124,7 @@ impl DaemonClient {
     }
 
     /// Check whether the daemon socket is reachable.
+    #[allow(dead_code)]
     pub async fn is_reachable(&self) -> bool {
         self.connect().await.is_ok()
     }

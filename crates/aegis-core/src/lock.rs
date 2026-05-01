@@ -27,6 +27,7 @@ impl LockedFile {
             .read(true)
             .write(true)
             .create(true)
+            .truncate(false)
             .open(path)
             .map_err(|e| AegisError::StorageIo {
                 path: path.to_path_buf(),
@@ -50,7 +51,7 @@ impl LockedFile {
                 }
                 Err(e) => {
                     return Err(AegisError::RegistryLock {
-                        source: std::io::Error::new(std::io::ErrorKind::Other, e),
+                        source: std::io::Error::other(e),
                     })
                 }
             }

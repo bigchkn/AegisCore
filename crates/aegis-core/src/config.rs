@@ -246,7 +246,7 @@ impl EffectiveConfig {
         if !path.exists() {
             return Ok(RawConfig::default());
         }
-        let content = std::fs::read_to_string(&path).map_err(|e| AegisError::Io(e))?;
+        let content = std::fs::read_to_string(&path).map_err(AegisError::Io)?;
         toml::from_str(&content).map_err(|e| AegisError::Config {
             field: "global_config".into(),
             reason: e.to_string(),
@@ -262,7 +262,7 @@ impl EffectiveConfig {
                 reason: format!("aegis.toml not found in {}", project_root.display()),
             });
         }
-        let content = std::fs::read_to_string(&path).map_err(|e| AegisError::Io(e))?;
+        let content = std::fs::read_to_string(&path).map_err(AegisError::Io)?;
         toml::from_str(&content).map_err(|e| AegisError::Config {
             field: "project_config".into(),
             reason: e.to_string(),
@@ -385,7 +385,7 @@ impl EffectiveConfig {
                 .sandbox
                 .defaults
                 .as_ref()
-                .or_else(|| global.sandbox.defaults.as_ref());
+                .or(global.sandbox.defaults.as_ref());
 
             SandboxPolicyConfig {
                 network: policy

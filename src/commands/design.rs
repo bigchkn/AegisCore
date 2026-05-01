@@ -36,10 +36,7 @@ pub fn list(printer: &Printer, anchor: &ProjectAnchor) -> Result<(), AegisCliErr
         return Ok(());
     }
 
-    println!(
-        "{:<30} {:<10} {:<10}  {}",
-        "NAME", "KIND", "LAYER", "DESCRIPTION"
-    );
+    println!("{:<30} {:<10} {:<10}  DESCRIPTION", "NAME", "KIND", "LAYER");
     printer.separator();
     for t in &items {
         println!(

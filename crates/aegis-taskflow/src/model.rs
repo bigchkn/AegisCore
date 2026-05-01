@@ -38,18 +38,13 @@ impl TaskflowStatus {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum TaskType {
+    #[default]
     Feature,
     Bug,
     Maintenance,
-}
-
-impl Default for TaskType {
-    fn default() -> Self {
-        Self::Feature
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

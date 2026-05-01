@@ -189,7 +189,7 @@ async fn handle_connection(
             .send(response_json)
             .await
             .map_err(|e| AegisError::IpcConnection {
-                source: std::io::Error::new(std::io::ErrorKind::Other, e),
+                source: std::io::Error::other(e),
             })?;
     }
 
@@ -1406,5 +1406,5 @@ async fn get_or_load_runtime(
 }
 
 fn io_error_from_codec(e: tokio_util::codec::LinesCodecError) -> std::io::Error {
-    std::io::Error::new(std::io::ErrorKind::Other, e)
+    std::io::Error::other(e)
 }

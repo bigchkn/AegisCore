@@ -12,8 +12,16 @@ providers:
     system_prompt_mechanism:
       type: "flag"
       arg: "--append-system-prompt-file"
+    nudges:
+      - trigger:
+          type: stalled
+          timeout_ms: 30000
+        actions:
+          - type: send_text
+            text: "Continue"
+        repeat: true
     error_patterns:
-      rate_limit: ["rate limit", "re:\\b429\\b", "usage limit reached", "hit your limit", "apierror: 529", "Stop and wait for limit to reset"]
+      rate_limit: ["rate limit", 're:429', "usage limit reached", "hit your limit", "apierror: 529", "Stop and wait for limit to reset"]
       auth: ["401", "authentication failed"]
 
   gemini-cli:
@@ -31,8 +39,17 @@ providers:
     system_prompt_mechanism:
       type: "env"
       var: "GEMINI_SYSTEM_MD"
+    nudges:
+      - trigger:
+          type: stalled
+          timeout_ms: 30000
+        actions:
+          - type: send_text
+            text: "Continue?"
+        repeat: true
     error_patterns:
-      rate_limit: ["quota exceeded", "usage limit reached", "re:\\b429\\b"]
+      rate_limit: ["quota exceeded", "usage limit reached", 're:[0-9]']
+
       auth: ["401", "permission denied"]
 
   codex:
@@ -47,7 +64,7 @@ providers:
     system_prompt_mechanism:
       type: "none"
     error_patterns:
-      rate_limit: ["rate limit", "re:\\b429\\b", "too many requests", "quota exceeded"]
+      rate_limit: ["rate limit", 're:429', "too many requests", "quota exceeded"]
       auth: ["401", "unauthorized", "invalid api key", "not logged in"]
 
   dirac:
@@ -62,6 +79,18 @@ providers:
       type: "headless_iterative"
     system_prompt_mechanism:
       type: "none"
+    nudges:
+      - trigger:
+          type: screen_scrape
+          pattern: "Task completed successfully"
+          interval_ms: 2000
+        actions:
+          - type: send_text
+            text: "1"
+          - type: wait
+            duration_ms: 1000
+          - type: send_initial_prompt
+        repeat: true
     error_patterns:
-      rate_limit: ["rate limit", "re:\\b429\\b", "too many requests", "quota exceeded"]
+      rate_limit: ["rate limit", 're:429', "too many requests", "quota exceeded"]
       auth: ["401", "unauthorized", "invalid api key", "not logged in", "authentication failed"]

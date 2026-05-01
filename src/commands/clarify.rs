@@ -2,6 +2,7 @@ use crate::{
     anchoring::ProjectAnchor, client::DaemonClient, error::AegisCliError, output::Printer,
 };
 
+#[allow(clippy::too_many_arguments)]
 pub async fn request(
     agent_id: &str,
     task_id: Option<&str>,

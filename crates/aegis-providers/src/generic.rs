@@ -1,6 +1,7 @@
 use crate::handoff::render_handoff_prompt;
 use crate::manifest::{ProviderDefinition, ResumeMechanism};
 use aegis_core::provider::{FailoverContext, Provider, ProviderConfig, SessionRef};
+use regex::Regex;
 use std::path::Path;
 use std::process::Command;
 
@@ -113,28 +114,40 @@ impl Provider for GenericProvider {
     }
 
     fn is_rate_limit_error(&self, line: &str) -> bool {
-        let l = line.to_lowercase();
         self.definition
             .error_patterns
             .rate_limit
             .iter()
-            .any(|p| l.contains(p))
+            .any(|p| match_pattern(p, line))
     }
 
     fn is_auth_error(&self, line: &str) -> bool {
-        let l = line.to_lowercase();
         self.definition
             .error_patterns
             .auth
             .iter()
-            .any(|p| l.contains(p))
+            .any(|p| match_pattern(p, line))
     }
 
     fn is_task_complete(&self, _line: &str) -> bool {
         false
     }
 
+    fn nudges(&self) -> &[aegis_core::provider::NudgeDefinition] {
+        &self.definition.nudges
+    }
+
     fn failover_handoff_prompt(&self, ctx: &FailoverContext) -> String {
         render_handoff_prompt(ctx)
     }
+}
+
+fn match_pattern(pattern: &str, line: &str) -> bool {
+    if let Some(regex_str) = pattern.strip_prefix("re:") {
+        if let Ok(re) = Regex::new(regex_str) {
+            let re: Regex = re;
+            return re.is_match(line);
+        }
+    }
+    line.to_lowercase().contains(&pattern.to_lowercase())
 }

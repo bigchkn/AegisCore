@@ -23,6 +23,49 @@ pub enum InteractionModel {
     InjectedTui,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum NudgeTrigger {
+    /// Triggered when the provider output has stalled for N seconds.
+    Stalled { timeout_ms: u64 },
+    /// Triggered immediately after a task is detected as complete (via Watchdog).
+    TaskComplete,
+    /// Triggered when a specific output pattern is matched in the streaming output.
+    Pattern(String),
+    /// Triggered when the TUI screen content matches a scraping rule.
+    ScreenScrape {
+        /// Regex pattern to look for on the screen.
+        pattern: String,
+        /// Optional: Only search within a specific rectangular region [x1, y1, x2, y2].
+        /// If None, searches the entire visible screen.
+        region: Option<[u16; 4]>,
+        /// How often to scrape the screen (ms).
+        interval_ms: u64,
+    },
+    /// Triggered when the screen content and cursor have been stable for N ms.
+    /// Useful for detecting when a TUI is waiting for input without a clear text prompt.
+    Stability { stable_ms: u64, timeout_ms: u64 },
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum NudgeAction {
+    /// Send literal text to the pane.
+    SendText { text: String },
+    /// Wait for a specific duration.
+    Wait { duration_ms: u64 },
+    /// Re-inject the initial system/task prompt.
+    SendInitialPrompt,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct NudgeDefinition {
+    pub trigger: NudgeTrigger,
+    pub actions: Vec<NudgeAction>,
+    /// Whether to repeat this nudge every time the trigger matches.
+    pub repeat: bool,
+}
+
 #[derive(Debug, Clone)]
 pub struct ProviderConfig {
     pub name: String,
@@ -93,6 +136,8 @@ pub trait Provider: Send + Sync {
     /// User-defined task-complete patterns are handled by the Watchdog config;
     /// providers may optionally detect their own completion signals here.
     fn is_task_complete(&self, line: &str) -> bool;
+
+    fn nudges(&self) -> &[NudgeDefinition];
 
     /// Generate the recovery prompt to inject into the receiving provider at failover.
     fn failover_handoff_prompt(&self, ctx: &FailoverContext) -> String;

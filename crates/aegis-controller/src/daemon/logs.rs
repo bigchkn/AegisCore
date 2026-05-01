@@ -208,7 +208,7 @@ impl PaneRelay {
                 Some(input_bytes) = in_rx.next() => {
                     append_tmux_input(&log_path, &input_bytes)?;
                     self.tmux.send_raw_input(&target, &input_bytes).await
-                        .map_err(|e| AegisError::IpcConnection { source: std::io::Error::new(std::io::ErrorKind::Other, e.to_string()) })?;
+                        .map_err(|e| AegisError::IpcConnection { source: std::io::Error::other(e.to_string()) })?;
                 }
             }
         }

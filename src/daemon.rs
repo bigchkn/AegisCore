@@ -44,7 +44,7 @@ async fn main() -> Result<()> {
         .append(true)
         .open(log_dir.join("daemon.log"))
         .ok()
-        .map(|f| std::sync::Mutex::new(f));
+        .map(std::sync::Mutex::new);
 
     let file_layer = log_file.map(|f| {
         let writer = std::sync::Arc::new(f);

@@ -269,10 +269,10 @@ impl TaskflowEngine {
                 pending.push((milestone.id, key.clone(), m_ref.name.clone()));
             } else {
                 for dep in &milestone.depends_on {
-                    if status_map.get(dep).map(|s| s != "done").unwrap_or(true) {
-                        if !blocked_by.contains(dep) {
-                            blocked_by.push(dep.clone());
-                        }
+                    if status_map.get(dep).map(|s| s != "done").unwrap_or(true)
+                        && !blocked_by.contains(dep)
+                    {
+                        blocked_by.push(dep.clone());
                     }
                 }
             }
@@ -512,7 +512,7 @@ impl TaskflowEngine {
                 .filter(|id| !id.trim().is_empty())
                 .unwrap_or_else(|| Self::next_backlog_task_id(&backlog.tasks));
 
-            if self.task_id_conflicts(&id, None, &[backlog_path.clone()])? {
+            if self.task_id_conflicts(&id, None, std::slice::from_ref(&backlog_path))? {
                 return Err(aegis_core::error::AegisError::ConfigValidation {
                     field: "task_id".into(),
                     reason: format!("Task ID {} already exists", id),
@@ -554,7 +554,7 @@ impl TaskflowEngine {
             .filter(|id| !id.trim().is_empty())
             .unwrap_or_else(|| Self::next_milestone_task_id(&milestone));
 
-        if self.task_id_conflicts(&id, None, &[m_path.clone()])? {
+        if self.task_id_conflicts(&id, None, std::slice::from_ref(&m_path))? {
             return Err(aegis_core::error::AegisError::ConfigValidation {
                 field: "task_id".into(),
                 reason: format!("Task ID {} already exists", id),
@@ -630,7 +630,11 @@ impl TaskflowEngine {
             let mut updated = backlog.tasks[current_index].clone();
             Self::apply_task_patch(&mut updated, &patch);
 
-            if self.task_id_conflicts(&updated.id, Some(task_uid), &[backlog_path.clone()])? {
+            if self.task_id_conflicts(
+                &updated.id,
+                Some(task_uid),
+                std::slice::from_ref(&backlog_path),
+            )? {
                 return Err(aegis_core::error::AegisError::ConfigValidation {
                     field: "task_id".into(),
                     reason: format!("Task ID {} already exists", updated.id),
@@ -674,7 +678,7 @@ impl TaskflowEngine {
         let mut updated = milestone.tasks[current_index].clone();
         Self::apply_task_patch(&mut updated, &patch);
 
-        if self.task_id_conflicts(&updated.id, Some(task_uid), &[m_path.clone()])? {
+        if self.task_id_conflicts(&updated.id, Some(task_uid), std::slice::from_ref(&m_path))? {
             return Err(aegis_core::error::AegisError::ConfigValidation {
                 field: "task_id".into(),
                 reason: format!("Task ID {} already exists", updated.id),

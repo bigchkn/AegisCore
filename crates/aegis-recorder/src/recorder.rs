@@ -165,12 +165,7 @@ where
             .map_err(AegisError::from)
     })
     .join()
-    .map_err(|_| {
-        AegisError::Io(std::io::Error::new(
-            std::io::ErrorKind::Other,
-            "tmux runtime thread panicked",
-        ))
-    })?
+    .map_err(|_| AegisError::Io(std::io::Error::other("tmux runtime thread panicked")))?
 }
 
 fn unique_archive_path(archive_dir: &std::path::Path, agent_id: Uuid, ts: &str) -> PathBuf {
@@ -184,8 +179,7 @@ fn unique_archive_path(archive_dir: &std::path::Path, agent_id: Uuid, ts: &str) 
 }
 
 fn lock_error<T>(_: std::sync::PoisonError<T>) -> AegisError {
-    AegisError::Io(std::io::Error::new(
-        std::io::ErrorKind::Other,
+    AegisError::Io(std::io::Error::other(
         "flight recorder active pane lock poisoned",
     ))
 }

@@ -886,7 +886,7 @@ async fn handle_ws(socket: WebSocket, event_bus: Arc<EventBus>) {
             Err(_) => continue,
         };
 
-        if sender.send(Message::Text(event_json.into())).await.is_err() {
+        if sender.send(Message::Text(event_json)).await.is_err() {
             break;
         }
     }
@@ -958,7 +958,7 @@ async fn ws_logs_handler(
                     };
                     let json = serde_json::to_string(&msg).unwrap();
                     Pin::new(&mut self.inner)
-                        .start_send(Message::Text(json.into()))
+                        .start_send(Message::Text(json))
                         .map_err(|e| aegis_core::AegisError::Unexpected(Box::new(e)))
                 }
                 fn poll_flush(
@@ -1065,7 +1065,7 @@ async fn ws_pane_handler(
                         }
                     };
                     Pin::new(&mut self.inner)
-                        .start_send(Message::Text(json.into()))
+                        .start_send(Message::Text(json))
                         .map_err(|e| aegis_core::AegisError::Unexpected(Box::new(e)))
                 }
                 fn poll_flush(

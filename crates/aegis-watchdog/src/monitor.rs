@@ -6,17 +6,36 @@ use std::{
 
 use aegis_core::{
     config::{RecorderConfig, WatchdogConfig},
+    provider::NudgeTrigger,
     Agent, AgentRegistry, AgentStatus, DetectedEvent, Recorder, Result, TaskRegistry,
     WatchdogAction, WatchdogSink,
 };
 use aegis_providers::ProviderRegistry;
-use aegis_tmux::{TmuxClient, TmuxTarget};
+use aegis_tmux::{TmuxClientInterface, TmuxTarget};
 use async_trait::async_trait;
 use tokio::sync::watch;
 use tracing::{error, warn};
 use uuid::Uuid;
 
-use crate::{FailoverCoordinator, FailoverExecutor, PatternMatcher};
+struct TmuxPaneObserver {
+    tmux: Arc<dyn TmuxClientInterface>,
+}
+
+#[async_trait]
+impl PaneObserver for TmuxPaneObserver {
+    async fn pane_exit_status(&self, target: &TmuxTarget) -> Result<Option<i32>> {
+        self.tmux.pane_exit_status(target).await.map_err(Into::into)
+    }
+
+    async fn capture_pane_plain(&self, target: &TmuxTarget, lines: usize) -> Result<String> {
+        self.tmux
+            .capture_pane_plain(target, lines)
+            .await
+            .map_err(Into::into)
+    }
+}
+
+use crate::{nudge::NudgeManager, FailoverCoordinator, FailoverExecutor, PatternMatcher};
 
 pub struct Watchdog {
     observer: Arc<dyn PaneObserver>,
@@ -24,15 +43,18 @@ pub struct Watchdog {
     executor: Arc<dyn FailoverExecutor>,
     failover: FailoverCoordinator,
     providers: Arc<ProviderRegistry>,
+    nudge: NudgeManager,
     sink: Arc<dyn WatchdogSink>,
     matcher: PatternMatcher,
     config: WatchdogConfig,
     recent_events: Mutex<HashMap<(Uuid, &'static str, String), Instant>>,
+    last_captures: Mutex<HashMap<Uuid, String>>,
 }
 
 impl Watchdog {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
-        tmux: Arc<TmuxClient>,
+        tmux: Arc<dyn TmuxClientInterface>,
         agents: Arc<dyn AgentRegistry>,
         tasks: Arc<dyn TaskRegistry>,
         recorder: Arc<dyn Recorder>,
@@ -43,7 +65,7 @@ impl Watchdog {
         executor: Arc<dyn FailoverExecutor>,
     ) -> Result<Self> {
         Self::with_observer(
-            Arc::new(TmuxPaneObserver { tmux }),
+            Arc::new(TmuxPaneObserver { tmux: tmux.clone() }),
             agents,
             tasks,
             recorder,
@@ -51,10 +73,12 @@ impl Watchdog {
             sink,
             config,
             recorder_config,
-            executor,
+            executor.clone(),
+            NudgeManager::new(tmux, executor),
         )
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn with_observer(
         observer: Arc<dyn PaneObserver>,
         agents: Arc<dyn AgentRegistry>,
@@ -65,6 +89,7 @@ impl Watchdog {
         config: WatchdogConfig,
         recorder_config: RecorderConfig,
         executor: Arc<dyn FailoverExecutor>,
+        nudge: NudgeManager,
     ) -> Result<Self> {
         let matcher = PatternMatcher::new(&config.patterns)?;
         let failover = FailoverCoordinator::new(
@@ -82,10 +107,12 @@ impl Watchdog {
             executor,
             failover,
             providers,
+            nudge,
             sink,
             matcher,
             config,
             recent_events: Mutex::new(HashMap::new()),
+            last_captures: Mutex::new(HashMap::new()),
         })
     }
 
@@ -164,6 +191,23 @@ impl Watchdog {
                 }
             };
 
+            // Track activity and apply nudges
+            {
+                let mut last_caps = self.last_captures.lock().unwrap();
+                let is_changed = match last_caps.get(&agent.agent_id) {
+                    Some(prev) => prev != &capture,
+                    None => true,
+                };
+                if is_changed {
+                    self.nudge.record_activity(agent.agent_id);
+                    last_caps.insert(agent.agent_id, capture.clone());
+                }
+            }
+
+            self.nudge
+                .check_and_apply(&agent, provider.nudges(), &capture)
+                .await?;
+
             if let Some(event) = self.matcher.detect(agent.agent_id, provider, &capture) {
                 if self.should_emit(&event) {
                     tracing::info!(
@@ -181,6 +225,22 @@ impl Watchdog {
     }
 
     async fn handle_event(&self, event: DetectedEvent) -> Result<()> {
+        // Apply TaskComplete nudges if applicable
+        if matches!(event, DetectedEvent::TaskComplete { .. }) {
+            if let Some(agent) = self.agents.get(event.agent_id())? {
+                if let Ok(provider) = self.providers.get(&agent.cli_provider) {
+                    let target = TmuxTarget::parse(&agent.tmux_target())?;
+                    for nudge in provider.nudges() {
+                        if matches!(nudge.trigger, NudgeTrigger::TaskComplete) {
+                            self.nudge
+                                .apply_actions(&agent, &target, &nudge.actions)
+                                .await?;
+                        }
+                    }
+                }
+            }
+        }
+
         let action = self.sink.on_event(event.clone());
         match action {
             WatchdogAction::InitiateFailover if self.config.failover_enabled => {
@@ -301,30 +361,29 @@ trait PaneObserver: Send + Sync {
     async fn capture_pane_plain(&self, target: &TmuxTarget, lines: usize) -> Result<String>;
 }
 
-struct TmuxPaneObserver {
-    tmux: Arc<TmuxClient>,
-}
-
-#[async_trait]
-impl PaneObserver for TmuxPaneObserver {
-    async fn pane_exit_status(&self, target: &TmuxTarget) -> Result<Option<i32>> {
-        self.tmux.pane_exit_status(target).await.map_err(Into::into)
-    }
-
-    async fn capture_pane_plain(&self, target: &TmuxTarget, lines: usize) -> Result<String> {
-        self.tmux
-            .capture_pane_plain(target, lines)
-            .await
-            .map_err(Into::into)
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use aegis_core::{config::WatchdogPatterns, AegisError, AgentKind, LogQuery, Task, TaskStatus};
+    use aegis_core::provider::{NudgeAction, NudgeDefinition};
+    use aegis_core::{
+        config::WatchdogPatterns, AegisError, AgentKind, LogQuery, StorageBackend, Task, TaskStatus,
+    };
+    use aegis_providers::{
+        generic::GenericProvider,
+        manifest::{ErrorPatterns, ProviderDefinition, ResumeMechanism},
+    };
+    use aegis_tmux::{TmuxClient, TmuxError};
     use chrono::Utc;
     use std::path::PathBuf;
+    use uuid::Uuid;
+
+    fn mock_config() -> aegis_core::config::EffectiveConfig {
+        aegis_core::config::EffectiveConfig::resolve(
+            &aegis_core::config::RawConfig::default(),
+            &aegis_core::config::RawConfig::default(),
+        )
+        .unwrap()
+    }
 
     fn recorder_config() -> RecorderConfig {
         RecorderConfig {
@@ -358,6 +417,190 @@ mod tests {
         )
         .unwrap();
         Arc::new(ProviderRegistry::from_config(&cfg).unwrap())
+    }
+
+    #[derive(Default)]
+    struct MockTmuxClient {
+        sent_texts: Mutex<Vec<(String, String)>>,
+    }
+
+    #[async_trait]
+    impl TmuxClientInterface for MockTmuxClient {
+        async fn send_interactive_text(
+            &self,
+            target: &TmuxTarget,
+            text: &str,
+        ) -> std::result::Result<(), TmuxError> {
+            self.sent_texts
+                .lock()
+                .unwrap()
+                .push((target.to_string(), text.to_string()));
+            Ok(())
+        }
+        async fn capture_pane_plain(
+            &self,
+            _target: &TmuxTarget,
+            _lines: usize,
+        ) -> std::result::Result<String, TmuxError> {
+            Ok(String::new())
+        }
+        async fn pane_exit_status(
+            &self,
+            _target: &TmuxTarget,
+        ) -> std::result::Result<Option<i32>, TmuxError> {
+            Ok(None)
+        }
+        async fn session_exists(&self, _session: &str) -> std::result::Result<bool, TmuxError> {
+            Ok(true)
+        }
+        async fn kill_session(&self, _session: &str) -> std::result::Result<(), TmuxError> {
+            Ok(())
+        }
+        async fn new_session(&self, name: &str) -> std::result::Result<String, TmuxError> {
+            Ok(name.to_string())
+        }
+        async fn harden_pane(&self, _target: &TmuxTarget) -> std::result::Result<(), TmuxError> {
+            Ok(())
+        }
+        async fn list_panes(
+            &self,
+            _target: &TmuxTarget,
+        ) -> std::result::Result<Vec<String>, TmuxError> {
+            Ok(vec!["%1".into()])
+        }
+        async fn pane_has_agent(
+            &self,
+            _target: &TmuxTarget,
+        ) -> std::result::Result<bool, TmuxError> {
+            Ok(true)
+        }
+        async fn wait_for_stability(
+            &self,
+            _target: &TmuxTarget,
+            _stable_duration_ms: u64,
+            _polling_interval_ms: u64,
+            _timeout_ms: u64,
+        ) -> std::result::Result<bool, TmuxError> {
+            Ok(true)
+        }
+    }
+
+    fn nudge_test_watchdog(
+        observer: Arc<dyn PaneObserver>,
+        agents: Arc<dyn AgentRegistry>,
+        executor: Arc<dyn FailoverExecutor>,
+        providers: Arc<ProviderRegistry>,
+        tmux: Arc<dyn TmuxClientInterface>,
+    ) -> Watchdog {
+        Watchdog::with_observer(
+            observer,
+            agents,
+            Arc::new(NoopTaskRegistry),
+            Arc::new(NoopRecorder),
+            providers,
+            Arc::new(RecordingSink::default()),
+            watchdog_config(&[]),
+            recorder_config(),
+            executor.clone(),
+            NudgeManager::new(tmux, executor),
+        )
+        .unwrap()
+    }
+
+    #[tokio::test]
+    async fn sweep_detects_and_applies_nudges() {
+        let agent = agent_with_status(AgentStatus::Active);
+        let executor = Arc::new(RecordingExecutor::default());
+        let tmux = Arc::new(MockTmuxClient::default());
+
+        let mut registry = ProviderRegistry::from_config(&mock_config()).unwrap();
+        let nudges = vec![
+            NudgeDefinition {
+                trigger: NudgeTrigger::Stalled { timeout_ms: 100 },
+                actions: vec![NudgeAction::SendText {
+                    text: "continue".into(),
+                }],
+                repeat: true,
+            },
+            NudgeDefinition {
+                trigger: NudgeTrigger::Pattern("WAITING".into()),
+                actions: vec![NudgeAction::SendInitialPrompt],
+                repeat: true,
+            },
+        ];
+
+        let definition = ProviderDefinition {
+            binary: "test".into(),
+            auto_approve_flags: vec![],
+            resume_mechanism: ResumeMechanism::CliFlag,
+            resume_flag: None,
+            resume_command: None,
+            export_command: None,
+            model_flag: None,
+            interactive_flag: None,
+            initial_prompt_arg: None,
+            interaction_model: aegis_core::InteractionModel::InjectedTui,
+            system_prompt_mechanism: aegis_core::SystemPromptMechanism::None,
+            nudges,
+            error_patterns: ErrorPatterns {
+                rate_limit: vec![],
+                auth: vec![],
+            },
+            startup_delay_ms: 0,
+        };
+        let user_config = aegis_core::provider::ProviderConfig {
+            name: "test-provider".into(),
+            binary: "test".into(),
+            extra_args: vec![],
+            resume_flag: None,
+            model: None,
+            interaction_model: aegis_core::InteractionModel::InjectedTui,
+            interactive_flag: None,
+            initial_prompt_arg: None,
+            startup_delay_ms: 0,
+        };
+        registry.insert(
+            "test-provider".into(),
+            Box::new(GenericProvider::new(definition, user_config)),
+        );
+
+        let observer = Arc::new(FakeObserver {
+            capture: "still WAITING here...".to_string(),
+            exit_status: None,
+            captures: Mutex::new(0),
+        });
+
+        let mut agent = agent;
+        agent.cli_provider = "test-provider".into();
+
+        let watchdog = nudge_test_watchdog(
+            observer.clone(),
+            Arc::new(FakeAgentRegistry {
+                agents: vec![agent.clone()],
+            }),
+            executor.clone(),
+            Arc::new(registry),
+            tmux.clone(),
+        );
+
+        // First sweep: should trigger Pattern nudge ("WAITING")
+        // and record activity (first time seeing this capture)
+        watchdog.sweep_once().await.unwrap();
+
+        // Wait for stall
+        tokio::time::sleep(Duration::from_millis(150)).await;
+
+        // Second sweep: capture hasn't changed, so should trigger Stalled nudge
+        watchdog.sweep_once().await.unwrap();
+
+        assert!(executor
+            .initial_prompts
+            .lock()
+            .unwrap()
+            .contains(&agent.agent_id));
+
+        let sent = tmux.sent_texts.lock().unwrap();
+        assert!(sent.iter().any(|(_, text)| text == "continue"));
     }
 
     fn agent_with_status(status: AgentStatus) -> Agent {
@@ -531,6 +774,7 @@ mod tests {
         status_paused: Mutex<Vec<Uuid>>,
         failed: Mutex<Vec<(Uuid, String)>>,
         receipts: Mutex<Vec<Uuid>>,
+        initial_prompts: Mutex<Vec<Uuid>>,
     }
 
     #[async_trait]
@@ -579,6 +823,11 @@ mod tests {
             self.receipts.lock().unwrap().push(agent_id);
             Ok(())
         }
+
+        async fn send_initial_prompt(&self, agent: &Agent) -> Result<()> {
+            self.initial_prompts.lock().unwrap().push(agent.agent_id);
+            Ok(())
+        }
     }
 
     fn test_watchdog(
@@ -597,7 +846,8 @@ mod tests {
             sink,
             config,
             recorder_config(),
-            executor,
+            executor.clone(),
+            NudgeManager::new(Arc::new(TmuxClient::new()), executor),
         )
         .unwrap()
     }

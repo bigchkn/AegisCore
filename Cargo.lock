@@ -111,6 +111,7 @@ name = "aegis-providers"
 version = "0.1.0"
 dependencies = [
  "aegis-core",
+ "regex",
  "serde",
  "serde_yaml",
  "tracing",
@@ -174,6 +175,7 @@ name = "aegis-tmux"
 version = "0.1.0"
 dependencies = [
  "aegis-core",
+ "async-trait",
  "tempfile",
  "thiserror 2.0.18",
  "tokio",

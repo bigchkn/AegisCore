@@ -2,7 +2,7 @@ use aegis_core::{AegisError, Result};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use uuid::Uuid;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -141,12 +141,18 @@ impl ProjectRegistry {
         self.save(projects)
     }
 
-    pub fn find_by_path(&self, path: &PathBuf) -> Result<Option<ProjectRecord>> {
-        let abs = path.canonicalize().unwrap_or_else(|_| path.clone());
+    pub fn find_by_path(&self, path: &Path) -> Result<Option<ProjectRecord>> {
+        let abs = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
         Ok(self.load()?.into_iter().find(|p| p.root_path == abs))
     }
 
     pub fn find_by_id(&self, id: Uuid) -> Result<Option<ProjectRecord>> {
         Ok(self.load()?.into_iter().find(|p| p.id == id))
+    }
+}
+
+impl Default for ProjectRegistry {
+    fn default() -> Self {
+        Self::new()
     }
 }

@@ -51,7 +51,7 @@ fn handle_overlay(key_event: KeyEvent, app: &mut AppState) -> AppAction {
 
 fn handle_project_switcher(
     key_event: KeyEvent,
-    projects: &Vec<ProjectRecord>,
+    projects: &[ProjectRecord],
     selected_idx: &mut usize,
 ) -> AppAction {
     match key_event.code {

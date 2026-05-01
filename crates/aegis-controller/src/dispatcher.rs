@@ -45,6 +45,7 @@ pub struct Dispatcher {
 }
 
 impl Dispatcher {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         registry: Arc<FileRegistry>,
         project_registry: Option<Arc<ProjectRegistry>>,
@@ -500,7 +501,7 @@ impl Dispatcher {
 
         let project_prefix = self
             .project_id
-            .map(|id| short_id(id))
+            .map(short_id)
             .unwrap_or_else(|| "default".to_string());
 
         let session = match kind {
@@ -987,7 +988,7 @@ impl Dispatcher {
             // We still mark the task complete if the agent is being explicitly terminated.
             TaskRegistry::complete(self.registry.as_ref(), task_id, None)?;
             self.events.publish(AegisEvent::TaskComplete {
-                task_id: task_id,
+                task_id,
                 receipt_path: "m23-messaging".to_string(),
             });
         }
@@ -1262,6 +1263,15 @@ impl FailoverExecutor for Dispatcher {
     async fn process_receipt(&self, agent_id: Uuid) -> Result<()> {
         Dispatcher::process_receipt(self, agent_id).await
     }
+
+    async fn send_initial_prompt(&self, agent: &Agent) -> Result<()> {
+        let prompt = self.resolve_agent_system_prompt(agent)?;
+        if let Some(tmux) = &self.tmux {
+            let target = TmuxTarget::parse(&agent.tmux_target())?;
+            tmux.send_interactive_text(&target, &prompt).await?;
+        }
+        Ok(())
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -1323,6 +1333,7 @@ fn shell_command(parts: &[String]) -> String {
         .join(" ")
 }
 
+#[cfg(test)]
 fn launch_shell_command(worktree_path: &std::path::Path, parts: &[String]) -> String {
     format!(
         "cd {} && {}",
