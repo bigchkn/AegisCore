@@ -29,6 +29,7 @@ export function DesignsView() {
   const [refinement, setRefinement] = useState<RefinementForm | null>(null);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const [listCollapsed, setListCollapsed] = useState(false);
 
   const loadDocs = useCallback(async () => {
     if (!activeProjectId) return;
@@ -133,6 +134,14 @@ export function DesignsView() {
           <p>{docs.length} documents under .aegis/designs</p>
         </div>
         <div className="taskflow-actions">
+          <button
+            type="button"
+            aria-expanded={!listCollapsed}
+            aria-controls="design-doc-list"
+            onClick={() => setListCollapsed((collapsed) => !collapsed)}
+          >
+            {listCollapsed ? 'Show List' : 'Hide List'}
+          </button>
           <button type="button" onClick={() => void loadDocs()}>
             Refresh
           </button>
@@ -144,29 +153,31 @@ export function DesignsView() {
 
       {error ? <div className="banner">{error}</div> : null}
 
-      <div className="designs-layout">
-        <aside className="designs-list" aria-label="Design documents">
-          {groupedDocs.length === 0 ? (
-            <p className="muted padding-14">No design documents found.</p>
-          ) : (
-            groupedDocs.map(([kind, items]) => (
-              <div key={kind} className="designs-group">
-                <h3>{kind}</h3>
-                {items.map((doc) => (
-                  <button
-                    key={doc.path}
-                    type="button"
-                    className={doc.path === selectedPath ? 'is-active' : ''}
-                    onClick={() => setSelectedPath(doc.path)}
-                  >
-                    <span>{doc.name}</span>
-                    <small>{doc.path}</small>
-                  </button>
-                ))}
-              </div>
-            ))
-          )}
-        </aside>
+      <div className={`designs-layout${listCollapsed ? ' is-list-collapsed' : ''}`}>
+        {listCollapsed ? null : (
+          <aside id="design-doc-list" className="designs-list" aria-label="Design documents">
+            {groupedDocs.length === 0 ? (
+              <p className="muted padding-14">No design documents found.</p>
+            ) : (
+              groupedDocs.map(([kind, items]) => (
+                <div key={kind} className="designs-group">
+                  <h3>{kind}</h3>
+                  {items.map((doc) => (
+                    <button
+                      key={doc.path}
+                      type="button"
+                      className={doc.path === selectedPath ? 'is-active' : ''}
+                      onClick={() => setSelectedPath(doc.path)}
+                    >
+                      <span>{doc.name}</span>
+                      <small>{doc.path}</small>
+                    </button>
+                  ))}
+                </div>
+              ))
+            )}
+          </aside>
+        )}
 
         <article className="designs-reader">
           {docLoading ? (

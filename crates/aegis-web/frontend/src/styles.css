@@ -979,6 +979,10 @@ tbody tr:hover {
   min-height: 0;
 }
 
+.designs-layout.is-list-collapsed {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .designs-list {
   overflow: auto;
   border-right: 1px solid #303842;

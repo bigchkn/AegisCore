@@ -79,6 +79,24 @@ describe('DesignsView', () => {
     expect(api.readDesignDoc).toHaveBeenCalledWith('proj-1', '.aegis/designs/hld/aegis.md');
   });
 
+  it('collapses and restores the design document list', async () => {
+    renderWithStore();
+
+    await waitFor(() => expect(screen.getByText('aegis.md')).toBeDefined());
+    const toggle = screen.getByRole('button', { name: 'Hide List' });
+
+    fireEvent.click(toggle);
+
+    expect(screen.queryByLabelText('Design documents')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Show List' }).getAttribute('aria-expanded')).toBe('false');
+    expect(screen.getByText(/Design content/)).toBeDefined();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Show List' }));
+
+    expect(screen.getByLabelText('Design documents')).toBeDefined();
+    expect(screen.getByRole('button', { name: 'Hide List' }).getAttribute('aria-expanded')).toBe('true');
+  });
+
   it('starts a design refinement cycle', async () => {
     (api.startDesignRefinement as any).mockResolvedValue({
       agent_id: 'agent-1',
