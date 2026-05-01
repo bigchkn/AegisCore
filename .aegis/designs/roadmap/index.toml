@@ -43,6 +43,11 @@ name = "Structured TUI Session Recording"
 path = "milestones/M41.toml"
 status = "in-progress"
 
+[milestones.M42]
+name = "Provider Nudging & Custom Behavior"
+path = "milestones/M42.toml"
+status = "pending"
+
 [milestones.M19]
 name = "Agent Design — Design Phase"
 path = "milestones/M19.toml"

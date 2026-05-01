@@ -1,0 +1,40 @@
+id = 42
+name = "Provider Nudging & Custom Behavior"
+status = "pending"
+lld = "lld/provider-nudging.md"
+depends_on = [37]
+
+[[tasks]]
+id = "42.1"
+uid = "7EEEF055-846D-4C86-9055-CA4013C8709A"
+task = "Define NudgeMechanism and NudgeType in aegis-core"
+task_type = "feature"
+status = "pending"
+
+[[tasks]]
+id = "42.2"
+uid = "67EEFB59-15D4-4431-81AF-E61C75E4F9B5"
+task = "Extend ProviderManifest with nudge configuration"
+task_type = "feature"
+status = "pending"
+
+[[tasks]]
+id = "42.3"
+uid = "44C35992-BDC7-42D6-BA4D-8AE5D94949FD"
+task = "Implement nudge execution logic in dispatcher"
+task_type = "feature"
+status = "pending"
+
+[[tasks]]
+id = "42.4"
+uid = "383EE6CB-7ED4-4911-8218-45D86DCEE59D"
+task = "Add nudge definitions for claude-code and dirac in builtin_providers.yaml"
+task_type = "configuration"
+status = "pending"
+
+[[tasks]]
+id = "42.5"
+uid = "9831BC4A-1B37-484A-BB75-73B35E1C5108"
+task = "Verify complex nudge sequences (e.g. dirac prompt re-injection)"
+task_type = "testing"
+status = "pending"
