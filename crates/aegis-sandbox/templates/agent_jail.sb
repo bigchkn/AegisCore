@@ -18,7 +18,8 @@
 ; Whitelist read/write for specific operational areas
 (allow file-read* file-write*
   (subpath "@@WORKTREE_PATH@@")
-  (subpath "@@AEGIS_LOGS_DIR@@"))
+  (subpath "@@AEGIS_LOGS_DIR@@")
+  (subpath "@@WORKTREE_PATH@@/.git"))
 
 ; User-specific whitelists for tool persistence (e.g. Claude Code)
 (allow file-read* file-write*
