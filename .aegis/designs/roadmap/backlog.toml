@@ -144,7 +144,7 @@ id = "B21"
 uid = "1083eced-766f-4715-859f-fd5f5cd7cabb"
 task = "aegis web-ui agent spawn should default to showing bastion templates rather than splinters on launch"
 task_type = "maintenance"
-status = "pending"
+status = "done"
 
 [[tasks]]
 id = "B22"

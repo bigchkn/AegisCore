@@ -73,10 +73,10 @@ export function AgentsView() {
   const [providers, setProviders] = useState<string[]>([]);
   const [templatesLoading, setTemplatesLoading] = useState(false);
   const [templatesLoaded, setTemplatesLoaded] = useState(false);
-  const [selectedKind, setSelectedKind] = useState<'bastion' | 'splinter'>('splinter');
+  const [selectedKind, setSelectedKind] = useState<'bastion' | 'splinter'>('bastion');
   const [selectedTemplateName, setSelectedTemplateName] = useState('');
   const [selectedProvider, setSelectedProvider] = useState('');
-  const [customKind, setCustomKind] = useState<'bastion' | 'splinter'>('splinter');
+  const [customKind, setCustomKind] = useState<'bastion' | 'splinter'>('bastion');
   const [customProvider, setCustomProvider] = useState('');
   const [customFallbacks, setCustomFallbacks] = useState<string[]>([]);
   const [templateVars, setTemplateVars] = useState<Record<string, string>>({});
@@ -127,7 +127,7 @@ export function AgentsView() {
         setProviders(result.providers);
         const initialTemplate =
           result.templates.find((template) => template.kind === selectedKind) ?? result.templates[0];
-        setSelectedKind(initialTemplate?.kind ?? 'splinter');
+        setSelectedKind(initialTemplate?.kind ?? 'bastion');
         setSelectedTemplateName((current) => current || initialTemplate?.name || '');
         setSelectedProvider((current) => current || initialTemplate?.provider || result.providers[0] || '');
         setCustomProvider((current) => current || initialTemplate?.provider || result.providers[0] || '');
@@ -146,10 +146,10 @@ export function AgentsView() {
     setTemplates([]);
     setProviders([]);
     setTemplatesLoaded(false);
-    setSelectedKind('splinter');
+    setSelectedKind('bastion');
     setSelectedTemplateName('');
     setSelectedProvider('');
-    setCustomKind('splinter');
+    setCustomKind('bastion');
     setCustomProvider('');
     setCustomFallbacks([]);
     setTemplateVars({});

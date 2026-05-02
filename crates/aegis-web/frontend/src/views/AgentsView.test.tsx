@@ -17,7 +17,7 @@ describe('AgentsView', () => {
     vi.unstubAllGlobals();
   });
 
-  it('shows built-in templates in the spawn modal', async () => {
+  it('shows built-in templates in the spawn modal, defaulting to bastion', async () => {
     const store = makeStore();
     store.dispatch(setActiveProject('project-1'));
     vi.stubGlobal('fetch', vi.fn(async () => templateListResponse()));
@@ -37,8 +37,9 @@ describe('AgentsView', () => {
     expect(await screen.findByRole('heading', { name: 'Spawn Agent' })).toBeTruthy();
     expect(screen.getByLabelText('Type')).toBeTruthy();
     expect(screen.getByLabelText('Provider')).toBeTruthy();
-    expect(await screen.findByLabelText('taskflow-implementer')).toBeTruthy();
-    expect(screen.getByText('Implements one taskflow task.')).toBeTruthy();
+    // Bastion templates are shown by default
+    expect(await screen.findByLabelText('taskflow-bastion')).toBeTruthy();
+    expect(screen.getByText('Coordinates taskflow.')).toBeTruthy();
   });
 
   it('submits the custom prompt spawn command through the existing API thunk', async () => {
@@ -77,7 +78,7 @@ describe('AgentsView', () => {
             command: 'spawn',
             params: {
               task: 'Investigate the queue',
-              kind: 'splinter',
+              kind: 'bastion',
               provider: 'claude-code',
               fallback_cascade: [],
             },
@@ -108,6 +109,9 @@ describe('AgentsView', () => {
     );
 
     fireEvent.click(screen.getByRole('button', { name: 'Spawn New Agent' }));
+    // Switch to splinter kind to see splinter templates
+    fireEvent.mouseDown(await screen.findByLabelText('Type'));
+    fireEvent.click(await screen.findByRole('option', { name: 'Splinter' }));
     fireEvent.click(await screen.findByLabelText('taskflow-implementer'));
     fireEvent.change(await screen.findByRole('textbox', { name: /Task Description/ }), {
       target: { value: 'Build the modal' },
