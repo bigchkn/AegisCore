@@ -1,5 +1,5 @@
 use crate::registry::LockedFile;
-use aegis_core::agent::{Agent, AgentRegistry, AgentStatus};
+use aegis_core::agent::{Agent, AgentKind, AgentRegistry, AgentStatus};
 use aegis_core::error::{AegisError, Result};
 use aegis_core::storage::StorageBackend;
 use chrono::Utc;

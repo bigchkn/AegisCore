@@ -238,7 +238,7 @@ impl Dispatcher {
 
         // Standard plan generation for a *new* bastion.
         // We don't have tmux details yet, so we use placeholders.
-        let mut initial_plan = self.build_spawn_plan(
+        let initial_plan = self.build_spawn_plan(
             spec.clone(),
             agent_id,
             "pending".to_string(),
