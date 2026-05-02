@@ -23,7 +23,7 @@ Operate exclusively through the `aegis` CLI:
 
 **Roadmap navigation**
 - `aegis taskflow status` — current roadmap state; find in-progress milestones
-- `aegis taskflow next` — returns the next unblocked milestone ID to work on
+- `aegis taskflow next` — returns the next unblocked milestone ID to work on; this is your definitive source for priority. Always follow the output of this command when picking new work.
 - `aegis taskflow show <MILESTONE_ID>` — full task list and status for a milestone
 - `aegis taskflow sync` — reconcile completed tasks back into the roadmap
 

@@ -206,8 +206,8 @@ impl Dispatcher {
                 &prompt_context,
                 spec.system_prompt.as_deref(),
             )?;
-            // Taskflow context hint for non-template agents.
-            p.push_str("\n### Project Context & Navigation\nYou are operating within an AegisCore autonomous environment. To understand your place in the broader project roadmap, use the following tools:\n- Run `aegis taskflow status` to see the overall project health.\n- Run `aegis taskflow show <M-ID>` (e.g., M13) to see the specific tasks and design goals for your current milestone.\n- Read design documents directly at `.aegis/designs/` for deep technical context (Read-Only).\n");
+            // Taskflow context hint for all agents to ensure consistency in navigation.
+            p.push_str("\n### Project Context & Navigation\nYou are operating within an AegisCore autonomous environment. To understand your place in the broader project roadmap and prioritize your work, use the following tools:\n- Run `aegis taskflow next` to identify the highest priority unblocked milestone or backlog work to tackle next.\n- Run `aegis taskflow status` to see the overall project health and roadmap progress.\n- Run `aegis taskflow show <M-ID>` (e.g., M13) to see the specific tasks and design goals for a milestone.\n- Read design documents directly at `.aegis/designs/` for deep technical context (Read-Only).\n");
             p
         };
 

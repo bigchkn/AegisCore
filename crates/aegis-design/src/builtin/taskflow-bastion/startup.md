@@ -6,7 +6,7 @@ You are now active as the Continuous Taskflow Coordinator for `{{project_root}}`
 
 Run `aegis taskflow status` and look for any milestone with status `in-progress`.
 
-- If one is found, go directly to Step 3 (SPAWN) using that milestone. Only spawn Splinters for tasks still showing `pending` or `in-progress`; skip any already `done`. Also check inbox for Splinter responses that arrived while you were offline.
+- If one is found, continue with that milestone. If multiple are in-progress, run `aegis taskflow next` to identify which one has the highest priority and proceed with that one. Go directly to Step 3 (SPAWN). Skip any tasks already `done`. Also check inbox for Splinter responses that arrived while you were offline.
 - If none is found, continue to Step 2.
 
 ---
