@@ -277,12 +277,13 @@ impl ControllerCommands {
         task_id: &str,
         task: &str,
         task_type: aegis_taskflow::model::TaskType,
+        notes: Option<String>,
     ) -> Result<()> {
         let tf = self.taskflow.as_ref().ok_or_else(|| AegisError::Config {
             field: "taskflow".to_string(),
             reason: "Taskflow engine is not initialized".to_string(),
         })?;
-        tf.add_task(milestone_id, task_id, task, task_type)
+        tf.add_task(milestone_id, task_id, task, task_type, notes)
     }
 
     pub fn taskflow_create_task(

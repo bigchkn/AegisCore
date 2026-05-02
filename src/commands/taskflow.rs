@@ -306,6 +306,7 @@ pub async fn add_task(
     id: &str,
     task: &str,
     task_type: aegis_taskflow::model::TaskType,
+    notes: Option<String>,
     printer: &Printer,
     client: &DaemonClient,
     anchor: &ProjectAnchor,
@@ -319,6 +320,7 @@ pub async fn add_task(
                 "id": id,
                 "task": task,
                 "task_type": task_type,
+                "notes": notes,
             }),
         )
         .await?;
@@ -334,6 +336,7 @@ pub async fn add_task_auto(
     milestone_id: &str,
     task: &str,
     task_type: aegis_taskflow::model::TaskType,
+    notes: Option<String>,
     printer: &Printer,
     client: &DaemonClient,
     anchor: &ProjectAnchor,
@@ -347,6 +350,7 @@ pub async fn add_task_auto(
                 "draft": {
                     "task": task,
                     "task_type": task_type,
+                    "notes": notes,
                 },
             }),
         )

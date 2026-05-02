@@ -318,6 +318,9 @@ enum TaskflowCommands {
         /// Mark as maintenance
         #[arg(long)]
         maint: bool,
+        /// Detailed notes for the task
+        #[arg(long)]
+        notes: Option<String>,
     },
     /// Update the status of a roadmap task
     SetTaskStatus {
@@ -686,6 +689,7 @@ async fn dispatch(cli: Cli, printer: &Printer, client: &DaemonClient) -> Result<
                     task,
                     bug,
                     maint,
+                    notes,
                 } => {
                     let m_id = milestone_id.unwrap_or_else(|| "backlog".to_string());
                     let task_type = if bug {
@@ -699,13 +703,13 @@ async fn dispatch(cli: Cli, printer: &Printer, client: &DaemonClient) -> Result<
                     match id {
                         Some(id) => {
                             commands::taskflow::add_task(
-                                &m_id, &id, &task, task_type, printer, client, &anchor,
+                                &m_id, &id, &task, task_type, notes, printer, client, &anchor,
                             )
                             .await
                         }
                         None => {
                             commands::taskflow::add_task_auto(
-                                &m_id, &task, task_type, printer, client, &anchor,
+                                &m_id, &task, task_type, notes, printer, client, &anchor,
                             )
                             .await
                         }

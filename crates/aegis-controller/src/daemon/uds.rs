@@ -626,8 +626,13 @@ async fn dispatch_command(
                 .get("task_type")
                 .and_then(|v| serde_json::from_value(v.clone()).ok())
                 .unwrap_or_default();
+            let notes: Option<String> = request
+                .params
+                .get("notes")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string());
 
-            commands.taskflow_add_task(milestone_id, id, task, task_type)?;
+            commands.taskflow_add_task(milestone_id, id, task, task_type, notes)?;
             Ok(serde_json::json!({ "message": "Task added" }))
         }
         "taskflow.create_task" => {

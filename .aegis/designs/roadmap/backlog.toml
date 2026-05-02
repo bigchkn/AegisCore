@@ -137,7 +137,7 @@ id = "B20"
 uid = "83892239-e911-4613-a1f2-71d7421e5c01"
 task = "aegis taskflow add-task command lacks way to set detailed notes"
 task_type = "maintenance"
-status = "pending"
+status = "done"
 
 [[tasks]]
 id = "B21"

@@ -868,6 +868,7 @@ impl TaskflowEngine {
         task_id: &str,
         task_desc: &str,
         task_type: crate::model::TaskType,
+        notes: Option<String>,
     ) -> Result<()> {
         if milestone_id == "backlog" {
             let backlog_path = self
@@ -907,7 +908,7 @@ impl TaskflowEngine {
                 task_type,
                 status: TaskflowStatus::Pending,
                 crate_name: None,
-                notes: None,
+                notes,
                 registry_task_id: None,
             });
 
@@ -956,7 +957,7 @@ impl TaskflowEngine {
             task_type,
             status: TaskflowStatus::Pending,
             crate_name: None,
-            notes: None,
+            notes,
             registry_task_id: None,
         });
 
@@ -1104,7 +1105,7 @@ mod tests {
         let (_tmp, engine) = setup_engine();
         engine.create_milestone("10", "Initial", None).unwrap();
         engine
-            .add_task("M10", "10.1", "First task", crate::model::TaskType::Feature)
+            .add_task("M10", "10.1", "First task", crate::model::TaskType::Feature, None)
             .unwrap();
 
         let m = engine.get_milestone("M10").unwrap();
@@ -1194,7 +1195,7 @@ mod tests {
         let (_tmp, engine) = setup_engine();
         engine.create_milestone("1", "M1", None).unwrap();
         engine
-            .add_task("M1", "1.1", "Task 1", crate::model::TaskType::Feature)
+            .add_task("M1", "1.1", "Task 1", crate::model::TaskType::Feature, None)
             .unwrap();
 
         let task_uuid = Uuid::new_v4();
@@ -1233,6 +1234,7 @@ mod tests {
                 "15.1",
                 "Spawn agent",
                 crate::model::TaskType::Feature,
+                None,
             )
             .unwrap();
 
