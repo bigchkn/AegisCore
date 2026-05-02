@@ -20,6 +20,8 @@ CLAUDE.md
 .windsurfrules
 GEMINI.md
 
+# Ignore the lock files
+**/**/*.lock
 
 # macOS
 .DS_Store
