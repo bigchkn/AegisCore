@@ -120,24 +120,35 @@ status = "done"
 
 [[tasks]]
 id = "B17"
-uid = "e66f7c2e-3bd1-4437-88f2-32af9ad3fc38"
-task = "Fix taskflow-bastion message inbox function inside aegis-design crate"
+uid = "b8b4f11b-4c26-49eb-920f-f5422ad5a43d"
+task = "aegis taskflow next doesn't display bulleted list of milestone|backlog tasks"
+task_type = "maintenance"
+status = "done"
+
+[[tasks]]
+id = "B19"
+uid = "55c65f3c-1c66-4d63-b2de-c5f485382a4a"
+task = "aegis web-ui taskflow edit page fails with json error when notes contain quotes"
+task_type = "bug"
+status = "pending"
+
+[[tasks]]
+id = "B20"
+uid = "83892239-e911-4613-a1f2-71d7421e5c01"
+task = "aegis taskflow add-task command lacks way to set detailed notes"
 task_type = "maintenance"
 status = "pending"
-notes = '''
-"""⎿  Error: Exit code 2                                                                                                                                         
-     error: the following required arguments were not provided:                                                                                                 
-       <AGENT_ID>                                             
-                                                                                                                                                                
-     Usage: aegis message inbox <AGENT_ID>                                                                                                                      
-  
-     For more information, try '--help'.                                                                                                                        
-                                                                  
-✢ Mustering… (8s · ↑ 303 tokens · thinking with medium effort)
 
-────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-· M                    6
-⏺─Bash(aegis message --help 2>&1)                              ─────────────────────────────────────────────────────────────────────────────────────────────────
-  ⎿  Send or inspectoagent-to-agentamessagesle) · esc to interrupt
-                                                                                                                                                                
-     Usage: aegis message [OPTIONS] <COMMAND>   """'''
+[[tasks]]
+id = "B21"
+uid = "1083eced-766f-4715-859f-fd5f5cd7cabb"
+task = "aegis web-ui agent spawn should default to showing bastion templates rather than splinters on launch"
+task_type = "maintenance"
+status = "pending"
+
+[[tasks]]
+id = "B22"
+uid = "ecf460b2-47bb-4227-b6bc-880428dfdd66"
+task = "sandbox claude in aegis requiring login when actual claude authenticated in command line"
+task_type = "bug"
+status = "pending"

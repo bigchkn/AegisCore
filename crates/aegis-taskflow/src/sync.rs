@@ -22,6 +22,7 @@ pub enum NextMilestoneOutcome {
         milestone_id: String,
         name: String,
         task_count: usize,
+        tasks: Vec<String>,
     },
     Exhausted,
     Blocked {
@@ -231,10 +232,17 @@ impl TaskflowEngine {
             .count();
 
         if backlog_task_count > 0 {
+            let pending_tasks: Vec<String> = backlog
+                .tasks
+                .iter()
+                .filter(|t| t.status != TaskflowStatus::Done)
+                .map(|t| t.task.clone())
+                .collect();
             return Ok(NextMilestoneOutcome::Ready {
                 milestone_id: "backlog".to_string(),
                 name: "Global Backlog".to_string(),
                 task_count: backlog_task_count,
+                tasks: pending_tasks,
             });
         }
 
@@ -298,16 +306,19 @@ impl TaskflowEngine {
         let m_path = roadmap_dir.join(&m_ref.path);
         let mut lock = LockedFile::open_shared(&m_path)?;
         let milestone: Milestone = lock.read_toml()?;
-        let task_count = milestone
+        let pending_tasks: Vec<String> = milestone
             .tasks
             .iter()
             .filter(|t| t.status != TaskflowStatus::Done)
-            .count();
+            .map(|t| t.task.clone())
+            .collect();
+        let task_count = pending_tasks.len();
 
         Ok(NextMilestoneOutcome::Ready {
             milestone_id: key,
             name,
             task_count,
+            tasks: pending_tasks,
         })
     }
 
@@ -1347,7 +1358,7 @@ mod tests {
 
         let outcome = engine.next_milestone().unwrap();
         assert!(
-            matches!(outcome, NextMilestoneOutcome::Ready { milestone_id, name, task_count }
+            matches!(outcome, NextMilestoneOutcome::Ready { milestone_id, name, task_count, .. }
                 if milestone_id == "backlog" && name == "Global Backlog" && task_count == 1)
         );
         drop(tmp);

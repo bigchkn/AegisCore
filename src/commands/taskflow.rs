@@ -420,16 +420,18 @@ pub async fn next(
                 .and_then(|v| v.as_str())
                 .unwrap_or("?");
             let name = payload.get("name").and_then(|v| v.as_str()).unwrap_or("?");
-            let count = payload
-                .get("task_count")
-                .and_then(|v| v.as_u64())
-                .unwrap_or(0);
+            let tasks: Vec<&str> = payload
+                .get("tasks")
+                .and_then(|v| v.as_array())
+                .map(|a| a.iter().filter_map(|v| v.as_str()).collect())
+                .unwrap_or_default();
             if id == "backlog" {
-                printer.line(&format!("Next backlog: {name} ({count} tasks pending)"));
+                printer.line(&format!("Backlog: {name}"));
             } else {
-                printer.line(&format!(
-                    "Next milestone: {id} — {name} ({count} tasks pending)"
-                ));
+                printer.line(&format!("Milestone {id} — {name}"));
+            }
+            for (i, task) in tasks.iter().enumerate() {
+                printer.line(&format!("  {}. {task}", i + 1));
             }
         }
         "exhausted" => printer.line("No pending milestones — backlog is exhausted."),
