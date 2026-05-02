@@ -96,10 +96,10 @@ fn install_launchd() -> Result<()> {
     let bin_path =
         std::env::current_exe().map_err(|e| aegis_core::AegisError::Unexpected(Box::new(e)))?;
 
-    // launchd runs with a minimal PATH; include Homebrew and Claude's install dir
-    // so the daemon can find tmux, claude, git, and other tools at runtime.
+    // launchd runs with a minimal PATH; include Homebrew and common user-level bin dirs
+    // so the daemon can find tmux, claude, git, code-review-graph, and other tools.
     let path_value = format!(
-        "{home}/.claude/local:/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+        "{home}/.local/bin:{home}/.claude/local:/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
     );
 
     let plist_content = format!(

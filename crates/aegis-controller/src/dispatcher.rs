@@ -661,6 +661,29 @@ impl Dispatcher {
                 })
                 .collect();
 
+            // Augment PATH with common user-level bin dirs if missing
+            if let Some((_, path)) = env_vars.iter_mut().find(|(k, _)| k == "PATH") {
+                let home = std::env::var("HOME").unwrap_or_default();
+                if !home.is_empty() {
+                    let local_bin = format!("{}/.local/bin", home);
+                    let claude_bin = format!("{}/.claude/local", home);
+                    let mut segments: Vec<String> = std::env::split_paths(path)
+                        .map(|p| p.to_string_lossy().into_owned())
+                        .collect();
+
+                    if !segments.iter().any(|s| s == &local_bin) {
+                        segments.insert(0, local_bin);
+                    }
+                    if !segments.iter().any(|s| s == &claude_bin) {
+                        segments.insert(0, claude_bin);
+                    }
+
+                    if let Ok(new_path) = std::env::join_paths(segments) {
+                        *path = new_path.to_string_lossy().into_owned();
+                    }
+                }
+            }
+
             env_vars.push(("AEGIS_AGENT_ID".to_string(), agent.agent_id.to_string()));
             env_vars.push(("TERM".to_string(), "xterm-256color".to_string()));
             let provider = self.providers.get(&agent.cli_provider)?;
