@@ -1191,6 +1191,46 @@ mod tests {
     }
 
     #[test]
+    fn test_update_task_notes_with_double_quotes_round_trip() {
+        let (_tmp, engine) = setup_engine();
+        let task = engine
+            .create_task(
+                "backlog",
+                crate::model::TaskDraft {
+                    id: Some("B1".to_string()),
+                    task: "Original".to_string(),
+                    task_type: crate::model::TaskType::Feature,
+                    status: None,
+                    crate_name: None,
+                    notes: None,
+                },
+            )
+            .unwrap();
+
+        engine
+            .update_task(
+                "backlog",
+                task.uid,
+                crate::model::TaskPatch {
+                    id: None,
+                    task: None,
+                    task_type: None,
+                    status: None,
+                    crate_name: None,
+                    notes: Some(Some(r#"Fix "quoted" notes causing TOML failure"#.to_string())),
+                    target_milestone_id: None,
+                },
+            )
+            .unwrap();
+
+        let backlog = engine.get_backlog().unwrap();
+        assert_eq!(
+            backlog.tasks[0].notes.as_deref(),
+            Some(r#"Fix "quoted" notes causing TOML failure"#),
+        );
+    }
+
+    #[test]
     fn test_sync_updates_status() {
         let (_tmp, engine) = setup_engine();
         engine.create_milestone("1", "M1", None).unwrap();

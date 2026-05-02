@@ -10,10 +10,33 @@ use aegis_design::{
 use axum::{
     extract::ws::{Message, WebSocket},
     extract::{Path, Query, State, WebSocketUpgrade},
+    http::StatusCode,
     response::IntoResponse,
     routing::{get, post},
     Json, Router,
 };
+
+type ApiResult<T = serde_json::Value> = std::result::Result<Json<T>, ApiError>;
+
+struct ApiError(String);
+
+impl From<String> for ApiError {
+    fn from(s: String) -> Self {
+        Self(s)
+    }
+}
+
+impl From<&str> for ApiError {
+    fn from(s: &str) -> Self {
+        Self(s.to_string())
+    }
+}
+
+impl IntoResponse for ApiError {
+    fn into_response(self) -> axum::response::Response {
+        (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": self.0}))).into_response()
+    }
+}
 use futures_util::{Sink, SinkExt, StreamExt};
 use std::collections::HashMap;
 use std::path::{Component, PathBuf};
@@ -121,7 +144,7 @@ async fn list_projects(State(state): State<HttpState>) -> Json<Vec<ProjectRecord
 async fn project_status(
     Path(id): Path<Uuid>,
     State(state): State<HttpState>,
-) -> std::result::Result<Json<serde_json::Value>, String> {
+) -> ApiResult {
     let runtime = get_runtime(&state, id).await.map_err(|e| e.to_string())?;
     let status = runtime.commands().status().map_err(|e| e.to_string())?;
     Ok(Json(serde_json::to_value(status).unwrap()))
@@ -130,7 +153,7 @@ async fn project_status(
 async fn list_agents(
     Path(id): Path<Uuid>,
     State(state): State<HttpState>,
-) -> std::result::Result<Json<serde_json::Value>, String> {
+) -> ApiResult {
     let runtime = get_runtime(&state, id).await.map_err(|e| e.to_string())?;
     let agents = runtime
         .commands()
@@ -142,7 +165,7 @@ async fn list_agents(
 async fn list_tasks(
     Path(id): Path<Uuid>,
     State(state): State<HttpState>,
-) -> std::result::Result<Json<serde_json::Value>, String> {
+) -> ApiResult {
     let runtime = get_runtime(&state, id).await.map_err(|e| e.to_string())?;
     let tasks = runtime.commands().list_tasks().map_err(|e| e.to_string())?;
     Ok(Json(serde_json::to_value(tasks).unwrap()))
@@ -151,7 +174,7 @@ async fn list_tasks(
 async fn list_channels(
     Path(id): Path<Uuid>,
     State(state): State<HttpState>,
-) -> std::result::Result<Json<serde_json::Value>, String> {
+) -> ApiResult {
     let runtime = get_runtime(&state, id).await.map_err(|e| e.to_string())?;
     let channels = runtime
         .commands()
@@ -163,7 +186,7 @@ async fn list_channels(
 async fn clarify_list(
     Path(id): Path<Uuid>,
     State(state): State<HttpState>,
-) -> std::result::Result<Json<serde_json::Value>, String> {
+) -> ApiResult {
     let runtime = get_runtime(&state, id).await.map_err(|e| e.to_string())?;
     let requests = runtime
         .commands()
@@ -176,7 +199,7 @@ async fn clarify_answer(
     Path(id): Path<Uuid>,
     State(state): State<HttpState>,
     Json(payload): Json<serde_json::Value>,
-) -> std::result::Result<Json<serde_json::Value>, String> {
+) -> ApiResult {
     let runtime = get_runtime(&state, id).await.map_err(|e| e.to_string())?;
     let commands = runtime.commands();
 
@@ -220,7 +243,7 @@ async fn dispatch_command(
     Path(id): Path<Uuid>,
     State(state): State<HttpState>,
     Json(payload): Json<serde_json::Value>,
-) -> std::result::Result<Json<serde_json::Value>, String> {
+) -> ApiResult {
     let runtime = get_runtime(&state, id).await.map_err(|e| e.to_string())?;
     let commands = runtime.commands();
 
@@ -300,7 +323,7 @@ async fn dispatch_command(
                             "kind": format!("{:?}", agent.kind),
                         })))
                     }
-                    other => Err(format!("Unknown spawn type: {other}")),
+                    other => Err(format!("Unknown spawn type: {other}").into()),
                 }
             }
         }
@@ -349,7 +372,7 @@ async fn dispatch_command(
             let registry = TemplateRegistry::load(&runtime.root_path);
             let resolved = registry.get(name).map_err(|e| e.to_string())?;
             if resolved.layer != TemplateLayer::BuiltIn {
-                return Err(format!("Template is not built in: {name}"));
+                return Err(format!("Template is not built in: {name}").into());
             }
 
             let vars =
@@ -382,7 +405,7 @@ async fn dispatch_command(
                 .and_then(|v| v.as_str())
                 .ok_or("Missing doc_type")?;
             if !matches!(doc_type, "HLD" | "LLD") {
-                return Err("doc_type must be HLD or LLD".to_string());
+                return Err("doc_type must be HLD or LLD".into());
             }
             let doc_path = params
                 .get("doc_path")
@@ -606,7 +629,7 @@ async fn dispatch_command(
                 "human_tui" => crate::clarification::ClarifierSource::HumanTui,
                 "telegram" => crate::clarification::ClarifierSource::Telegram,
                 "system" => crate::clarification::ClarifierSource::System,
-                other => return Err(format!("Unknown clarification source: {other}")),
+                other => return Err(format!("Unknown clarification source: {other}").into()),
             };
             let request = commands
                 .clarify_answer(request_id, answer, payload, answered_by)
@@ -630,7 +653,7 @@ async fn dispatch_command(
                 .map_err(|e| e.to_string())?;
             Ok(Json(serde_json::to_value(request).unwrap()))
         }
-        _ => Err(format!("Unknown command: {}", cmd)),
+        _ => Err(format!("Unknown command: {}", cmd).into()),
     }
 }
 
@@ -720,7 +743,7 @@ struct DesignReadQuery {
 async fn list_design_docs(
     Path(id): Path<Uuid>,
     State(state): State<HttpState>,
-) -> std::result::Result<Json<Vec<DesignDocSummary>>, String> {
+) -> std::result::Result<Json<Vec<DesignDocSummary>>, ApiError> {
     let runtime = get_runtime(&state, id).await.map_err(|e| e.to_string())?;
     let designs_dir = runtime.root_path.join(".aegis").join("designs");
     let mut docs = Vec::new();
@@ -733,7 +756,7 @@ async fn read_design_doc(
     Path(id): Path<Uuid>,
     Query(query): Query<DesignReadQuery>,
     State(state): State<HttpState>,
-) -> std::result::Result<Json<DesignDocContent>, String> {
+) -> std::result::Result<Json<DesignDocContent>, ApiError> {
     let runtime = get_runtime(&state, id).await.map_err(|e| e.to_string())?;
     let designs_dir = runtime.root_path.join(".aegis").join("designs");
     let relative = normalize_design_path(&query.path)?;
@@ -741,10 +764,10 @@ async fn read_design_doc(
     let full_path = designs_dir.join(&relative);
     let full_path = full_path.canonicalize().map_err(|e| e.to_string())?;
     if !full_path.starts_with(&designs_root) {
-        return Err("Design path resolves outside .aegis/designs".to_string());
+        return Err("Design path resolves outside .aegis/designs".into());
     }
     if !full_path.is_file() {
-        return Err(format!("Design doc not found: {}", query.path));
+        return Err(format!("Design doc not found: {}", query.path).into());
     }
     let content = std::fs::read_to_string(&full_path).map_err(|e| e.to_string())?;
     let metadata = full_path.metadata().map_err(|e| e.to_string())?;
@@ -851,7 +874,7 @@ fn design_doc_kind(relative: &std::path::Path) -> String {
 async fn taskflow_status(
     Path(id): Path<Uuid>,
     State(state): State<HttpState>,
-) -> std::result::Result<Json<serde_json::Value>, String> {
+) -> ApiResult {
     let runtime = get_runtime(&state, id).await.map_err(|e| e.to_string())?;
     let status = runtime
         .commands()
@@ -863,7 +886,7 @@ async fn taskflow_status(
 async fn taskflow_show(
     Path((id, milestone_id)): Path<(Uuid, String)>,
     State(state): State<HttpState>,
-) -> std::result::Result<Json<serde_json::Value>, String> {
+) -> ApiResult {
     let runtime = get_runtime(&state, id).await.map_err(|e| e.to_string())?;
     let milestone = runtime
         .commands()

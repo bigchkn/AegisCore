@@ -130,7 +130,8 @@ id = "B19"
 uid = "55c65f3c-1c66-4d63-b2de-c5f485382a4a"
 task = "aegis web-ui taskflow edit page fails with json error when notes contain quotes"
 task_type = "bug"
-status = "pending"
+status = "done"
+notes = "HTTP handlers returned Err(String) which Axum converts to 200 OK plain-text; frontend called response.json() on the plain-text body and got a JSON parse error. Fixed by introducing ApiError that returns 500 with a JSON body, ensuring !response.ok is true so the frontend error handler activates instead."
 
 [[tasks]]
 id = "B20"
