@@ -1,52 +1,38 @@
 ; AegisCore agent sandbox profile
 ; Generated at spawn time - do not edit manually.
 (version 1)
-(deny default)
+(allow default)
 
-; Core execution
-(allow process-exec
-  (subpath "/usr/bin")
-  (subpath "/usr/local/bin")
-  (subpath "/opt/homebrew/bin")
-  (subpath "/opt/homebrew/Cellar")
-  (subpath "/bin")
-  (subpath "/usr/sbin")
-  ; User-installed AI CLI tools and their runtimes
-  (subpath "@@HOME@@/.claude")
-  (subpath "@@HOME@@/.nvm")
-  (subpath "@@HOME@@/.local/bin"))
-@@EXTRA_EXEC_PATHS@@
-(allow process-fork)
-(allow signal)
-; sysctl-read is required by the claude binary for platform/hardware detection at startup.
-; Without it, sandbox-exec sends SIGTRAP and the process dies immediately.
-(allow sysctl-read)
-(allow mach-lookup)
-(allow iokit-get-properties)
+; Global write restriction
+(deny file-write*
+  (subpath "/"))
 
-; Broad read access — agents need to read freely to understand project context,
-; run bash commands, load system libraries, and use provider auth state.
-; Writes are still tightly restricted.
-(allow file-read* (subpath "/"))
-
-; Restricted write access: worktree + shared temp space only
-(allow file-read* file-write*
+; Core temporary and device writes
+(allow file-write*
   (subpath "/tmp")
   (subpath "/private/tmp")
   (subpath "/var/folders")
-  (subpath "/dev/null")
-  (subpath "/dev/zero")
-  (subpath "/dev/ttys"))
+  (subpath "/private/var/folders")
+  (subpath "/dev"))
 
-; Agent worktree
+; Whitelist read/write for specific operational areas
 (allow file-read* file-write*
-  (subpath "@@WORKTREE_PATH@@"))
+  (subpath "@@WORKTREE_PATH@@")
+  (subpath "@@AEGIS_LOGS_DIR@@"))
 
-; Extra reads
+; User-specific whitelists for tool persistence (e.g. Claude Code)
+(allow file-read* file-write*
+  (subpath "@@HOME@@/.claude")
+  (literal "@@HOME@@/.claude.json")
+  (literal "@@HOME@@/.claude.json.lock")
+  (regex #"^@@HOME@@/\.claude\.json\.tmp")
+  (subpath "@@HOME@@/Library/Caches/claude-cli-nodejs"))
+
+; Extra reads (though largely redundant with allow default)
 @@EXTRA_READS@@
 
 ; Extra writes
 @@EXTRA_WRITES@@
 
-; Network policy
+; Network policy (carve out from allow default)
 @@NETWORK_POLICY@@

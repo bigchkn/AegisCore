@@ -159,10 +159,7 @@ impl Dispatcher {
                 launch_command.extend(sandbox.exec_prefix(&sandbox_profile));
             }
         }
-        launch_command.extend(resolved_command_parts(
-            &provider_command,
-            &provider.config().binary,
-        ));
+        launch_command.extend(command_parts(&provider_command));
 
         let now = Utc::now();
         let agent = Agent {
@@ -657,7 +654,15 @@ impl Dispatcher {
                 }
             })?;
 
-            let env_vars = vec![("AEGIS_AGENT_ID".to_string(), agent.agent_id.to_string())];
+            let mut env_vars: Vec<(String, String)> = std::env::vars()
+                .filter(|(k, _)| {
+                    // Filter out some potentially problematic or internal variables
+                    !matches!(k.as_str(), "PS1" | "PROMPT" | "ZSH_NAME" | "OLDPWD")
+                })
+                .collect();
+
+            env_vars.push(("AEGIS_AGENT_ID".to_string(), agent.agent_id.to_string()));
+            env_vars.push(("TERM".to_string(), "xterm-256color".to_string()));
             let provider = self.providers.get(&agent.cli_provider)?;
 
             let trigger_text = if let Some(ot) = &plan.override_trigger {
